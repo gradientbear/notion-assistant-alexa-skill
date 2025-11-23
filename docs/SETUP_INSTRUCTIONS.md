@@ -50,10 +50,37 @@ INSERT INTO licenses (license_key, status, notes) VALUES
 
 ### 2.2 Create OAuth App (for Account Linking)
 
+**Important:** This is different from the Internal Integration in Step 2.1. You need an **OAuth integration** for account linking.
+
 1. Go to https://www.notion.so/my-integrations
-2. Create a new OAuth integration
-3. Set redirect URI: `https://your-web-app.vercel.app/api/oauth/callback`
-4. Copy **Client ID** and **Client Secret**
+2. Click **"New integration"** button
+3. Select **"Public integration"** (not Internal integration)
+   - This enables OAuth flow for users to authorize access
+4. Fill in the integration details:
+   - **Name**: "Notion Assistant Alexa Skill" (or any name you prefer)
+   - **Logo**: Optional (upload an icon if you want)
+   - **Associated workspace**: Select your workspace
+5. Set **Redirect URIs**:
+   - Click "Add redirect URI"
+   - Enter: `https://your-web-app.vercel.app/api/oauth/callback`
+   - **Note:** Replace `your-web-app.vercel.app` with your actual Vercel domain
+   - You can add multiple redirect URIs (e.g., localhost for testing)
+6. Click **"Submit"** to create the integration
+7. After creation, you'll see:
+   - **OAuth client ID** - This is your `NOTION_CLIENT_ID`
+   - **OAuth client secret** - This is your `NOTION_CLIENT_SECRET`
+   - **⚠️ Important:** Copy the client secret immediately - you can only see it once!
+8. Copy both values and save them securely
+
+**Where to find them:**
+- After creating the integration, you'll be on the integration's settings page
+- The **OAuth client ID** is visible at the top of the page
+- The **OAuth client secret** is shown once after creation - click "Show" to reveal it
+- If you lose the secret, you'll need to create a new integration or regenerate it
+
+**For testing (localhost):**
+- You can add `http://localhost:3000/api/oauth/callback` as a redirect URI
+- This allows you to test the OAuth flow locally before deploying
 
 ## Step 3: AWS Lambda Setup
 

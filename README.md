@@ -29,6 +29,7 @@ A private, premium Alexa Skill integrated with Notion API for voice-first task m
 │   │   └── page.tsx   # Login page
 │   └── package.json
 ├── shared/             # Shared TypeScript types
+├── admin/              # Admin panel for license management (optional)
 ├── docs/               # Documentation
 │   ├── TECHNICAL_DOCUMENTATION.md
 │   ├── USER_GUIDE.md
@@ -73,9 +74,11 @@ cd ../web-login && npm install
 ## 📚 Documentation
 
 - **[Setup Instructions](docs/SETUP_INSTRUCTIONS.md)** - Complete deployment guide
+- **[Notion OAuth Setup](docs/NOTION_OAUTH_SETUP.md)** - Detailed OAuth integration guide
 - **[Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md)** - Architecture and implementation details
 - **[User Guide](docs/USER_GUIDE.md)** - End-user documentation
 - **[Notion Database Templates](docs/NOTION_DATABASE_TEMPLATES.md)** - Database setup guide
+- **[FAQ](docs/FAQ.md)** - Frequently asked questions
 
 ## 🧪 Testing
 
