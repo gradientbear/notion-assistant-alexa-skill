@@ -1,7 +1,19 @@
+// Mock environment variables before importing
+process.env.SUPABASE_URL = 'https://test.supabase.co';
+process.env.SUPABASE_SERVICE_KEY = 'test-key';
+
+jest.mock('../../utils/database', () => {
+  const actual = jest.requireActual('../../utils/database');
+  return {
+    ...actual,
+    supabase: {
+      from: jest.fn(),
+    },
+  };
+});
+
 import { validateLicense, getUserByAmazonId } from '../../utils/database';
 import { supabase } from '../../utils/database';
-
-jest.mock('../../utils/database', () => ({
   ...jest.requireActual('../../utils/database'),
   supabase: {
     from: jest.fn(),

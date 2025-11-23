@@ -17,6 +17,7 @@ export class PriorityListHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -25,6 +26,7 @@ export class PriorityListHandler implements RequestHandler {
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {
         return buildSimpleResponse(
+          handlerInput,
           'I couldn\'t find your Tasks database in Notion. ' +
           'Please make sure it exists and try again.'
         );
@@ -34,6 +36,7 @@ export class PriorityListHandler implements RequestHandler {
 
       if (tasks.length === 0) {
         return buildSimpleResponse(
+          handlerInput,
           'You have no priority tasks right now. Great job staying on top of things!'
         );
       }
@@ -62,10 +65,11 @@ export class PriorityListHandler implements RequestHandler {
         speechText += '. ';
       });
 
-      return buildSimpleResponse(speechText);
+      return buildSimpleResponse(handlerInput, speechText);
     } catch (error) {
       console.error('Error getting priority tasks:', error);
       return buildSimpleResponse(
+        handlerInput,
         'I encountered an error retrieving your priority tasks. Please try again later.'
       );
     }

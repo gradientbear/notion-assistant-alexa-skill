@@ -19,6 +19,7 @@ export class FocusTimerHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -27,6 +28,7 @@ export class FocusTimerHandler implements RequestHandler {
       const focusLogsDbId = await findDatabaseByName(notionClient, 'Focus_Logs');
       if (!focusLogsDbId) {
         return buildSimpleResponse(
+          handlerInput,
           'I couldn\'t find your Focus Logs database in Notion. ' +
           'Please make sure it exists and try again.'
         );
@@ -37,6 +39,7 @@ export class FocusTimerHandler implements RequestHandler {
 
       // Start timer (Alexa will handle the timer, but we log it immediately)
       return buildSimpleResponse(
+        handlerInput,
         `Starting your ${FOCUS_DURATION_MINUTES}-minute focus timer. ` +
         `I've logged this session to your Notion Focus Logs. ` +
         `Focus time starts now!`
@@ -44,6 +47,7 @@ export class FocusTimerHandler implements RequestHandler {
     } catch (error) {
       console.error('Error starting focus timer:', error);
       return buildSimpleResponse(
+        handlerInput,
         'I encountered an error starting your focus timer. Please try again later.'
       );
     }

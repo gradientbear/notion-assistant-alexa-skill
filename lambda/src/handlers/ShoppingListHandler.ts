@@ -20,6 +20,7 @@ export class ShoppingListHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -31,6 +32,7 @@ export class ShoppingListHandler implements RequestHandler {
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {
         return buildSimpleResponse(
+          handlerInput,
           'I couldn\'t find your Tasks database in Notion. ' +
           'Please make sure it exists and try again.'
         );
@@ -41,6 +43,7 @@ export class ShoppingListHandler implements RequestHandler {
         
         if (!itemsSlot || !itemsSlot.value) {
           return buildResponse(
+            handlerInput,
             'What items would you like to add to your shopping list?',
             'Tell me the items you want to add.'
           );
@@ -55,6 +58,7 @@ export class ShoppingListHandler implements RequestHandler {
 
         if (items.length === 0) {
           return buildResponse(
+            handlerInput,
             'I didn\'t catch the items. What would you like to add?',
             'Tell me the items for your shopping list.'
           );
@@ -70,6 +74,7 @@ export class ShoppingListHandler implements RequestHandler {
           : items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
 
         return buildSimpleResponse(
+          handlerInput,
           `Added to shopping list: ${itemsList}.`
         );
       }
@@ -78,7 +83,7 @@ export class ShoppingListHandler implements RequestHandler {
         const tasks = await getShoppingListTasks(notionClient, tasksDbId);
 
         if (tasks.length === 0) {
-          return buildSimpleResponse('Your shopping list is empty.');
+          return buildSimpleResponse(handlerInput, 'Your shopping list is empty.');
         }
 
         let speechText = `Your shopping list has ${tasks.length} item${tasks.length > 1 ? 's' : ''}: `;
@@ -90,7 +95,7 @@ export class ShoppingListHandler implements RequestHandler {
         });
         speechText += '.';
 
-        return buildSimpleResponse(speechText);
+        return buildSimpleResponse(handlerInput, speechText);
       }
 
       if (intentName === 'MarkShoppingCompleteIntent') {
@@ -98,6 +103,7 @@ export class ShoppingListHandler implements RequestHandler {
         
         if (!itemSlot || !itemSlot.value) {
           return buildResponse(
+            handlerInput,
             'Which item would you like to mark as complete?',
             'Tell me the item name.'
           );
@@ -113,6 +119,7 @@ export class ShoppingListHandler implements RequestHandler {
 
         if (!matchingTask) {
           return buildSimpleResponse(
+            handlerInput,
             `I couldn't find "${itemSlot.value}" on your shopping list.`
           );
         }
@@ -120,14 +127,16 @@ export class ShoppingListHandler implements RequestHandler {
         await markTaskComplete(notionClient, matchingTask.id);
 
         return buildSimpleResponse(
+          handlerInput,
           `Marked ${matchingTask.name} as complete.`
         );
       }
 
-      return buildSimpleResponse('I\'m not sure what you want to do with your shopping list.');
+      return buildSimpleResponse(handlerInput, 'I\'m not sure what you want to do with your shopping list.');
     } catch (error) {
       console.error('Error handling shopping list:', error);
       return buildSimpleResponse(
+        handlerInput,
         'I encountered an error with your shopping list. Please try again later.'
       );
     }

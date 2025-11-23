@@ -18,6 +18,7 @@ export class BrainDumpHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -35,6 +36,7 @@ export class BrainDumpHandler implements RequestHandler {
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
       return buildResponse(
+        handlerInput,
         'I\'m ready to capture your thoughts. What tasks would you like to add?',
         'Tell me the tasks you want to add, or say done when finished.'
       );
@@ -45,6 +47,7 @@ export class BrainDumpHandler implements RequestHandler {
 
       if (!userUtterance) {
         return buildResponse(
+          handlerInput,
           'I didn\'t catch that. What tasks would you like to add?',
           'Tell me the tasks, or say done when finished.'
         );
@@ -59,7 +62,7 @@ export class BrainDumpHandler implements RequestHandler {
         if (tasks.length === 0) {
           attributes.brainDumpState = 'initial';
           handlerInput.attributesManager.setSessionAttributes(attributes);
-          return buildSimpleResponse('No tasks were added.');
+          return buildSimpleResponse(handlerInput, 'No tasks were added.');
         }
 
         // Find tasks database
@@ -68,6 +71,7 @@ export class BrainDumpHandler implements RequestHandler {
           attributes.brainDumpState = 'initial';
           handlerInput.attributesManager.setSessionAttributes(attributes);
           return buildSimpleResponse(
+            handlerInput,
             'I couldn\'t find your Tasks database in Notion. ' +
             'Please make sure it exists and try again.'
           );
@@ -83,6 +87,7 @@ export class BrainDumpHandler implements RequestHandler {
           handlerInput.attributesManager.setSessionAttributes(attributes);
 
           return buildSimpleResponse(
+            handlerInput,
             `Great! I've added ${tasks.length} task${tasks.length > 1 ? 's' : ''} to your Notion database.`
           );
         } catch (error) {
@@ -90,6 +95,7 @@ export class BrainDumpHandler implements RequestHandler {
           attributes.brainDumpState = 'initial';
           handlerInput.attributesManager.setSessionAttributes(attributes);
           return buildSimpleResponse(
+            handlerInput,
             'I encountered an error adding your tasks. Please try again later.'
           );
         }
@@ -102,12 +108,13 @@ export class BrainDumpHandler implements RequestHandler {
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
       return buildResponse(
+        handlerInput,
         `Got it. Added "${userUtterance}". What else?`,
         'Tell me another task, or say done when finished.'
       );
     }
 
-    return buildSimpleResponse('I\'m not sure what you want to do. Please try again.');
+    return buildSimpleResponse(handlerInput, 'I\'m not sure what you want to do. Please try again.');
   }
 }
 

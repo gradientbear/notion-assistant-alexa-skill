@@ -17,6 +17,7 @@ export class LaunchRequestHandler implements RequestHandler {
     
     if (!userId) {
       return buildSimpleResponse(
+        handlerInput,
         'Welcome to Notion Assistant. Please enable the skill in your Alexa app.'
       );
     }
@@ -26,6 +27,7 @@ export class LaunchRequestHandler implements RequestHandler {
     
     if (!user) {
       return buildSimpleResponse(
+        handlerInput,
         'Welcome to Notion Assistant. Please link your account using the Alexa app. ' +
         'You will need your email and license key to complete setup.'
       );
@@ -34,13 +36,14 @@ export class LaunchRequestHandler implements RequestHandler {
     const isValidLicense = await validateLicense(user.license_key);
     if (!isValidLicense) {
       return buildSimpleResponse(
+        handlerInput,
         'Your license key is invalid or has been deactivated. Please contact support.'
       );
     }
 
     // Check if Notion is connected
     if (!user.notion_token) {
-      return buildLinkAccountResponse();
+      return buildLinkAccountResponse(handlerInput);
     }
 
     // Store user in session
@@ -49,6 +52,7 @@ export class LaunchRequestHandler implements RequestHandler {
     handlerInput.attributesManager.setSessionAttributes(attributes);
 
     return buildSimpleResponse(
+      handlerInput,
       'Welcome to Notion Assistant. You can ask me to dump your brain, ' +
       'check your priorities, start a focus timer, log your energy, ' +
       'view your schedule, or manage your shopping list. What would you like to do?'

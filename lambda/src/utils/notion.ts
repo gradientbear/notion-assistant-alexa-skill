@@ -106,8 +106,8 @@ export async function getTopPriorityTasks(
           ],
         },
         sorts: [
-          { property: 'Priority', direction: 'desc' },
-          { property: 'Due Date', direction: 'asc' },
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
         ],
         page_size: limit,
       })
@@ -159,8 +159,8 @@ export async function getTodayTasks(
           ],
         },
         sorts: [
-          { property: 'Priority', direction: 'desc' },
-          { property: 'Due Date', direction: 'asc' },
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
         ],
       })
     );
@@ -202,7 +202,7 @@ export async function getShoppingListTasks(
             },
           ],
         },
-        sorts: [{ property: 'Task Name', direction: 'asc' }],
+        sorts: [{ property: 'Task Name', direction: 'ascending' }],
       })
     );
 

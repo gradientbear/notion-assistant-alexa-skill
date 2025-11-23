@@ -18,6 +18,7 @@ export class EnergyTrackerHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -34,6 +35,7 @@ export class EnergyTrackerHandler implements RequestHandler {
         energyValue = parsed;
       } else {
         return buildResponse(
+          handlerInput,
           'Please provide an energy level between 1 and 10.',
           'What is your energy level from 1 to 10?'
         );
@@ -41,6 +43,7 @@ export class EnergyTrackerHandler implements RequestHandler {
     } else {
       // Ask for energy level
       return buildResponse(
+        handlerInput,
         'What is your energy level from 1 to 10?',
         'Please tell me your energy level from 1 to 10.'
       );
@@ -50,6 +53,7 @@ export class EnergyTrackerHandler implements RequestHandler {
       const energyLogsDbId = await findDatabaseByName(notionClient, 'Energy_Logs');
       if (!energyLogsDbId) {
         return buildSimpleResponse(
+          handlerInput,
           'I couldn\'t find your Energy Logs database in Notion. ' +
           'Please make sure it exists and try again.'
         );
@@ -61,11 +65,13 @@ export class EnergyTrackerHandler implements RequestHandler {
       await logEnergy(notionClient, energyLogsDbId, energyLevel, timeOfDay);
 
       return buildSimpleResponse(
+        handlerInput,
         `Logged your energy level as ${energyLevel.toLowerCase()} for ${timeOfDay.toLowerCase()}.`
       );
     } catch (error) {
       console.error('Error logging energy:', error);
       return buildSimpleResponse(
+        handlerInput,
         'I encountered an error logging your energy level. Please try again later.'
       );
     }

@@ -1,8 +1,9 @@
-import { Response, ResponseBuilder } from 'ask-sdk-core';
-import { Response as AlexaResponse } from 'ask-sdk-model';
+import { HandlerInput } from 'ask-sdk-core';
+import { Response } from 'ask-sdk-model';
 
-export function buildResponse(speechText: string, repromptText?: string): Response {
-  const responseBuilder = new ResponseBuilder()
+export function buildResponse(handlerInput: HandlerInput, speechText: string, repromptText?: string): Response {
+  const responseBuilder = handlerInput.responseBuilder;
+  responseBuilder
     .speak(speechText)
     .withShouldEndSession(false);
 
@@ -13,15 +14,15 @@ export function buildResponse(speechText: string, repromptText?: string): Respon
   return responseBuilder.getResponse();
 }
 
-export function buildSimpleResponse(speechText: string): Response {
-  return new ResponseBuilder()
+export function buildSimpleResponse(handlerInput: HandlerInput, speechText: string): Response {
+  return handlerInput.responseBuilder
     .speak(speechText)
     .withShouldEndSession(true)
     .getResponse();
 }
 
-export function buildLinkAccountResponse(): Response {
-  return new ResponseBuilder()
+export function buildLinkAccountResponse(handlerInput: HandlerInput): Response {
+  return handlerInput.responseBuilder
     .speak('Please link your Notion account in the Alexa app to continue.')
     .withLinkAccountCard()
     .withShouldEndSession(true)

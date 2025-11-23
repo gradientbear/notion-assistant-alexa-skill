@@ -25,6 +25,7 @@ describe('Alexa Skill Integration', () => {
         },
         device: {
           deviceId: 'test-device',
+          supportedInterfaces: {},
         },
       },
     },
@@ -41,7 +42,10 @@ describe('Alexa Skill Integration', () => {
     const response = await handler(request, {} as any, () => {});
     
     expect(response).toBeDefined();
-    expect(response.version).toBe('1.0');
+    expect(response).toHaveProperty('version');
+    if (response && 'version' in response) {
+      expect(response.version).toBe('1.0');
+    }
   });
 
   it('should handle IntentRequest', async () => {
@@ -54,6 +58,7 @@ describe('Alexa Skill Integration', () => {
         locale: 'en-US',
         intent: {
           name: 'PriorityListIntent',
+          confirmationStatus: 'NONE',
         },
       },
     };

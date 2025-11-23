@@ -17,6 +17,7 @@ export class ScheduleHandler implements RequestHandler {
 
     if (!user || !notionClient) {
       return buildSimpleResponse(
+        handlerInput,
         'Please link your Notion account in the Alexa app to use this feature.'
       );
     }
@@ -25,6 +26,7 @@ export class ScheduleHandler implements RequestHandler {
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {
         return buildSimpleResponse(
+          handlerInput,
           'I couldn\'t find your Tasks database in Notion. ' +
           'Please make sure it exists and try again.'
         );
@@ -34,6 +36,7 @@ export class ScheduleHandler implements RequestHandler {
 
       if (tasks.length === 0) {
         return buildSimpleResponse(
+          handlerInput,
           'You have no tasks scheduled for today. Enjoy your free day!'
         );
       }
@@ -50,10 +53,11 @@ export class ScheduleHandler implements RequestHandler {
         speechText += '. ';
       });
 
-      return buildSimpleResponse(speechText);
+      return buildSimpleResponse(handlerInput, speechText);
     } catch (error) {
       console.error('Error getting schedule:', error);
       return buildSimpleResponse(
+        handlerInput,
         'I encountered an error retrieving your schedule. Please try again later.'
       );
     }
