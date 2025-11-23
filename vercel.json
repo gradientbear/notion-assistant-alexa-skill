@@ -1,0 +1,15 @@
+{
+  "buildCommand": "cd web-login && npm install && npm run build",
+  "outputDirectory": "web-login/.next",
+  "framework": "nextjs",
+  "installCommand": "cd web-login && npm install",
+  "devCommand": "cd web-login && npm run dev",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+    "SUPABASE_SERVICE_KEY": "@supabase_service_key",
+    "NOTION_CLIENT_ID": "@notion_client_id",
+    "NOTION_CLIENT_SECRET": "@notion_client_secret",
+    "NOTION_REDIRECT_URI": "@notion_redirect_uri"
+  }
+}
+

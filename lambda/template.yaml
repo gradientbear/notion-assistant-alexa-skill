@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Notion Assistant Alexa Skill Lambda Function
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: nodejs20.x
+    Environment:
+      Variables:
+        SUPABASE_URL: !Ref SupabaseUrl
+        SUPABASE_SERVICE_KEY: !Ref SupabaseServiceKey
+
+Parameters:
+  SupabaseUrl:
+    Type: String
+    Description: Supabase project URL
+    NoEcho: true
+  SupabaseServiceKey:
+    Type: String
+    Description: Supabase service role key
+    NoEcho: true
+
+Resources:
+  NotionAssistantFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: dist/
+      Handler: index.handler
+      Events:
+        AlexaSkillEvent:
+          Type: AlexaSkill
+          Properties:
+            SkillId: !Ref AlexaSkillId
+
+Parameters:
+  AlexaSkillId:
+    Type: String
+    Description: Alexa Skill ID
+
+Outputs:
+  NotionAssistantFunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt NotionAssistantFunction.Arn
+

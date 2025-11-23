@@ -1,0 +1,264 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "notion assistant",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "BrainDumpIntent",
+          "samples": [
+            "dump my brain",
+            "brain dump",
+            "add tasks",
+            "capture my thoughts",
+            "I need to remember",
+            "add to my tasks"
+          ],
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "PriorityListIntent",
+          "samples": [
+            "what's my priority",
+            "what are my priorities",
+            "show my priority list",
+            "what should I focus on",
+            "top priority tasks",
+            "what's important"
+          ]
+        },
+        {
+          "name": "FocusTimerIntent",
+          "samples": [
+            "start focus timer",
+            "start pomodoro",
+            "begin focus session",
+            "start a focus timer",
+            "timer for focus"
+          ]
+        },
+        {
+          "name": "EnergyTrackerIntent",
+          "samples": [
+            "log energy {energyLevel}",
+            "my energy is {energyLevel}",
+            "energy level {energyLevel}",
+            "log my energy",
+            "track energy {energyLevel}"
+          ],
+          "slots": [
+            {
+              "name": "energyLevel",
+              "type": "AMAZON.NUMBER",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "ScheduleIntent",
+          "samples": [
+            "what's my schedule for today",
+            "what do I have today",
+            "show my schedule",
+            "tasks for today",
+            "what's on my calendar today",
+            "today's tasks"
+          ]
+        },
+        {
+          "name": "AddShoppingIntent",
+          "samples": [
+            "add to shopping {items}",
+            "add {items} to shopping list",
+            "shopping list add {items}",
+            "add {items} to shopping"
+          ],
+          "slots": [
+            {
+              "name": "items",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "ReadShoppingIntent",
+          "samples": [
+            "read my shopping list",
+            "what's on my shopping list",
+            "show shopping list",
+            "shopping list",
+            "what do I need to buy"
+          ]
+        },
+        {
+          "name": "MarkShoppingCompleteIntent",
+          "samples": [
+            "mark {item} as done",
+            "complete {item}",
+            "{item} is done",
+            "mark {item} as complete",
+            "finished {item}"
+          ],
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        }
+      ],
+      "types": []
+    },
+    "dialog": {
+      "intents": [
+        {
+          "name": "BrainDumpIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.Task"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "EnergyTrackerIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "energyLevel",
+              "type": "AMAZON.NUMBER",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.EnergyLevel"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "AddShoppingIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "items",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.Items"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "MarkShoppingCompleteIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "item",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.Item"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        }
+      ],
+      "delegations": []
+    },
+    "prompts": [
+      {
+        "id": "Elicit.Slot.1234567890.Task",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What tasks would you like to add?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the tasks you want to add."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.EnergyLevel",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What is your energy level from 1 to 10?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Please tell me your energy level from 1 to 10."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.Items",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What items would you like to add to your shopping list?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the items you want to add."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.Item",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which item would you like to mark as complete?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the item name."
+          }
+        ]
+      }
+    ]
+  }
+}
+

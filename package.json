@@ -1,0 +1,22 @@
+{
+  "name": "notion-assistant-alexa-skill",
+  "version": "1.0.0",
+  "description": "Alexa Skill integrated with Notion API for task management and productivity tracking",
+  "private": true,
+  "workspaces": [
+    "lambda",
+    "web-login",
+    "shared"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "deploy:lambda": "cd lambda && npm run deploy",
+    "deploy:web": "cd web-login && npm run deploy"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3"
+  }
+}
+
