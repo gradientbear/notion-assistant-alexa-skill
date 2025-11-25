@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Notion Assistant - Admin Panel',
-  description: 'License key management for Notion Assistant',
+  title: 'Notion Data - Admin Panel',
+  description: 'License key management for Notion Data',
 }
 
 export default function RootLayout({

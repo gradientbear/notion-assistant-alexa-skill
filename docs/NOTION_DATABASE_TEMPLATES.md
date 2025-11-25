@@ -6,11 +6,24 @@ This guide provides step-by-step instructions for creating the required Notion d
 
 You can create these databases manually or duplicate a template if provided. The exact property names and types are critical for the skill to work correctly.
 
+## Recommended Structure
+
+**We recommend creating a dedicated page for privacy and organizing all three databases on that page.**
+
+1. Create a new page in your Notion workspace (e.g., "Privacy" or "Alexa Skill Data")
+2. Add all three databases to this page (as inline tables or full-page databases)
+3. This keeps your task management data organized and separate from other workspace content
+
+**Benefits:**
+- Better organization and privacy
+- Easier to find and manage all skill-related data
+- Cleaner workspace structure
+
 ## Database 1: Tasks
 
 ### Create Database
 
-1. In your Notion workspace, create a new page
+1. In your Notion workspace, create a new page (recommended: "Privacy" or "Alexa Skill Data")
 2. Type `/database` and select "Table - Inline" or "Table - Full page"
 3. Name the database: **Tasks** (exact name, case-sensitive)
 
@@ -63,7 +76,7 @@ Tasks
 
 ### Create Database
 
-1. Create a new page in Notion
+1. On the same page where you created Tasks (or create a new page)
 2. Type `/database` and select "Table - Inline" or "Table - Full page"
 3. Name the database: **Focus_Logs** (exact name, case-sensitive, with underscore)
 
@@ -102,7 +115,7 @@ Focus_Logs
 
 ### Create Database
 
-1. Create a new page in Notion
+1. On the same page where you created Tasks and Focus_Logs (or create a new page)
 2. Type `/database` and select "Table - Inline" or "Table - Full page"
 3. Name the database: **Energy_Logs** (exact name, case-sensitive, with underscore)
 

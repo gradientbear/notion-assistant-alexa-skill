@@ -27,7 +27,8 @@ export async function getUserByAmazonId(amazonAccountId: string): Promise<User |
 export async function createUser(
   amazonAccountId: string,
   email: string,
-  licenseKey: string
+  licenseKey: string,
+  notionToken: string | null = null
 ): Promise<User> {
   const { data, error } = await supabase
     .from('users')
@@ -35,7 +36,7 @@ export async function createUser(
       amazon_account_id: amazonAccountId,
       email,
       license_key: licenseKey,
-      notion_token: null,
+      notion_token: notionToken,
     })
     .select()
     .single();
@@ -81,5 +82,63 @@ export async function validateLicense(licenseKey: string): Promise<boolean> {
 export async function getUserLicenseKey(amazonAccountId: string): Promise<string | null> {
   const user = await getUserByAmazonId(amazonAccountId);
   return user?.license_key || null;
+}
+
+export async function getUserByEmailAndLicense(
+  email: string,
+  licenseKey: string
+): Promise<User | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .eq('email', email)
+    .eq('license_key', licenseKey)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as User;
+}
+
+export async function createOrUpdateUser(
+  amazonAccountId: string,
+  email: string,
+  licenseKey: string,
+  notionToken: string | null = null
+): Promise<User> {
+  // Check if user exists by Amazon account ID
+  const existingUser = await getUserByAmazonId(amazonAccountId);
+  
+  if (existingUser) {
+    // Update existing user
+    const updateData: any = {
+      email,
+      license_key: licenseKey,
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Only update notion_token if provided
+    if (notionToken !== null) {
+      updateData.notion_token = notionToken;
+    }
+    
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', existingUser.id)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update user: ${error.message}`);
+    }
+
+    return data as User;
+  } else {
+    // Create new user
+    return await createUser(amazonAccountId, email, licenseKey, notionToken);
+  }
 }
 

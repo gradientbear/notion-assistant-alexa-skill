@@ -18,7 +18,7 @@ export class LaunchRequestHandler implements RequestHandler {
     if (!userId) {
       return buildSimpleResponse(
         handlerInput,
-        'Welcome to Notion Assistant. Please enable the skill in your Alexa app.'
+        'Welcome to Notion Data. Please enable the skill in your Alexa app.'
       );
     }
 
@@ -28,7 +28,7 @@ export class LaunchRequestHandler implements RequestHandler {
     if (!user) {
       return buildSimpleResponse(
         handlerInput,
-        'Welcome to Notion Assistant. Please link your account using the Alexa app. ' +
+        'Welcome to Notion Data. Please link your account using the Alexa app. ' +
         'You will need your email and license key to complete setup.'
       );
     }
@@ -53,7 +53,7 @@ export class LaunchRequestHandler implements RequestHandler {
 
     return buildSimpleResponse(
       handlerInput,
-      'Welcome to Notion Assistant. You can ask me to dump your brain, ' +
+      'Welcome to Notion Data. You can ask me to dump your brain, ' +
       'check your priorities, start a focus timer, log your energy, ' +
       'view your schedule, or manage your shopping list. What would you like to do?'
     );

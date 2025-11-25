@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Notion Assistant Alexa Skill Lambda Function
+Description: Notion Data Alexa Skill Lambda Function
 
 Globals:
   Function:
@@ -21,6 +21,9 @@ Parameters:
     Type: String
     Description: Supabase service role key
     NoEcho: true
+  AlexaSkillId:
+    Type: String
+    Description: Alexa Skill ID
 
 Resources:
   NotionAssistantFunction:
@@ -33,11 +36,6 @@ Resources:
           Type: AlexaSkill
           Properties:
             SkillId: !Ref AlexaSkillId
-
-Parameters:
-  AlexaSkillId:
-    Type: String
-    Description: Alexa Skill ID
 
 Outputs:
   NotionAssistantFunctionArn:

@@ -1,13 +1,14 @@
 {
   "name": "notion-assistant-lambda",
   "version": "1.0.0",
-  "description": "AWS Lambda backend for Notion Assistant Alexa Skill",
+  "description": "AWS Lambda backend for Notion Data Alexa Skill",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
     "deploy": "sam build && sam deploy",
     "test": "jest",
+    "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {

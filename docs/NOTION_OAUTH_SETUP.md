@@ -27,7 +27,7 @@ You need to create a **Public OAuth Integration** in Notion to enable account li
 Fill in the form:
 
 - **Integration name**: 
-  - Example: "Notion Assistant Alexa Skill"
+  - Example: "Notion Data Alexa Skill"
   - This name will be shown to users during OAuth
 
 - **Logo** (optional):

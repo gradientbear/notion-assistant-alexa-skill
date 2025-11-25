@@ -1,4 +1,4 @@
-# Notion Assistant Alexa Skill
+# Notion Data Alexa Skill
 
 A private, premium Alexa Skill integrated with Notion API for voice-first task management and productivity tracking.
 

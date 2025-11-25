@@ -1,4 +1,4 @@
-# Notion Assistant Alexa Skill - Technical Documentation
+# Notion Data Alexa Skill - Technical Documentation
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@
 
 ## Architecture Overview
 
-The Notion Assistant Alexa Skill consists of three main components:
+The Notion Data Alexa Skill consists of three main components:
 
 1. **AWS Lambda Function** - Handles all Alexa requests and Notion API interactions
 2. **Next.js Web Application** - Provides OAuth/account linking interface

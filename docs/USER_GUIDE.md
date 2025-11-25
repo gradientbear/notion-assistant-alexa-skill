@@ -1,8 +1,8 @@
-# Notion Assistant Alexa Skill - User Guide
+# Notion Data Alexa Skill - User Guide
 
 ## Welcome!
 
-The Notion Assistant Alexa Skill helps you manage your tasks and track your productivity using voice commands with your Alexa device, all synced to your Notion workspace.
+The Notion Data Alexa Skill helps you manage your tasks and track your productivity using voice commands with your Alexa device, all synced to your Notion workspace.
 
 ## Getting Started
 
@@ -15,7 +15,9 @@ The Notion Assistant Alexa Skill helps you manage your tasks and track your prod
 
 ### Step 1: Set Up Notion Databases
 
-Before using the skill, you need to create three databases in your Notion workspace:
+Before using the skill, you need to create three databases in your Notion workspace.
+
+**Recommended:** Create a dedicated page (e.g., "Privacy" or "Alexa Skill Data") and add all three databases to that page for better organization.
 
 #### 1. Tasks Database
 
@@ -57,7 +59,7 @@ Create a database named **"Energy_Logs"** with the following properties:
 ### Step 2: Enable the Skill
 
 1. Open the Alexa app on your phone
-2. Search for "Notion Assistant"
+2. Search for "Notion Data"
 3. Click "Enable" or "Link Account"
 4. You'll be redirected to the web login page
 
@@ -72,7 +74,7 @@ Create a database named **"Energy_Logs"** with the following properties:
 
 ### Step 4: Start Using the Skill
 
-Say: **"Alexa, open Notion Assistant"**
+Say: **"Alexa, open Notion Data"**
 
 ## Voice Commands
 
@@ -166,13 +168,13 @@ Manage your shopping list:
 ### "Please link your Notion account"
 
 - Go to the Alexa app
-- Find Notion Assistant in your skills
+- Find Notion Data in your skills
 - Click "Link Account" or "Settings"
 - Complete the OAuth flow again
 
 ### Skill not responding
 
-- Try: "Alexa, open Notion Assistant"
+- Try: "Alexa, open Notion Data"
 - Check your internet connection
 - Ensure the skill is enabled in your Alexa app
 - Restart your Alexa device if needed
@@ -211,5 +213,5 @@ A: Yes, all data is stored in your own Notion workspace. We only store minimal a
 
 ---
 
-Enjoy using Notion Assistant! 🎉
+Enjoy using Notion Data! 🎉
 

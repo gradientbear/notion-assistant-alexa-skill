@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Notion Assistant - Account Linking',
+  title: 'Notion Data - Account Linking',
   description: 'Link your Notion account to Alexa Skill',
 }
 

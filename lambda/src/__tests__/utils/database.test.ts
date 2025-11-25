@@ -2,23 +2,15 @@
 process.env.SUPABASE_URL = 'https://test.supabase.co';
 process.env.SUPABASE_SERVICE_KEY = 'test-key';
 
-jest.mock('../../utils/database', () => {
-  const actual = jest.requireActual('../../utils/database');
-  return {
-    ...actual,
-    supabase: {
-      from: jest.fn(),
-    },
-  };
-});
+// Mock Supabase client before database module loads
+const mockFrom = jest.fn();
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: jest.fn(() => ({
+    from: mockFrom,
+  })),
+}));
 
 import { validateLicense, getUserByAmazonId } from '../../utils/database';
-import { supabase } from '../../utils/database';
-  ...jest.requireActual('../../utils/database'),
-  supabase: {
-    from: jest.fn(),
-  },
-}));
 
 describe('Database Utils', () => {
   beforeEach(() => {
@@ -27,7 +19,6 @@ describe('Database Utils', () => {
 
   describe('validateLicense', () => {
     it('should return true for active license', async () => {
-      const mockFrom = supabase.from as jest.Mock;
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -44,7 +35,6 @@ describe('Database Utils', () => {
     });
 
     it('should return false for inactive license', async () => {
-      const mockFrom = supabase.from as jest.Mock;
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -61,7 +51,6 @@ describe('Database Utils', () => {
     });
 
     it('should return false for non-existent license', async () => {
-      const mockFrom = supabase.from as jest.Mock;
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -90,7 +79,6 @@ describe('Database Utils', () => {
         updated_at: '2024-01-01',
       };
 
-      const mockFrom = supabase.from as jest.Mock;
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
@@ -107,7 +95,6 @@ describe('Database Utils', () => {
     });
 
     it('should return null when user not found', async () => {
-      const mockFrom = supabase.from as jest.Mock;
       mockFrom.mockReturnValue({
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({

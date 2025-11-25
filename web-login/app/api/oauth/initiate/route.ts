@@ -1,8 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { createOAuthSession } from './session';
+
+export async function GET(request: NextRequest) {
+  // Handle Alexa account linking - GET request with query parameters
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const amazonAccountId = searchParams.get('amazon_account_id') || null;
+    const email = searchParams.get('email');
+    const licenseKey = searchParams.get('license_key');
+
+    if (!email || !licenseKey) {
+      return NextResponse.redirect(
+        new URL('/?error=Email and license key are required', request.url)
+      );
+    }
+
+    // Validate license key
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY || '';
+
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return NextResponse.redirect(
+        new URL('/?error=Server configuration error', request.url)
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const { data: license, error: licenseError } = await supabase
+      .from('licenses')
+      .select('status')
+      .eq('license_key', licenseKey)
+      .single();
+
+    if (licenseError || !license || license.status !== 'active') {
+      return NextResponse.redirect(
+        new URL('/?error=Invalid or inactive license key', request.url)
+      );
+    }
+
+    // Generate state and code verifier
+    const state = crypto.randomBytes(32).toString('hex');
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+
+    // Store session in database
+    await createOAuthSession(state, email, licenseKey, amazonAccountId, codeVerifier);
+
+    // Build Notion OAuth URL
+    const notionClientId = process.env.NOTION_CLIENT_ID || '';
+    const notionRedirectUri = process.env.NOTION_REDIRECT_URI || '';
+
+    if (!notionClientId || !notionRedirectUri) {
+      return NextResponse.redirect(
+        new URL('/?error=Missing Notion OAuth configuration', request.url)
+      );
+    }
+
+    const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');
+    authUrl.searchParams.set('client_id', notionClientId);
+    authUrl.searchParams.set('redirect_uri', notionRedirectUri);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('owner', 'user');
+    authUrl.searchParams.set('state', state);
+
+    return NextResponse.redirect(authUrl.toString());
+  } catch (error: any) {
+    console.error('OAuth initiation error:', error);
+    return NextResponse.redirect(
+      new URL('/?error=OAuth initiation failed', request.url)
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
+  // Handle web form submission
   try {
     // Check environment variables at runtime, not module load time
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -26,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { email, licenseKey } = await request.json();
+    const { email, licenseKey, amazon_account_id } = await request.json();
 
     if (!email || !licenseKey) {
       return NextResponse.json(
@@ -35,25 +107,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate PKCE code verifier and challenge
-    const codeVerifier = crypto.randomBytes(32).toString('base64url');
-    const codeChallenge = crypto
-      .createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url');
+    // Validate license key
+    const { data: license, error: licenseError } = await supabase
+      .from('licenses')
+      .select('status')
+      .eq('license_key', licenseKey)
+      .single();
 
-    // Store code verifier in session (in production, use proper session storage)
-    // For now, we'll include it in the state parameter
-    const state = crypto.randomBytes(16).toString('hex');
-    
-    // Store state, email, licenseKey, and codeVerifier temporarily
-    // In production, use Redis or database for this
-    const sessionData = {
-      email,
-      licenseKey,
-      codeVerifier,
-      timestamp: Date.now(),
-    };
+    if (licenseError || !license || license.status !== 'active') {
+      return NextResponse.json(
+        { error: 'Invalid or inactive license key' },
+        { status: 401 }
+      );
+    }
+
+    // Generate PKCE code verifier and state
+    const codeVerifier = crypto.randomBytes(32).toString('base64url');
+    const state = crypto.randomBytes(32).toString('hex');
+
+    // Store session in database
+    await createOAuthSession(state, email, licenseKey, amazon_account_id || null, codeVerifier);
 
     // Build Notion OAuth URL
     const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');
@@ -63,9 +136,6 @@ export async function POST(request: NextRequest) {
     authUrl.searchParams.set('owner', 'user');
     authUrl.searchParams.set('state', state);
 
-    // In production, store sessionData with state as key in Redis/DB
-    // For now, we'll encode it in the state (not ideal for production)
-    
     return NextResponse.json({ authUrl: authUrl.toString(), state });
   } catch (error: any) {
     console.error('OAuth initiation error:', error);

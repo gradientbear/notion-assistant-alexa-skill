@@ -31,9 +31,9 @@ function SuccessContent() {
           Your Notion account has been linked successfully.
         </p>
         <div className={styles.success}>
-          <p>You can now use the Notion Assistant Alexa skill.</p>
+          <p>You can now use the Notion Data Alexa skill.</p>
           <p style={{ marginTop: '16px', fontSize: '14px', color: '#666' }}>
-            Go back to your Alexa app and try: "Alexa, open Notion Assistant"
+            Go back to your Alexa app and try: "Alexa, open Notion Data"
           </p>
         </div>
       </div>

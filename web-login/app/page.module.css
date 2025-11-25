@@ -103,6 +103,15 @@
   text-align: center;
 }
 
+.info {
+  padding: 12px;
+  background-color: #eef;
+  border: 1px solid #ccf;
+  border-radius: 8px;
+  color: #33c;
+  font-size: 14px;
+}
+
 .footer {
   margin-top: 32px;
   text-align: center;

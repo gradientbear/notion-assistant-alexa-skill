@@ -1,6 +1,6 @@
 # Setup Instructions
 
-Complete setup guide for deploying the Notion Assistant Alexa Skill.
+Complete setup guide for deploying the Notion Data Alexa Skill.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ INSERT INTO licenses (license_key, status, notes) VALUES
 
 1. Go to https://www.notion.so/my-integrations
 2. Click "New integration"
-3. Name it "Notion Assistant Alexa Skill"
+3. Name it "Notion Data Alexa Skill"
 4. Select your workspace
 5. Set capabilities:
    - ✅ Read content
@@ -57,7 +57,7 @@ INSERT INTO licenses (license_key, status, notes) VALUES
 3. Select **"Public integration"** (not Internal integration)
    - This enables OAuth flow for users to authorize access
 4. Fill in the integration details:
-   - **Name**: "Notion Assistant Alexa Skill" (or any name you prefer)
+   - **Name**: "Notion Data Alexa Skill" (or any name you prefer)
    - **Logo**: Optional (upload an icon if you want)
    - **Associated workspace**: Select your workspace
 5. Set **Redirect URIs**:
@@ -106,7 +106,82 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 npm run build
 ```
 
-### 3.4 Deploy with SAM
+### 3.4 Configure AWS Credentials
+
+Before deploying, you need to configure AWS credentials. SAM CLI uses the same credentials as AWS CLI.
+
+**Option 1: Using AWS CLI (Recommended)**
+
+```bash
+# Install AWS CLI if not already installed
+# https://aws.amazon.com/cli/
+
+# Configure credentials
+aws configure
+```
+
+You'll be prompted for:
+- **AWS Access Key ID**: Your AWS access key
+- **AWS Secret Access Key**: Your AWS secret key
+- **Default region name**: `us-east-1` (or your preferred region)
+- **Default output format**: `json` (recommended)
+
+**Option 2: Using Environment Variables**
+
+```bash
+# Windows PowerShell
+$env:AWS_ACCESS_KEY_ID="your-access-key-id"
+$env:AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+$env:AWS_DEFAULT_REGION="us-east-1"
+
+# Windows CMD
+set AWS_ACCESS_KEY_ID=your-access-key-id
+set AWS_SECRET_ACCESS_KEY=your-secret-access-key
+set AWS_DEFAULT_REGION=us-east-1
+
+# Linux/Mac
+export AWS_ACCESS_KEY_ID="your-access-key-id"
+export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+**Option 3: Using AWS SSO**
+
+If your organization uses AWS SSO:
+
+```bash
+aws sso login --profile your-profile-name
+export AWS_PROFILE=your-profile-name
+```
+
+**Getting AWS Credentials:**
+
+1. Go to AWS Console → IAM → Users
+2. Select your user (or create a new one)
+3. Go to "Security credentials" tab
+4. Click "Create access key"
+5. Choose "Command Line Interface (CLI)"
+6. Download or copy the credentials (you'll only see the secret key once)
+
+**Required IAM Permissions:**
+
+Your AWS user/role needs permissions to:
+- Create and manage Lambda functions
+- Create and manage IAM roles
+- Create and manage CloudFormation stacks
+- Upload to S3 (for SAM deployment artifacts)
+
+You can use the `AdministratorAccess` policy for development, or create a custom policy with the minimum required permissions.
+
+**Verify Credentials:**
+
+```bash
+aws sts get-caller-identity
+```
+
+This should return your AWS account ID and user ARN if credentials are configured correctly.
+
+### 3.5 Deploy with SAM
 
 ```bash
 # Install AWS SAM CLI if not installed
@@ -159,7 +234,7 @@ Or connect your GitHub repo to Vercel for automatic deployments.
 1. Go to https://developer.amazon.com/alexa/console/ask
 2. Click "Create Skill"
 3. Choose:
-   - Skill name: "Notion Assistant"
+   - Skill name: "Notion Data"
    - Default language: English (US)
    - Model: Custom
    - Hosting: Provision your own
@@ -184,12 +259,20 @@ Or connect your GitHub repo to Vercel for automatic deployments.
 1. Go to "Account Linking"
 2. Enable account linking
 3. Set:
-   - Authorization URI: `https://your-web-app.vercel.app/api/oauth/initiate`
-   - Access Token URI: `https://your-web-app.vercel.app/api/oauth/callback`
-   - Client ID: (use a simple identifier, e.g., "notion-assistant")
-   - Client Secret: (generate a random string)
-   - Scopes: (leave empty or add as needed)
+   - **Authorization URI**: `https://your-web-app.vercel.app/api/oauth/initiate`
+   - **Access Token URI**: `https://your-web-app.vercel.app/api/oauth/callback`
+   - **Redirect URLs** (or "Allowed Return URLs"): `https://your-web-app.vercel.app/api/oauth/callback`
+     - This should match your Access Token URI
+     - You can add multiple URLs if needed (one per line)
+   - **Client ID**: (use a simple identifier, e.g., "notion-assistant")
+   - **Client Secret**: (generate a random string)
+   - **Scopes**: (leave empty or add as needed)
 4. Click "Save"
+
+**Important Notes:**
+- Replace `your-web-app.vercel.app` with your actual Vercel deployment URL
+- The Redirect URL must match your Access Token URI exactly
+- Both URLs should use HTTPS (required for production)
 
 ### 5.5 Configure Permissions
 
@@ -203,7 +286,7 @@ Or connect your GitHub repo to Vercel for automatic deployments.
 
 1. Go to "Test" tab
 2. Enable testing for your account
-3. Try: "open notion assistant"
+3. Try: "open Notion Data"
 
 ## Step 6: CI/CD Setup (Optional)
 
@@ -252,7 +335,7 @@ sam local invoke NotionAssistantFunction --event test-event.json
 1. Enable skill in Alexa app
 2. Link account
 3. Test all intents:
-   - "Alexa, open Notion Assistant"
+   - "Alexa, open Notion Data"
    - "Alexa, dump my brain"
    - "Alexa, what's my priority?"
 
@@ -260,9 +343,17 @@ sam local invoke NotionAssistantFunction --event test-event.json
 
 ### Lambda Deployment Fails
 
-- Check AWS credentials are configured
-- Verify SAM CLI is installed
+**"Unable to locate credentials" error:**
+- Run `aws configure` to set up credentials
+- Or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` environment variables
+- Verify with `aws sts get-caller-identity`
+- Check credentials file exists at `~/.aws/credentials` (Linux/Mac) or `%USERPROFILE%\.aws\credentials` (Windows)
+
+**Other issues:**
+- Verify SAM CLI is installed: `sam --version`
 - Check `template.yaml` syntax
+- Ensure you have IAM permissions for Lambda, CloudFormation, and S3
+- Check CloudFormation console for stack creation errors
 
 ### Web Login OAuth Fails
 

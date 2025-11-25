@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "notion assistant",
+      "invocationName": "notion data",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",

@@ -1,4 +1,4 @@
--- Notion Assistant Alexa Skill - Supabase Database Schema
+-- Notion Data Alexa Skill - Supabase Database Schema
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -23,10 +23,24 @@ CREATE TABLE IF NOT EXISTS licenses (
   notes TEXT
 );
 
+-- OAuth sessions table for temporary OAuth state storage
+CREATE TABLE IF NOT EXISTS oauth_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  state VARCHAR(255) UNIQUE NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  license_key VARCHAR(255) NOT NULL,
+  amazon_account_id VARCHAR(255),
+  code_verifier TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_amazon_account_id ON users(amazon_account_id);
 CREATE INDEX IF NOT EXISTS idx_users_license_key ON users(license_key);
 CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status);
+CREATE INDEX IF NOT EXISTS idx_oauth_sessions_state ON oauth_sessions(state);
+CREATE INDEX IF NOT EXISTS idx_oauth_sessions_expires_at ON oauth_sessions(expires_at);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -57,6 +71,19 @@ CREATE POLICY "Service role can manage users" ON users
 -- Service role can do everything
 CREATE POLICY "Service role can manage licenses" ON licenses
   FOR ALL USING (true);
+
+-- RLS Policies for oauth_sessions table
+-- Service role can do everything
+CREATE POLICY "Service role can manage oauth_sessions" ON oauth_sessions
+  FOR ALL USING (true);
+
+-- Function to clean up expired OAuth sessions
+CREATE OR REPLACE FUNCTION cleanup_expired_oauth_sessions()
+RETURNS void AS $$
+BEGIN
+  DELETE FROM oauth_sessions WHERE expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
 
 -- Sample data insertion script (for testing)
 -- Uncomment and modify as needed:
