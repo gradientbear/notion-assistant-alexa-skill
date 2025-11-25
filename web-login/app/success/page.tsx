@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import styles from '../page.module.css'
 
-export default function SuccessPage() {
+function SuccessContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +38,20 @@ export default function SuccessPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.container}>
+        <div className={styles.card}>
+          <h1 className={styles.title}>Loading...</h1>
+        </div>
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   )
 }
 
