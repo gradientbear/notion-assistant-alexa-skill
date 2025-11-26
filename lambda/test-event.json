@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "session": {
+    "sessionId": "test-session-id",
+    "user": {
+      "userId": "test-user-id"
+    }
+  },
+  "request": {
+    "type": "LaunchRequest",
+    "requestId": "test-request-id",
+    "timestamp": "2024-01-01T00:00:00Z",
+    "locale": "en-US"
+  }
+}
+

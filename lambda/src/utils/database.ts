@@ -4,22 +4,49 @@ import { User, License } from '../types';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
 
+console.log('[Database] Initializing Supabase client:', {
+  hasUrl: !!supabaseUrl,
+  hasKey: !!supabaseKey,
+  urlLength: supabaseUrl.length,
+  keyLength: supabaseKey.length
+});
+
 if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Missing Supabase environment variables');
+  const error = new Error('Missing Supabase environment variables');
+  console.error('[Database] Error:', error.message);
+  console.error('[Database] SUPABASE_URL:', supabaseUrl ? 'SET' : 'MISSING');
+  console.error('[Database] SUPABASE_SERVICE_KEY:', supabaseKey ? 'SET' : 'MISSING');
+  throw error;
 }
 
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+console.log('[Database] Supabase client created successfully');
 
 export async function getUserByAmazonId(amazonAccountId: string): Promise<User | null> {
+  console.log('[getUserByAmazonId] Looking up user with amazon_account_id:', amazonAccountId);
+  
   const { data, error } = await supabase
     .from('users')
     .select('*')
     .eq('amazon_account_id', amazonAccountId)
     .single();
 
-  if (error || !data) {
+  if (error) {
+    console.error('[getUserByAmazonId] Supabase error:', error);
     return null;
   }
+
+  if (!data) {
+    console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
+    return null;
+  }
+
+  console.log('[getUserByAmazonId] User found:', {
+    id: data.id,
+    email: data.email,
+    hasNotionToken: !!data.notion_token,
+    notionTokenLength: data.notion_token?.length || 0
+  });
 
   return data as User;
 }
