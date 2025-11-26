@@ -11,6 +11,8 @@ Globals:
       Variables:
         SUPABASE_URL: !Ref SupabaseUrl
         SUPABASE_SERVICE_KEY: !Ref SupabaseServiceKey
+        # Set DISABLE_LICENSE_VALIDATION=true to bypass license checks for testing
+        DISABLE_LICENSE_VALIDATION: 'true'
 
 Parameters:
   SupabaseUrl:

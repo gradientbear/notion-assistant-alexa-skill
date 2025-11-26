@@ -24,6 +24,7 @@ export const handler = SkillBuilders.custom()
     new SessionEndedHandler()
   )
   .addRequestInterceptors(
+    // License validation can be disabled by setting DISABLE_LICENSE_VALIDATION=true
     new LicenseValidationInterceptor(),
     new NotionConnectionInterceptor()
   )

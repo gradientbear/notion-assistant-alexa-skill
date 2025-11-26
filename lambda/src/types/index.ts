@@ -4,6 +4,11 @@ export interface User {
   email: string;
   license_key: string;
   notion_token: string | null;
+  notion_setup_complete: boolean;
+  privacy_page_id: string | null;
+  tasks_db_id: string | null;
+  focus_logs_db_id: string | null;
+  energy_logs_db_id: string | null;
   created_at: string;
   updated_at: string;
 }

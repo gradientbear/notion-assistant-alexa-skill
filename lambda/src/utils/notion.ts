@@ -305,3 +305,404 @@ export function getTimeOfDay(): 'Morning' | 'Afternoon' | 'Evening' {
   return 'Evening';
 }
 
+/**
+ * Get the user's workspace root page ID
+ * This is needed to create pages in the user's workspace
+ */
+export async function getUserWorkspace(client: Client): Promise<string | null> {
+  try {
+    // Search for pages in the workspace
+    const response = await withRetry(() =>
+      client.search({
+        filter: {
+          property: 'object',
+          value: 'page',
+        },
+        page_size: 1,
+      })
+    );
+
+    if (response.results.length > 0) {
+      const page = response.results[0] as any;
+      // Get the parent workspace/page
+      if (page.parent?.workspace) {
+        // For workspace root, we need to find a page and use its parent
+        return page.id;
+      }
+      // Traverse up to find workspace root
+      return page.parent?.page_id || page.id;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting user workspace:', error);
+    return null;
+  }
+}
+
+/**
+ * Create a Privacy page in the user's workspace
+ */
+export async function createPrivacyPage(client: Client): Promise<string | null> {
+  try {
+    // First, try to find if Privacy page already exists
+    const searchResponse = await withRetry(() =>
+      client.search({
+        query: 'Privacy',
+        filter: {
+          property: 'object',
+          value: 'page',
+        },
+      })
+    );
+
+    const existingPage = searchResponse.results.find(
+      (item: any) => {
+        if (item.object !== 'page') return false;
+        // Check title in properties or in title array
+        const title = item.properties?.title?.title?.[0]?.plain_text || 
+                     item.title?.[0]?.plain_text;
+        return title === 'Privacy';
+      }
+    );
+
+    if (existingPage) {
+      return (existingPage as any).id;
+    }
+
+    // Find a workspace page to use as parent
+    // For OAuth integrations, we need to find an existing page
+    const workspaceSearch = await withRetry(() =>
+      client.search({
+        filter: {
+          property: 'object',
+          value: 'page',
+        },
+        page_size: 1,
+      })
+    );
+
+    let parentId: string | null = null;
+    if (workspaceSearch.results.length > 0) {
+      const firstPage = workspaceSearch.results[0] as any;
+      // Try to get the workspace root or use the first page's parent
+      if (firstPage.parent?.workspace) {
+        // If parent is workspace, we can create as child of this page
+        parentId = firstPage.id;
+      } else if (firstPage.parent?.page_id) {
+        parentId = firstPage.parent.page_id;
+      } else {
+        parentId = firstPage.id;
+      }
+    }
+
+    if (!parentId) {
+      throw new Error('Could not find a parent page in workspace');
+    }
+
+    // Create new Privacy page as child of workspace page
+    const pageResponse = await withRetry(() =>
+      client.pages.create({
+        parent: {
+          type: 'page_id',
+          page_id: parentId,
+        },
+        properties: {
+          title: [
+            {
+              text: {
+                content: 'Privacy',
+              },
+            },
+          ],
+        },
+      })
+    );
+
+    return pageResponse.id;
+  } catch (error) {
+    console.error('Error creating Privacy page:', error);
+    return null;
+  }
+}
+
+/**
+ * Create Tasks database on a parent page
+ */
+export async function createTasksDatabase(
+  client: Client,
+  parentPageId: string
+): Promise<string | null> {
+  try {
+    // Check if database already exists
+    const searchResponse = await withRetry(() =>
+      client.search({
+        query: 'Tasks',
+        filter: {
+          property: 'object',
+          value: 'database',
+        },
+      })
+    );
+
+    const existingDb = searchResponse.results.find(
+      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Tasks'
+    );
+
+    if (existingDb) {
+      return (existingDb as any).id;
+    }
+
+    // Create Tasks database
+    const dbResponse = await withRetry(() =>
+      client.databases.create({
+        parent: {
+          type: 'page_id',
+          page_id: parentPageId,
+        },
+        title: [
+          {
+            text: {
+              content: 'Tasks',
+            },
+          },
+        ],
+        properties: {
+          'Task Name': {
+            title: {},
+          },
+          Priority: {
+            select: {
+              options: [
+                { name: 'High', color: 'red' },
+                { name: 'Medium', color: 'yellow' },
+                { name: 'Low', color: 'blue' },
+              ],
+            },
+          },
+          Status: {
+            select: {
+              options: [
+                { name: 'To Do', color: 'gray' },
+                { name: 'In Progress', color: 'blue' },
+                { name: 'Done', color: 'green' },
+              ],
+            },
+          },
+          Category: {
+            select: {
+              options: [
+                { name: 'Work', color: 'orange' },
+                { name: 'Personal', color: 'purple' },
+                { name: 'Fitness', color: 'pink' },
+                { name: 'Shopping', color: 'green' },
+              ],
+            },
+          },
+          'Due Date': {
+            date: {},
+          },
+          Notes: {
+            rich_text: {},
+          },
+        },
+      })
+    );
+
+    return dbResponse.id;
+  } catch (error) {
+    console.error('Error creating Tasks database:', error);
+    return null;
+  }
+}
+
+/**
+ * Create Focus_Logs database on a parent page
+ */
+export async function createFocusLogsDatabase(
+  client: Client,
+  parentPageId: string
+): Promise<string | null> {
+  try {
+    // Check if database already exists
+    const searchResponse = await withRetry(() =>
+      client.search({
+        query: 'Focus_Logs',
+        filter: {
+          property: 'object',
+          value: 'database',
+        },
+      })
+    );
+
+    const existingDb = searchResponse.results.find(
+      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Focus_Logs'
+    );
+
+    if (existingDb) {
+      return (existingDb as any).id;
+    }
+
+    // Create Focus_Logs database
+    const dbResponse = await withRetry(() =>
+      client.databases.create({
+        parent: {
+          type: 'page_id',
+          page_id: parentPageId,
+        },
+        title: [
+          {
+            text: {
+              content: 'Focus_Logs',
+            },
+          },
+        ],
+        properties: {
+          Date: {
+            date: {},
+          },
+          'Duration (minutes)': {
+            number: {},
+          },
+          'Focus Level': {
+            select: {
+              options: [
+                { name: 'Low', color: 'red' },
+                { name: 'Medium', color: 'yellow' },
+                { name: 'High', color: 'green' },
+              ],
+            },
+          },
+          Notes: {
+            rich_text: {},
+          },
+        },
+      })
+    );
+
+    return dbResponse.id;
+  } catch (error) {
+    console.error('Error creating Focus_Logs database:', error);
+    return null;
+  }
+}
+
+/**
+ * Create Energy_Logs database on a parent page
+ */
+export async function createEnergyLogsDatabase(
+  client: Client,
+  parentPageId: string
+): Promise<string | null> {
+  try {
+    // Check if database already exists
+    const searchResponse = await withRetry(() =>
+      client.search({
+        query: 'Energy_Logs',
+        filter: {
+          property: 'object',
+          value: 'database',
+        },
+      })
+    );
+
+    const existingDb = searchResponse.results.find(
+      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Energy_Logs'
+    );
+
+    if (existingDb) {
+      return (existingDb as any).id;
+    }
+
+    // Create Energy_Logs database
+    const dbResponse = await withRetry(() =>
+      client.databases.create({
+        parent: {
+          type: 'page_id',
+          page_id: parentPageId,
+        },
+        title: [
+          {
+            text: {
+              content: 'Energy_Logs',
+            },
+          },
+        ],
+        properties: {
+          Date: {
+            date: {},
+          },
+          'Energy Level': {
+            select: {
+              options: [
+                { name: 'Low', color: 'red' },
+                { name: 'Medium', color: 'yellow' },
+                { name: 'High', color: 'green' },
+              ],
+            },
+          },
+          'Time of Day': {
+            select: {
+              options: [
+                { name: 'Morning', color: 'orange' },
+                { name: 'Afternoon', color: 'yellow' },
+                { name: 'Evening', color: 'purple' },
+              ],
+            },
+          },
+          Notes: {
+            rich_text: {},
+          },
+        },
+      })
+    );
+
+    return dbResponse.id;
+  } catch (error) {
+    console.error('Error creating Energy_Logs database:', error);
+    return null;
+  }
+}
+
+/**
+ * Complete Notion setup for a user:
+ * 1. Create Privacy page
+ * 2. Create three databases (Tasks, Focus_Logs, Energy_Logs)
+ * Returns an object with all created IDs
+ */
+export async function setupNotionWorkspace(
+  client: Client
+): Promise<{
+  privacyPageId: string | null;
+  tasksDbId: string | null;
+  focusLogsDbId: string | null;
+  energyLogsDbId: string | null;
+}> {
+  try {
+    // Step 1: Create Privacy page
+    const privacyPageId = await createPrivacyPage(client);
+    if (!privacyPageId) {
+      throw new Error('Failed to create Privacy page');
+    }
+
+    // Step 2: Create databases on the Privacy page
+    const tasksDbId = await createTasksDatabase(client, privacyPageId);
+    const focusLogsDbId = await createFocusLogsDatabase(client, privacyPageId);
+    const energyLogsDbId = await createEnergyLogsDatabase(client, privacyPageId);
+
+    return {
+      privacyPageId,
+      tasksDbId: tasksDbId || null,
+      focusLogsDbId: focusLogsDbId || null,
+      energyLogsDbId: energyLogsDbId || null,
+    };
+  } catch (error) {
+    console.error('Error setting up Notion workspace:', error);
+    return {
+      privacyPageId: null,
+      tasksDbId: null,
+      focusLogsDbId: null,
+      energyLogsDbId: null,
+    };
+  }
+}
+

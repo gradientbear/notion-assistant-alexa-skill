@@ -37,6 +37,7 @@ export async function createUser(
       email,
       license_key: licenseKey,
       notion_token: notionToken,
+      notion_setup_complete: notionToken !== null,
     })
     .select()
     .single();
@@ -62,6 +63,46 @@ export async function updateUserNotionToken(
 
   if (error) {
     throw new Error(`Failed to update Notion token: ${error.message}`);
+  }
+}
+
+export async function updateUserNotionSetup(
+  userId: string,
+  setupData: {
+    privacyPageId?: string | null;
+    tasksDbId?: string | null;
+    focusLogsDbId?: string | null;
+    energyLogsDbId?: string | null;
+    setupComplete?: boolean;
+  }
+): Promise<void> {
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (setupData.privacyPageId !== undefined) {
+    updateData.privacy_page_id = setupData.privacyPageId;
+  }
+  if (setupData.tasksDbId !== undefined) {
+    updateData.tasks_db_id = setupData.tasksDbId;
+  }
+  if (setupData.focusLogsDbId !== undefined) {
+    updateData.focus_logs_db_id = setupData.focusLogsDbId;
+  }
+  if (setupData.energyLogsDbId !== undefined) {
+    updateData.energy_logs_db_id = setupData.energyLogsDbId;
+  }
+  if (setupData.setupComplete !== undefined) {
+    updateData.notion_setup_complete = setupData.setupComplete;
+  }
+
+  const { error } = await supabase
+    .from('users')
+    .update(updateData)
+    .eq('id', userId);
+
+  if (error) {
+    throw new Error(`Failed to update Notion setup: ${error.message}`);
   }
 }
 
@@ -122,6 +163,8 @@ export async function createOrUpdateUser(
     // Only update notion_token if provided
     if (notionToken !== null) {
       updateData.notion_token = notionToken;
+      // If token is being set, mark setup as incomplete (will be completed after database creation)
+      updateData.notion_setup_complete = false;
     }
     
     const { data, error } = await supabase

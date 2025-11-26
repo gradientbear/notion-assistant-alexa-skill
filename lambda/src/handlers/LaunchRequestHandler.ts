@@ -22,7 +22,7 @@ export class LaunchRequestHandler implements RequestHandler {
       );
     }
 
-    // Check if user exists and has valid license
+    // Check if user exists
     const user = await getUserByAmazonId(userId);
     
     if (!user) {
@@ -33,12 +33,15 @@ export class LaunchRequestHandler implements RequestHandler {
       );
     }
 
-    const isValidLicense = await validateLicense(user.license_key);
-    if (!isValidLicense) {
-      return buildSimpleResponse(
-        handlerInput,
-        'Your license key is invalid or has been deactivated. Please contact support.'
-      );
+    // Skip license validation if DISABLE_LICENSE_VALIDATION is set to 'true'
+    if (process.env.DISABLE_LICENSE_VALIDATION !== 'true') {
+      const isValidLicense = await validateLicense(user.license_key);
+      if (!isValidLicense) {
+        return buildSimpleResponse(
+          handlerInput,
+          'Your license key is invalid or has been deactivated. Please contact support.'
+        );
+      }
     }
 
     // Check if Notion is connected

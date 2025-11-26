@@ -7,6 +7,21 @@ import { getUserByAmazonId, validateLicense } from '../utils/database';
 
 export class LicenseValidationInterceptor implements RequestInterceptor {
   async process(handlerInput: HandlerInput): Promise<void> {
+    // Bypass license validation if DISABLE_LICENSE_VALIDATION is set to 'true'
+    if (process.env.DISABLE_LICENSE_VALIDATION === 'true') {
+      // Still load user for session attributes, but skip license check
+      const userId = handlerInput.requestEnvelope.session?.user?.userId;
+      if (userId) {
+        const user = await getUserByAmazonId(userId);
+        if (user) {
+          const attributes = handlerInput.attributesManager.getSessionAttributes();
+          attributes.user = user;
+          handlerInput.attributesManager.setSessionAttributes(attributes);
+        }
+      }
+      return;
+    }
+
     const requestType = handlerInput.requestEnvelope.request.type;
 
     // Skip validation for LaunchRequest (handled in LaunchRequestHandler)
