@@ -149,9 +149,12 @@
           "name": "HighPriorityTasksIntent",
           "samples": [
             "what are my high priority tasks",
+            "what are my high-priority tasks",
             "show high priority",
             "high priority tasks",
-            "what's high priority"
+            "high-priority tasks",
+            "what's high priority",
+            "what's high-priority"
           ]
         },
         {
@@ -250,10 +253,16 @@
             "add {task}",
             "add {task} to my to-do list",
             "add high priority {task}",
+            "add high-priority {task}",
             "add {task} due tomorrow",
             "add {task} to work",
             "add urgent {task}",
-            "add {task} for today"
+            "add {task} for today",
+            "remind me to {task}",
+            "remind me {task}",
+            "add {task} to shopping",
+            "add {task} to fitness",
+            "add {task} to personal"
           ],
           "slots": [
             {
@@ -271,7 +280,10 @@
             "mark {task} as complete",
             "{task} is done",
             "mark all today's tasks as done",
-            "complete all today's tasks"
+            "complete all today's tasks",
+            "finish {task}",
+            "done with {task}",
+            "{task} done"
           ],
           "slots": [
             {
@@ -288,7 +300,26 @@
             "remove {task}",
             "delete completed tasks",
             "remove completed tasks",
-            "delete all completed tasks"
+            "delete all completed tasks",
+            "remove all completed tasks"
+          ],
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "UpdateTaskStatusIntent",
+          "samples": [
+            "set {task} to in progress",
+            "move {task} to in progress",
+            "start {task}",
+            "begin {task}",
+            "set {task} to in-progress",
+            "move {task} to in-progress"
           ],
           "slots": [
             {
@@ -421,6 +452,23 @@
             }
           ],
           "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "UpdateTaskStatusIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.TaskUpdate"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
         }
       ],
       "delegations": []
@@ -510,6 +558,19 @@
           {
             "type": "PlainText",
             "value": "Which task would you like to delete?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the task name."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.TaskUpdate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which task would you like to update?"
           },
           {
             "type": "PlainText",

@@ -9,6 +9,7 @@ export interface OAuthSession {
   email: string;
   license_key: string;
   amazon_account_id: string | null;
+  auth_user_id: string | null;
   code_verifier: string | null;
   created_at: string;
   expires_at: string;

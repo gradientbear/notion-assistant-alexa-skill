@@ -21,7 +21,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [user, setUser] = useState<User | null>(null)
-  const [currentStep, setCurrentStep] = useState<OnboardingStep>('amazon')
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>('notion')
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string>('')
   const [message, setMessage] = useState<string>('')
@@ -144,14 +144,14 @@ export default function OnboardingPage() {
       const userData = await response.json()
       setUser(userData)
 
-      // Determine current step - Amazon linking first, then Notion
+      // Determine current step - Notion first (optional), then Amazon, then License
       if (userData.onboarding_complete) {
         router.push('/dashboard')
         return
-      } else if (!userData.amazon_account_id) {
-        setCurrentStep('amazon')
       } else if (!userData.notion_token) {
         setCurrentStep('notion')
+      } else if (!userData.amazon_account_id) {
+        setCurrentStep('amazon')
       } else if (!userData.license_key) {
         setCurrentStep('license')
       }
@@ -196,20 +196,30 @@ export default function OnboardingPage() {
     router.push('/license')
   }
 
+  const handleSkipNotion = async () => {
+    // Allow user to skip Notion connection and proceed to next step
+    if (!user?.amazon_account_id) {
+      setCurrentStep('amazon')
+    } else if (!user?.license_key) {
+      setCurrentStep('license')
+    }
+  }
+
   const steps = [
+    {
+      id: 'notion' as OnboardingStep,
+      title: 'Connect Notion (Optional)',
+      description: 'Link your Notion workspace and we\'ll automatically create the required databases. You can skip this and connect later.',
+      completed: !!user?.notion_token && user?.notion_setup_complete,
+      action: handleNotionConnect,
+      skippable: true,
+    },
     {
       id: 'amazon' as OnboardingStep,
       title: 'Link Amazon Account',
       description: 'Connect your Amazon account to enable the Alexa skill',
       completed: !!user?.amazon_account_id,
       action: handleAmazonLink,
-    },
-    {
-      id: 'notion' as OnboardingStep,
-      title: 'Connect Notion',
-      description: 'Link your Notion workspace and we\'ll automatically create the required databases',
-      completed: !!user?.notion_token && user?.notion_setup_complete,
-      action: handleNotionConnect,
     },
     {
       id: 'license' as OnboardingStep,
@@ -299,13 +309,43 @@ export default function OnboardingPage() {
                       <p className="text-gray-600 mb-4">{step.description}</p>
                       
                       {isCurrent && !isCompleted && (
-                        <button
-                          onClick={step.action}
-                          disabled={processing}
-                          className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
-                        >
-                          {processing ? 'Processing...' : `Start ${step.title}`}
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          {step.id === 'notion' && (
+                            <>
+                              <a
+                                href="https://www.notion.so/signup"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-6 py-2 bg-white border-2 border-blue-600 text-blue-600 font-semibold rounded-lg hover:bg-blue-50 transition text-center"
+                              >
+                                Create Notion Account
+                              </a>
+                              <button
+                                onClick={step.action}
+                                disabled={processing}
+                                className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
+                              >
+                                {processing ? 'Processing...' : 'Connect Notion'}
+                              </button>
+                              <button
+                                onClick={handleSkipNotion}
+                                disabled={processing}
+                                className="px-6 py-2 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition disabled:opacity-50"
+                              >
+                                Skip for Now
+                              </button>
+                            </>
+                          )}
+                          {step.id !== 'notion' && (
+                            <button
+                              onClick={step.action}
+                              disabled={processing}
+                              className="px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-indigo-700 transition disabled:opacity-50"
+                            >
+                              {processing ? 'Processing...' : `Start ${step.title}`}
+                            </button>
+                          )}
+                        </div>
                       )}
                       
                       {isCompleted && (
@@ -321,6 +361,32 @@ export default function OnboardingPage() {
           </div>
 
           {/* Additional Info */}
+          {currentStep === 'notion' && (
+            <div className="space-y-4 mb-6">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800 mb-2">
+                  <strong>Don't have a Notion account?</strong>
+                </p>
+                <p className="text-sm text-blue-700 mb-3">
+                  Notion is free to use. Click "Create Notion Account" above to sign up, then come back to connect your workspace.
+                </p>
+                <p className="text-sm text-blue-700">
+                  You can also skip this step and connect Notion later from your dashboard.
+                </p>
+              </div>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm text-green-800">
+                  <strong>What we'll create in your Notion workspace:</strong>
+                </p>
+                <ul className="list-disc list-inside text-sm text-green-700 mt-2 space-y-1">
+                  <li>A "Privacy" page in your Notion workspace</li>
+                  <li>Tasks database for task management</li>
+                  <li>Focus_Logs database for focus tracking</li>
+                  <li>Energy_Logs database for energy tracking</li>
+                </ul>
+              </div>
+            </div>
+          )}
           {currentStep === 'amazon' && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800">
@@ -330,19 +396,6 @@ export default function OnboardingPage() {
                 <li>Enables the Alexa skill to identify you</li>
                 <li>Required for using the skill on your Alexa devices</li>
                 <li>Links your web account to your Alexa account</li>
-              </ul>
-            </div>
-          )}
-          {currentStep === 'notion' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-800">
-                <strong>What we'll create:</strong>
-              </p>
-              <ul className="list-disc list-inside text-sm text-blue-700 mt-2 space-y-1">
-                <li>A "Privacy" page in your Notion workspace</li>
-                <li>Tasks database for task management</li>
-                <li>Focus_Logs database for focus tracking</li>
-                <li>Energy_Logs database for energy tracking</li>
               </ul>
             </div>
           )}

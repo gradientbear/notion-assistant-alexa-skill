@@ -4,28 +4,57 @@ import { findDatabaseByName, addTask, parseTaskFromUtterance } from '../utils/no
 
 export class AddTaskHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return (
-      handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
-      handlerInput.requestEnvelope.request.intent.name === 'AddTaskIntent'
-    );
+    const isIntentRequest = handlerInput.requestEnvelope.request.type === 'IntentRequest';
+    const intentName = isIntentRequest 
+      ? (handlerInput.requestEnvelope.request as any).intent?.name 
+      : null;
+    
+    const canHandle = isIntentRequest && intentName === 'AddTaskIntent';
+    
+    if (isIntentRequest) {
+      console.log('[AddTaskHandler] canHandle check:', {
+        isIntentRequest,
+        intentName,
+        canHandle
+      });
+    }
+    
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
-    const attributes = handlerInput.attributesManager.getSessionAttributes();
-    const user = attributes.user;
-    const notionClient = attributes.notionClient;
-
-    if (!user || !notionClient) {
-      return buildResponse(
-        handlerInput,
-        'Please link your Notion account in the Alexa app to use this feature.',
-        'What would you like to do?'
-      );
-    }
-
     try {
+      console.log('[AddTaskHandler] Handler started');
+      const attributes = handlerInput.attributesManager.getSessionAttributes();
+      const user = attributes.user;
+      const notionClient = attributes.notionClient;
+
+      console.log('[AddTaskHandler] Session check:', {
+        hasUser: !!user,
+        hasNotionClient: !!notionClient,
+        userId: user?.id,
+        hasNotionToken: !!user?.notion_token
+      });
+
+      if (!user || !notionClient) {
+        console.warn('[AddTaskHandler] Missing user or Notion client');
+        return buildResponse(
+          handlerInput,
+          'Please link your Notion account in the Alexa app to use this feature.',
+          'What would you like to do?'
+        );
+      }
+
       const request = handlerInput.requestEnvelope.request as any;
       const taskSlot = request.intent.slots?.task?.value;
+
+      console.log('[AddTaskHandler] Handler invoked');
+      console.log('[AddTaskHandler] Intent name:', request.intent.name);
+      console.log('[AddTaskHandler] Task slot value:', taskSlot);
+      console.log('[AddTaskHandler] Full request:', JSON.stringify({
+        intent: request.intent.name,
+        slots: request.intent.slots
+      }));
 
       if (!taskSlot || taskSlot.trim().length === 0) {
         return buildResponse(
@@ -46,8 +75,20 @@ export class AddTaskHandler implements RequestHandler {
 
       // Parse task properties from utterance
       const parsed = parseTaskFromUtterance(taskSlot);
+      console.log('[AddTaskHandler] Parsed task:', JSON.stringify(parsed));
+      
+      // Additional validation
+      if (!parsed || !parsed.taskName) {
+        console.error('[AddTaskHandler] Parsing returned invalid result:', parsed);
+        return buildResponse(
+          handlerInput,
+          'I couldn\'t understand the task name. Please try again.',
+          'What task would you like to add?'
+        );
+      }
       
       if (!parsed.taskName || parsed.taskName.trim().length === 0) {
+        console.error('[AddTaskHandler] Empty task name after parsing. Original:', taskSlot);
         return buildResponse(
           handlerInput,
           'I couldn\'t understand the task name. Please try again.',
@@ -56,14 +97,33 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       // Add task with parsed properties
-      await addTask(
-        notionClient,
-        tasksDbId,
-        parsed.taskName,
-        parsed.priority || 'Medium',
-        parsed.category || 'Personal',
-        parsed.dueDate
-      );
+      console.log('[AddTaskHandler] Adding task to Notion:', {
+        name: parsed.taskName,
+        priority: parsed.priority || 'Medium',
+        category: parsed.category || 'Personal',
+        dueDate: parsed.dueDate,
+        databaseId: tasksDbId
+      });
+
+      try {
+        await addTask(
+          notionClient,
+          tasksDbId,
+          parsed.taskName,
+          parsed.priority || 'Medium',
+          parsed.category || 'Personal',
+          parsed.dueDate
+        );
+        console.log('[AddTaskHandler] Task added successfully to Notion');
+      } catch (notionError: any) {
+        console.error('[AddTaskHandler] Notion API error:', {
+          message: notionError?.message,
+          status: notionError?.status,
+          code: notionError?.code,
+          body: notionError?.body
+        });
+        throw notionError; // Re-throw to be caught by outer catch
+      }
 
       // Build confirmation message
       let confirmation = `Added: ${parsed.taskName}`;
@@ -97,8 +157,16 @@ export class AddTaskHandler implements RequestHandler {
       confirmation += '.';
 
       return buildResponse(handlerInput, confirmation, 'What else would you like to do?');
-    } catch (error) {
-      console.error('Error adding task:', error);
+    } catch (error: any) {
+      console.error('[AddTaskHandler] Error adding task:', error);
+      console.error('[AddTaskHandler] Error details:', {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        stack: error?.stack,
+        name: error?.name,
+        error: JSON.stringify(error)
+      });
       return buildResponse(
         handlerInput,
         'I encountered an error adding your task. Please try again.',

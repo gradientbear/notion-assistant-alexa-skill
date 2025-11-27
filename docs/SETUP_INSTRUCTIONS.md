@@ -62,7 +62,7 @@ INSERT INTO licenses (license_key, status, notes) VALUES
    - **Associated workspace**: Select your workspace
 5. Set **Redirect URIs**:
    - Click "Add redirect URI"
-   - Enter: `https://your-web-app.vercel.app/api/oauth/callback`
+   - Enter: `https://notion-data-user.vercel.app/api/oauth/callback`
    - **Note:** Replace `your-web-app.vercel.app` with your actual Vercel domain
    - You can add multiple redirect URIs (e.g., localhost for testing)
 6. Click **"Submit"** to create the integration

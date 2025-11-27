@@ -5,10 +5,22 @@ import { findDatabaseByName, addTask } from '../utils/notion';
 
 export class BrainDumpHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return (
-      handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
-      handlerInput.requestEnvelope.request.intent.name === 'BrainDumpIntent'
-    );
+    const isIntentRequest = handlerInput.requestEnvelope.request.type === 'IntentRequest';
+    const intentName = isIntentRequest 
+      ? (handlerInput.requestEnvelope.request as any).intent?.name 
+      : null;
+    
+    const canHandle = isIntentRequest && intentName === 'BrainDumpIntent';
+    
+    if (isIntentRequest) {
+      console.log('[BrainDumpHandler] canHandle check:', {
+        isIntentRequest,
+        intentName,
+        canHandle
+      });
+    }
+    
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {

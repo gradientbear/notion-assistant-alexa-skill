@@ -630,34 +630,38 @@ export function parseTaskFromUtterance(utterance: string): {
   dueDate?: string;
   category?: 'Work' | 'Personal' | 'Fitness' | 'Shopping';
 } {
-  const lowerUtterance = utterance.toLowerCase();
-  let taskName = utterance;
+  const lowerUtterance = utterance.toLowerCase().trim();
+  let taskName = utterance.trim();
   let priority: 'High' | 'Medium' | 'Low' | undefined;
   let dueDate: string | undefined;
   let category: 'Work' | 'Personal' | 'Fitness' | 'Shopping' | undefined;
 
-  // Parse priority
+  // First, remove common prefixes
+  taskName = taskName.replace(/^(add|remind me to|remind me)\s+/i, '').trim();
+
+  // Parse priority (must check before removing other parts)
   if (lowerUtterance.includes('high priority') || lowerUtterance.includes('urgent')) {
     priority = 'High';
-    taskName = taskName.replace(/high priority|urgent/gi, '').trim();
+    taskName = taskName.replace(/\b(high\s+priority|urgent)\b/gi, '').trim();
   } else if (lowerUtterance.includes('low priority')) {
     priority = 'Low';
-    taskName = taskName.replace(/low priority/gi, '').trim();
+    taskName = taskName.replace(/\blow\s+priority\b/gi, '').trim();
   }
 
-  // Parse category
-  if (lowerUtterance.includes('work') || lowerUtterance.includes('to work:')) {
+  // Parse category (be more specific to avoid false matches)
+  // Check for "work task" or "to work" patterns
+  if (lowerUtterance.match(/\b(work\s+task|to\s+work|work:)\b/)) {
     category = 'Work';
-    taskName = taskName.replace(/to work:|work/gi, '').trim();
-  } else if (lowerUtterance.includes('fitness') || lowerUtterance.includes('workout')) {
+    taskName = taskName.replace(/\b(work\s+task|to\s+work|work:)\b/gi, '').trim();
+  } else if (lowerUtterance.match(/\b(fitness|workout|to\s+fitness|fitness:)\b/)) {
     category = 'Fitness';
-    taskName = taskName.replace(/fitness|workout/gi, '').trim();
-  } else if (lowerUtterance.includes('shopping')) {
+    taskName = taskName.replace(/\b(fitness|workout|to\s+fitness|fitness:)\b/gi, '').trim();
+  } else if (lowerUtterance.match(/\b(to\s+shopping|shopping|shopping\s+list)\b/)) {
     category = 'Shopping';
-    taskName = taskName.replace(/shopping/gi, '').trim();
-  } else if (lowerUtterance.includes('personal')) {
+    taskName = taskName.replace(/\b(to\s+shopping|shopping|shopping\s+list)\b/gi, '').trim();
+  } else if (lowerUtterance.match(/\b(personal|to\s+personal|personal:)\b/)) {
     category = 'Personal';
-    taskName = taskName.replace(/personal/gi, '').trim();
+    taskName = taskName.replace(/\b(personal|to\s+personal|personal:)\b/gi, '').trim();
   }
 
   // Parse dates
@@ -667,13 +671,13 @@ export function parseTaskFromUtterance(utterance: string): {
 
   if (lowerUtterance.includes('today')) {
     dueDate = today.toISOString().split('T')[0];
-    taskName = taskName.replace(/today/gi, '').trim();
+    taskName = taskName.replace(/\btoday\b/gi, '').trim();
   } else if (lowerUtterance.includes('tomorrow')) {
     dueDate = tomorrow.toISOString().split('T')[0];
-    taskName = taskName.replace(/tomorrow/gi, '').trim();
-  } else if (lowerUtterance.includes('due')) {
-    // Try to extract date after "due"
-    const dueMatch = lowerUtterance.match(/due\s+(\w+)/);
+    taskName = taskName.replace(/\btomorrow\b/gi, '').trim();
+  } else if (lowerUtterance.includes('due') || lowerUtterance.includes('next')) {
+    // Try to extract date after "due" or "next"
+    const dueMatch = lowerUtterance.match(/(?:due|next)\s+(\w+)/);
     if (dueMatch) {
       const dateStr = dueMatch[1];
       if (dateStr === 'monday' || dateStr === 'mon') {
@@ -719,16 +723,33 @@ export function parseTaskFromUtterance(utterance: string): {
         sunday.setDate(diff);
         dueDate = sunday.toISOString().split('T')[0];
       }
-      taskName = taskName.replace(/due\s+\w+/gi, '').trim();
+      taskName = taskName.replace(/\b(due|next)\s+\w+\b/gi, '').trim();
     }
   }
 
-  // Clean up task name
+  // Clean up task name - remove common suffixes and phrases
+  // Remove duration/time mentions (not supported yet)
   taskName = taskName
-    .replace(/^add\s+/i, '')
-    .replace(/\s+to\s+my\s+to-do\s+list/gi, '')
+    .replace(/\s+to\s+my\s+to-do\s+list\b/gi, '')
+    .replace(/\s+to\s+my\s+to\s+do\s+list\b/gi, '') // Handle "to do" without hyphen
+    .replace(/\s+to\s+my\s+tasks?\b/gi, '')
+    .replace(/\s+for\s+today\b/gi, '')
+    .replace(/\s+\d+\s*(minutes?|mins?|hours?|hrs?)\b/gi, '') // Remove duration
+    .replace(/\s+\d+\s*(calories?|cal)\b/gi, '') // Remove calorie mentions
     .replace(/^:\s*/, '')
+    .replace(/\s+/g, ' ') // Normalize multiple spaces
     .trim();
+
+  // If task name is empty after parsing, use original utterance (fallback)
+  if (!taskName || taskName.length === 0) {
+    // Remove common prefixes and suffixes as fallback
+    taskName = utterance
+      .replace(/^(add|remind me to|remind me)\s+/i, '')
+      .replace(/\s+to\s+my\s+to-do\s+list\b/gi, '')
+      .replace(/\s+to\s+my\s+to\s+do\s+list\b/gi, '')
+      .replace(/\s+to\s+my\s+tasks?\b/gi, '')
+      .trim();
+  }
 
   return { taskName, priority, dueDate, category };
 }

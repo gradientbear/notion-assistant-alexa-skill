@@ -7,6 +7,7 @@ import { TaskListHandler } from './handlers/TaskListHandler';
 import { AddTaskHandler } from './handlers/AddTaskHandler';
 import { MarkTaskCompleteHandler } from './handlers/MarkTaskCompleteHandler';
 import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
+import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
 import { FocusTimerHandler } from './handlers/FocusTimerHandler';
 import { EnergyTrackerHandler } from './handlers/EnergyTrackerHandler';
 import { ScheduleHandler } from './handlers/ScheduleHandler';
@@ -23,6 +24,7 @@ export const handler = SkillBuilders.custom()
     new TaskListHandler(),
     new AddTaskHandler(),
     new MarkTaskCompleteHandler(),
+    new UpdateTaskStatusHandler(),
     new DeleteTaskHandler(),
     new BrainDumpHandler(),
     new PriorityListHandler(),
@@ -41,9 +43,16 @@ export const handler = SkillBuilders.custom()
           const userId = handlerInput.requestEnvelope.session?.user?.userId;
           console.log('[Request Interceptor] Request type:', request.type);
           console.log('[Request Interceptor] User ID:', userId);
-          // Only log essential parts to avoid circular reference issues
           console.log('[Request Interceptor] Request ID:', handlerInput.requestEnvelope.request.requestId);
           console.log('[Request Interceptor] Session ID:', handlerInput.requestEnvelope.session?.sessionId);
+          
+          // Log intent details if it's an IntentRequest
+          if (request.type === 'IntentRequest') {
+            const intent = (request as any).intent;
+            console.log('[Request Interceptor] Intent name:', intent?.name);
+            console.log('[Request Interceptor] Intent slots:', JSON.stringify(intent?.slots || {}));
+            console.log('[Request Interceptor] Intent confirmation status:', intent?.confirmationStatus);
+          }
         } catch (error: any) {
           console.error('[Request Interceptor] Error in logging:', error?.message);
           // Don't throw - just log and continue

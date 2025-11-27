@@ -48,8 +48,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Handle user denial
+    // Handle user denial or errors
     if (error) {
+      // Check error type - Notion may return different error codes
+      const errorDescription = searchParams.get('error_description') || '';
+      const isNoAccount = error === 'invalid_grant' || 
+                         errorDescription.toLowerCase().includes('account') ||
+                         errorDescription.toLowerCase().includes('sign up') ||
+                         errorDescription.toLowerCase().includes('register');
+
       // Create partial user registration (without Notion token) if we have Amazon account ID
       if (session.amazon_account_id) {
         // Check if user already exists
@@ -89,9 +96,22 @@ export async function GET(request: NextRequest) {
       // Check if this is Alexa account linking (has amazon_account_id in session)
       if (session.amazon_account_id) {
         // For Alexa, return error in OAuth2 format
+        const errorMsg = isNoAccount 
+          ? 'Notion account not found. Please create a Notion account first, then retry.'
+          : 'User denied Notion access. You can retry the connection later.';
         return NextResponse.json(
-          { error: 'access_denied', error_description: 'User denied Notion access. You can retry the connection later.' },
+          { error: 'access_denied', error_description: errorMsg },
           { status: 400 }
+        );
+      }
+
+      // For web flow, redirect with appropriate message
+      if (isNoAccount) {
+        return NextResponse.redirect(
+          new URL(
+            `/error?message=${encodeURIComponent('You need a Notion account to connect. Please create one first.')}&no_account=true&signup_url=https://www.notion.so/signup`,
+            request.url
+          )
         );
       }
 
