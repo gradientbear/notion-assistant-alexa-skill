@@ -5,7 +5,7 @@ import {
 } from 'ask-sdk-core';
 import { Request } from 'ask-sdk-model';
 import { getUserByAmazonId, validateLicense } from '../utils/database';
-import { buildSimpleResponse, buildLinkAccountResponse } from '../utils/alexa';
+import { buildSimpleResponse, buildResponse, buildLinkAccountResponse } from '../utils/alexa';
 
 export class LaunchRequestHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -70,11 +70,12 @@ export class LaunchRequestHandler implements RequestHandler {
     attributes.user = user;
     handlerInput.attributesManager.setSessionAttributes(attributes);
 
-    return buildSimpleResponse(
+    return buildResponse(
       handlerInput,
       'Welcome to Notion Data. You can ask me to dump your brain, ' +
       'check your priorities, start a focus timer, log your energy, ' +
-      'view your schedule, or manage your shopping list. What would you like to do?'
+      'view your schedule, or manage your shopping list. What would you like to do?',
+      'What would you like to do?'
     );
   }
 }

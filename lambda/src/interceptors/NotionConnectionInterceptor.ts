@@ -4,9 +4,10 @@ import { createNotionClient } from '../utils/notion';
 
 export class NotionConnectionInterceptor implements RequestInterceptor {
   async process(handlerInput: HandlerInput): Promise<void> {
-    const requestType = handlerInput.requestEnvelope.request.type;
+    try {
+      const requestType = handlerInput.requestEnvelope.request.type;
 
-    console.log('[NotionConnectionInterceptor] Processing request type:', requestType);
+      console.log('[NotionConnectionInterceptor] Processing request type:', requestType);
 
     // Skip for LaunchRequest and SessionEndedRequest
     if (requestType === 'LaunchRequest' || requestType === 'SessionEndedRequest') {
@@ -35,6 +36,11 @@ export class NotionConnectionInterceptor implements RequestInterceptor {
     attributes.notionClient = notionClient;
     handlerInput.attributesManager.setSessionAttributes(attributes);
     console.log('[NotionConnectionInterceptor] Notion client created and stored');
+    } catch (error: any) {
+      console.error('[NotionConnectionInterceptor] Error:', error);
+      console.error('[NotionConnectionInterceptor] Error stack:', error?.stack);
+      // Don't throw - let handlers deal with missing client
+    }
   }
 }
 

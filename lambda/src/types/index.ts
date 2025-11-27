@@ -29,6 +29,7 @@ export interface NotionTask {
   status: 'To Do' | 'In Progress' | 'Done';
   category: 'Work' | 'Personal' | 'Fitness' | 'Shopping';
   notes: string | null;
+  deleted?: boolean;
 }
 
 export interface NotionFocusLog {

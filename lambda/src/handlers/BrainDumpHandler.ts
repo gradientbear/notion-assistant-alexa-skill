@@ -12,11 +12,12 @@ export class BrainDumpHandler implements RequestHandler {
   }
 
   async handle(handlerInput: HandlerInput) {
-    console.log('[BrainDumpHandler] Handler invoked');
-    
-    const attributes = handlerInput.attributesManager.getSessionAttributes();
-    const user = attributes.user;
-    const notionClient = attributes.notionClient;
+    try {
+      console.log('[BrainDumpHandler] Handler invoked');
+      
+      const attributes = handlerInput.attributesManager.getSessionAttributes();
+      const user = attributes.user;
+      const notionClient = attributes.notionClient;
 
     console.log('[BrainDumpHandler] User and client check:', {
       hasUser: !!user,
@@ -45,27 +46,48 @@ export class BrainDumpHandler implements RequestHandler {
     const conversationState = attributes.brainDumpState || 'initial';
     
     console.log('[BrainDumpHandler] Conversation state:', conversationState);
+    console.log('[BrainDumpHandler] Session attributes:', JSON.stringify(attributes));
+
+    // If we have a task slot value even in 'initial' state, treat it as collecting
+    const userUtterance = request.intent.slots?.task?.value;
+    const hasTaskSlot = !!userUtterance && userUtterance.trim().length > 0;
 
     if (conversationState === 'initial') {
-      // Start the brain dump conversation
-      attributes.brainDumpState = 'collecting';
-      attributes.brainDumpTasks = [];
-      handlerInput.attributesManager.setSessionAttributes(attributes);
+      // If user provided tasks in the same turn, process them immediately
+      if (hasTaskSlot) {
+        console.log('[BrainDumpHandler] Tasks provided in initial turn, processing immediately');
+        attributes.brainDumpState = 'collecting';
+        attributes.brainDumpTasks = [];
+        // Fall through to processing logic
+      } else {
+        // Start the brain dump conversation
+        attributes.brainDumpState = 'collecting';
+        attributes.brainDumpTasks = [];
+        handlerInput.attributesManager.setSessionAttributes(attributes);
 
-      return buildResponse(
-        handlerInput,
-        'I\'m ready to capture your thoughts. What tasks would you like to add?',
-        'Tell me the tasks you want to add, or say done when finished.'
-      );
+        console.log('[BrainDumpHandler] Starting brain dump, waiting for tasks');
+        return buildResponse(
+          handlerInput,
+          'I\'m ready to capture your thoughts. What tasks would you like to add?',
+          'Tell me the tasks you want to add, or say done when finished.'
+        );
+      }
     }
 
-    if (conversationState === 'collecting') {
-      const userUtterance = request.intent.slots?.task?.value;
+    if (conversationState === 'collecting' || (conversationState === 'initial' && hasTaskSlot)) {
+      // Ensure we're in collecting state
+      if (conversationState === 'initial') {
+        attributes.brainDumpState = 'collecting';
+        attributes.brainDumpTasks = [];
+      }
 
-      console.log('[BrainDumpHandler] User utterance:', userUtterance);
+      // Use the task slot value if available
+      const taskValue = userUtterance || request.intent.slots?.task?.value;
 
-      if (!userUtterance) {
-        console.log('[BrainDumpHandler] No user utterance found');
+      console.log('[BrainDumpHandler] User utterance/task value:', taskValue);
+
+      if (!taskValue || taskValue.trim().length === 0) {
+        console.log('[BrainDumpHandler] No task value found');
         return buildResponse(
           handlerInput,
           'I didn\'t catch that. What tasks would you like to add?',
@@ -75,15 +97,20 @@ export class BrainDumpHandler implements RequestHandler {
 
       // Parse multiple tasks from a single utterance (split by "and", comma, etc.)
       const taskSeparators = /\s+(and|,|, and)\s+/i;
-      const tasksFromUtterance = userUtterance.split(taskSeparators).filter(
+      const tasksFromUtterance = taskValue.split(taskSeparators).filter(
         (part, index) => index % 2 === 0 && part.trim().length > 0
       ).map(task => task.trim());
+      
+      // If splitting didn't work, use the whole value as a single task
+      if (tasksFromUtterance.length === 0) {
+        tasksFromUtterance.push(taskValue.trim());
+      }
 
       console.log('[BrainDumpHandler] Parsed tasks:', tasksFromUtterance);
 
       // Check if user said "done" or similar
       const donePhrases = ['done', 'finished', 'that\'s all', 'complete', 'nothing'];
-      if (donePhrases.some(phrase => userUtterance.toLowerCase().includes(phrase))) {
+      if (donePhrases.some(phrase => taskValue.toLowerCase().includes(phrase))) {
         // Save all collected tasks
         const tasks = attributes.brainDumpTasks || [];
         
@@ -199,19 +226,29 @@ export class BrainDumpHandler implements RequestHandler {
 
       // Single task - add to collection
       const tasks = attributes.brainDumpTasks || [];
-      tasks.push(tasksFromUtterance[0] || userUtterance);
+      const taskToAdd = tasksFromUtterance[0] || taskValue;
+      tasks.push(taskToAdd);
       attributes.brainDumpTasks = tasks;
+      attributes.brainDumpState = 'collecting'; // Ensure state is set
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
       console.log('[BrainDumpHandler] Task added to collection, total tasks:', tasks.length);
       return buildResponse(
         handlerInput,
-        `Got it. Added "${tasksFromUtterance[0] || userUtterance}". What else?`,
+        `Got it. Added "${taskToAdd}". What else?`,
         'Tell me another task, or say done when finished.'
       );
     }
 
     return buildSimpleResponse(handlerInput, 'I\'m not sure what you want to do. Please try again.');
+    } catch (error: any) {
+      console.error('[BrainDumpHandler] Unexpected error:', error);
+      console.error('[BrainDumpHandler] Error stack:', error?.stack);
+      return buildSimpleResponse(
+        handlerInput,
+        'I encountered an error. Please try again.'
+      );
+    }
   }
 }
 

@@ -74,6 +74,9 @@ export async function addTask(
     Category: {
       select: { name: category },
     },
+    Deleted: {
+      checkbox: false,
+    },
   };
 
   if (dueDate) {
@@ -100,9 +103,17 @@ export async function getTopPriorityTasks(
       client.databases.query({
         database_id: databaseId,
         filter: {
-          or: [
-            { property: 'Status', select: { equals: 'To Do' } },
-            { property: 'Status', select: { equals: 'In Progress' } },
+          and: [
+            {
+              property: 'Deleted',
+              checkbox: { equals: false },
+            },
+            {
+              or: [
+                { property: 'Status', select: { equals: 'To Do' } },
+                { property: 'Status', select: { equals: 'In Progress' } },
+              ],
+            },
           ],
         },
         sorts: [
@@ -123,6 +134,7 @@ export async function getTopPriorityTasks(
         status: props.Status?.select?.name || 'To Do',
         category: props.Category?.select?.name || 'Personal',
         notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        deleted: props.Deleted?.checkbox || false,
       };
     });
   } catch (error) {
@@ -144,6 +156,10 @@ export async function getTodayTasks(
         database_id: databaseId,
         filter: {
           and: [
+            {
+              property: 'Deleted',
+              checkbox: { equals: false },
+            },
             {
               property: 'Due Date',
               date: {
@@ -175,6 +191,7 @@ export async function getTodayTasks(
         status: props.Status?.select?.name || 'To Do',
         category: props.Category?.select?.name || 'Personal',
         notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        deleted: props.Deleted?.checkbox || false,
       };
     });
   } catch (error) {
@@ -193,6 +210,10 @@ export async function getShoppingListTasks(
         database_id: databaseId,
         filter: {
           and: [
+            {
+              property: 'Deleted',
+              checkbox: { equals: false },
+            },
             { property: 'Category', select: { equals: 'Shopping' } },
             {
               or: [
@@ -216,12 +237,500 @@ export async function getShoppingListTasks(
         status: props.Status?.select?.name || 'To Do',
         category: props.Category?.select?.name || 'Shopping',
         notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        deleted: props.Deleted?.checkbox || false,
       };
     });
   } catch (error) {
     console.error('Error getting shopping list:', error);
     return [];
   }
+}
+
+// Helper function to map page to NotionTask
+function mapPageToTask(page: any): NotionTask {
+  const props = page.properties;
+  return {
+    id: page.id,
+    name: props['Task Name']?.title?.[0]?.plain_text || 'Untitled',
+    priority: props.Priority?.select?.name || 'Medium',
+    dueDate: props['Due Date']?.date?.start || null,
+    status: props.Status?.select?.name || 'To Do',
+    category: props.Category?.select?.name || 'Personal',
+    notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+    deleted: props.Deleted?.checkbox || false,
+  };
+}
+
+// Helper function to add deleted filter to existing filter
+function addDeletedFilter(existingFilter: any): any {
+  if (existingFilter.and) {
+    return {
+      and: [
+        { property: 'Deleted', checkbox: { equals: false } },
+        ...existingFilter.and,
+      ],
+    };
+  } else if (existingFilter.or) {
+    return {
+      and: [
+        { property: 'Deleted', checkbox: { equals: false } },
+        existingFilter,
+      ],
+    };
+  } else {
+    return {
+      and: [
+        { property: 'Deleted', checkbox: { equals: false } },
+        existingFilter,
+      ],
+    };
+  }
+}
+
+/**
+ * Get all tasks (excluding deleted)
+ */
+export async function getAllTasks(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: {
+          property: 'Deleted',
+          checkbox: { equals: false },
+        },
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting all tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks by priority
+ */
+export async function getTasksByPriority(
+  client: Client,
+  databaseId: string,
+  priority: 'High' | 'Medium' | 'Low'
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          property: 'Priority',
+          select: { equals: priority },
+        }),
+        sorts: [
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error(`Error getting ${priority} priority tasks:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks by status
+ */
+export async function getTasksByStatus(
+  client: Client,
+  databaseId: string,
+  status: 'To Do' | 'In Progress' | 'Done'
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          property: 'Status',
+          select: { equals: status },
+        }),
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error(`Error getting ${status} tasks:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks by category
+ */
+export async function getTasksByCategory(
+  client: Client,
+  databaseId: string,
+  category: 'Work' | 'Personal' | 'Fitness' | 'Shopping'
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          property: 'Category',
+          select: { equals: category },
+        }),
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error(`Error getting ${category} tasks:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get pending tasks (To Do or In Progress)
+ */
+export async function getPendingTasks(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          or: [
+            { property: 'Status', select: { equals: 'To Do' } },
+            { property: 'Status', select: { equals: 'In Progress' } },
+          ],
+        }),
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting pending tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Get overdue tasks
+ */
+export async function getOverdueTasks(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          and: [
+            {
+              property: 'Due Date',
+              date: { before: today },
+            },
+            {
+              or: [
+                { property: 'Status', select: { equals: 'To Do' } },
+                { property: 'Status', select: { equals: 'In Progress' } },
+              ],
+            },
+          ],
+        }),
+        sorts: [
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting overdue tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks due tomorrow
+ */
+export async function getTasksDueTomorrow(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  try {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          property: 'Due Date',
+          date: { equals: tomorrow },
+        }),
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting tasks due tomorrow:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks due this week (next 7 days)
+ */
+export async function getTasksDueThisWeek(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          and: [
+            {
+              property: 'Due Date',
+              date: { on_or_after: today },
+            },
+            {
+              property: 'Due Date',
+              date: { on_or_before: nextWeek },
+            },
+          ],
+        }),
+        sorts: [
+          { property: 'Due Date', direction: 'ascending' },
+          { property: 'Priority', direction: 'descending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting tasks due this week:', error);
+    return [];
+  }
+}
+
+/**
+ * Get completed tasks (optionally filtered by time range)
+ */
+export async function getCompletedTasks(
+  client: Client,
+  databaseId: string,
+  timeRange?: { start: string; end: string }
+): Promise<NotionTask[]> {
+  try {
+    let filter: any = {
+      property: 'Status',
+      select: { equals: 'Done' },
+    };
+
+    if (timeRange) {
+      filter = {
+        and: [
+          { property: 'Deleted', checkbox: { equals: false } },
+          { property: 'Status', select: { equals: 'Done' } },
+          {
+            property: 'Due Date',
+            date: {
+              on_or_after: timeRange.start,
+              on_or_before: timeRange.end,
+            },
+          },
+        ],
+      };
+    } else {
+      filter = addDeletedFilter(filter);
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter,
+        sorts: [
+          { property: 'Due Date', direction: 'descending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting completed tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks by date range
+ */
+export async function getTasksByDateRange(
+  client: Client,
+  databaseId: string,
+  date: string
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: addDeletedFilter({
+          property: 'Due Date',
+          date: { equals: date },
+        }),
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting tasks by date range:', error);
+    return [];
+  }
+}
+
+/**
+ * Get completed tasks for deletion
+ */
+export async function getCompletedTasksForDeletion(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask[]> {
+  return getCompletedTasks(client, databaseId);
+}
+
+/**
+ * Parse task properties from natural language utterance
+ */
+export function parseTaskFromUtterance(utterance: string): {
+  taskName: string;
+  priority?: 'High' | 'Medium' | 'Low';
+  dueDate?: string;
+  category?: 'Work' | 'Personal' | 'Fitness' | 'Shopping';
+} {
+  const lowerUtterance = utterance.toLowerCase();
+  let taskName = utterance;
+  let priority: 'High' | 'Medium' | 'Low' | undefined;
+  let dueDate: string | undefined;
+  let category: 'Work' | 'Personal' | 'Fitness' | 'Shopping' | undefined;
+
+  // Parse priority
+  if (lowerUtterance.includes('high priority') || lowerUtterance.includes('urgent')) {
+    priority = 'High';
+    taskName = taskName.replace(/high priority|urgent/gi, '').trim();
+  } else if (lowerUtterance.includes('low priority')) {
+    priority = 'Low';
+    taskName = taskName.replace(/low priority/gi, '').trim();
+  }
+
+  // Parse category
+  if (lowerUtterance.includes('work') || lowerUtterance.includes('to work:')) {
+    category = 'Work';
+    taskName = taskName.replace(/to work:|work/gi, '').trim();
+  } else if (lowerUtterance.includes('fitness') || lowerUtterance.includes('workout')) {
+    category = 'Fitness';
+    taskName = taskName.replace(/fitness|workout/gi, '').trim();
+  } else if (lowerUtterance.includes('shopping')) {
+    category = 'Shopping';
+    taskName = taskName.replace(/shopping/gi, '').trim();
+  } else if (lowerUtterance.includes('personal')) {
+    category = 'Personal';
+    taskName = taskName.replace(/personal/gi, '').trim();
+  }
+
+  // Parse dates
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (lowerUtterance.includes('today')) {
+    dueDate = today.toISOString().split('T')[0];
+    taskName = taskName.replace(/today/gi, '').trim();
+  } else if (lowerUtterance.includes('tomorrow')) {
+    dueDate = tomorrow.toISOString().split('T')[0];
+    taskName = taskName.replace(/tomorrow/gi, '').trim();
+  } else if (lowerUtterance.includes('due')) {
+    // Try to extract date after "due"
+    const dueMatch = lowerUtterance.match(/due\s+(\w+)/);
+    if (dueMatch) {
+      const dateStr = dueMatch[1];
+      if (dateStr === 'monday' || dateStr === 'mon') {
+        const monday = new Date(today);
+        const day = monday.getDay();
+        const diff = monday.getDate() + (day === 0 ? 1 : 8 - day);
+        monday.setDate(diff);
+        dueDate = monday.toISOString().split('T')[0];
+      } else if (dateStr === 'tuesday' || dateStr === 'tue') {
+        const tuesday = new Date(today);
+        const day = tuesday.getDay();
+        const diff = tuesday.getDate() + (day <= 1 ? 2 - day : 9 - day);
+        tuesday.setDate(diff);
+        dueDate = tuesday.toISOString().split('T')[0];
+      } else if (dateStr === 'wednesday' || dateStr === 'wed') {
+        const wednesday = new Date(today);
+        const day = wednesday.getDay();
+        const diff = wednesday.getDate() + (day <= 2 ? 3 - day : 10 - day);
+        wednesday.setDate(diff);
+        dueDate = wednesday.toISOString().split('T')[0];
+      } else if (dateStr === 'thursday' || dateStr === 'thu') {
+        const thursday = new Date(today);
+        const day = thursday.getDay();
+        const diff = thursday.getDate() + (day <= 3 ? 4 - day : 11 - day);
+        thursday.setDate(diff);
+        dueDate = thursday.toISOString().split('T')[0];
+      } else if (dateStr === 'friday' || dateStr === 'fri') {
+        const friday = new Date(today);
+        const day = friday.getDay();
+        const diff = friday.getDate() + (day <= 4 ? 5 - day : 12 - day);
+        friday.setDate(diff);
+        dueDate = friday.toISOString().split('T')[0];
+      } else if (dateStr === 'saturday' || dateStr === 'sat') {
+        const saturday = new Date(today);
+        const day = saturday.getDay();
+        const diff = saturday.getDate() + (day <= 5 ? 6 - day : 13 - day);
+        saturday.setDate(diff);
+        dueDate = saturday.toISOString().split('T')[0];
+      } else if (dateStr === 'sunday' || dateStr === 'sun') {
+        const sunday = new Date(today);
+        const day = sunday.getDay();
+        const diff = sunday.getDate() + (day === 0 ? 0 : 7 - day);
+        sunday.setDate(diff);
+        dueDate = sunday.toISOString().split('T')[0];
+      }
+      taskName = taskName.replace(/due\s+\w+/gi, '').trim();
+    }
+  }
+
+  // Clean up task name
+  taskName = taskName
+    .replace(/^add\s+/i, '')
+    .replace(/\s+to\s+my\s+to-do\s+list/gi, '')
+    .replace(/^:\s*/, '')
+    .trim();
+
+  return { taskName, priority, dueDate, category };
 }
 
 export async function markTaskComplete(
@@ -238,6 +747,67 @@ export async function markTaskComplete(
       },
     })
   );
+}
+
+/**
+ * Mark multiple tasks as complete (batch operation)
+ */
+export async function markTasksCompleteBatch(
+  client: Client,
+  databaseId: string,
+  taskIds: string[]
+): Promise<void> {
+  await Promise.all(
+    taskIds.map(pageId => markTaskComplete(client, pageId))
+  );
+}
+
+/**
+ * Delete task (soft delete - set Deleted field to true)
+ */
+export async function deleteTask(
+  client: Client,
+  pageId: string
+): Promise<void> {
+  await withRetry(() =>
+    client.pages.update({
+      page_id: pageId,
+      properties: {
+        Deleted: {
+          checkbox: true,
+        },
+      },
+    })
+  );
+}
+
+/**
+ * Delete multiple tasks (batch operation)
+ */
+export async function deleteTasksBatch(
+  client: Client,
+  databaseId: string,
+  taskIds: string[]
+): Promise<void> {
+  await Promise.all(
+    taskIds.map(pageId => deleteTask(client, pageId))
+  );
+}
+
+/**
+ * Delete all completed tasks
+ */
+export async function deleteCompletedTasks(
+  client: Client,
+  databaseId: string
+): Promise<number> {
+  const completedTasks = await getCompletedTasksForDeletion(client, databaseId);
+  if (completedTasks.length === 0) {
+    return 0;
+  }
+  const taskIds = completedTasks.map(task => task.id);
+  await deleteTasksBatch(client, databaseId, taskIds);
+  return completedTasks.length;
 }
 
 export async function logFocusSession(
@@ -503,6 +1073,9 @@ export async function createTasksDatabase(
           },
           Notes: {
             rich_text: {},
+          },
+          Deleted: {
+            checkbox: {},
           },
         },
       })

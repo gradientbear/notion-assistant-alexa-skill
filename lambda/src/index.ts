@@ -3,6 +3,10 @@ import { RequestEnvelope } from 'ask-sdk-model';
 import { LaunchRequestHandler } from './handlers/LaunchRequestHandler';
 import { BrainDumpHandler } from './handlers/BrainDumpHandler';
 import { PriorityListHandler } from './handlers/PriorityListHandler';
+import { TaskListHandler } from './handlers/TaskListHandler';
+import { AddTaskHandler } from './handlers/AddTaskHandler';
+import { MarkTaskCompleteHandler } from './handlers/MarkTaskCompleteHandler';
+import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
 import { FocusTimerHandler } from './handlers/FocusTimerHandler';
 import { EnergyTrackerHandler } from './handlers/EnergyTrackerHandler';
 import { ScheduleHandler } from './handlers/ScheduleHandler';
@@ -15,6 +19,11 @@ import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInte
 export const handler = SkillBuilders.custom()
   .addRequestHandlers(
     new LaunchRequestHandler(),
+    // Task management handlers (more specific first)
+    new TaskListHandler(),
+    new AddTaskHandler(),
+    new MarkTaskCompleteHandler(),
+    new DeleteTaskHandler(),
     new BrainDumpHandler(),
     new PriorityListHandler(),
     new FocusTimerHandler(),
