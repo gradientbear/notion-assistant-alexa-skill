@@ -58,6 +58,12 @@ Click the "+" button in the table header to add properties:
    - Type: Text
    - Optional field for additional information
 
+7. **Deleted** (Checkbox)
+   - Type: Checkbox
+   - Default: false (unchecked)
+   - Used to mark tasks as deleted (soft delete)
+   - Deleted tasks are filtered out from queries
+
 ### Final Structure
 
 Your Tasks database should look like this:
@@ -69,7 +75,8 @@ Tasks
 ├── Due Date (Date)
 ├── Status (Select: To Do, In Progress, Done)
 ├── Category (Select: Work, Personal, Fitness, Shopping)
-└── Notes (Text)
+├── Notes (Text)
+└── Deleted (Checkbox)
 ```
 
 ## Database 2: Focus_Logs

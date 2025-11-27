@@ -1,43 +1,25 @@
 {
   "pages": {
-    "/_not-found/page": [
-      "static/chunks/webpack-cf43e38db5277eea.js",
-      "static/chunks/618f8807-fffc56f2b87cf2cf.js",
-      "static/chunks/364-8754a32a79ea8a36.js",
-      "static/chunks/main-app-3f07e7da16e23694.js",
-      "static/chunks/app/_not-found/page-d5fd5db8f2290c2c.js"
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
     ],
     "/layout": [
-      "static/chunks/webpack-cf43e38db5277eea.js",
-      "static/chunks/618f8807-fffc56f2b87cf2cf.js",
-      "static/chunks/364-8754a32a79ea8a36.js",
-      "static/chunks/main-app-3f07e7da16e23694.js",
-      "static/css/b99e0a3e7a0000a9.css",
-      "static/chunks/app/layout-a9dca6a923749e6c.js"
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/layout.css",
+      "static/chunks/app/layout.js"
     ],
-    "/error/page": [
-      "static/chunks/webpack-cf43e38db5277eea.js",
-      "static/chunks/618f8807-fffc56f2b87cf2cf.js",
-      "static/chunks/364-8754a32a79ea8a36.js",
-      "static/chunks/main-app-3f07e7da16e23694.js",
-      "static/css/52cf1406774dccd8.css",
-      "static/chunks/app/error/page-59750c3d62958ed8.js"
+    "/onboarding/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/onboarding/page.js"
     ],
-    "/page": [
-      "static/chunks/webpack-cf43e38db5277eea.js",
-      "static/chunks/618f8807-fffc56f2b87cf2cf.js",
-      "static/chunks/364-8754a32a79ea8a36.js",
-      "static/chunks/main-app-3f07e7da16e23694.js",
-      "static/css/52cf1406774dccd8.css",
-      "static/chunks/app/page-7e57dd653ee37eff.js"
-    ],
-    "/success/page": [
-      "static/chunks/webpack-cf43e38db5277eea.js",
-      "static/chunks/618f8807-fffc56f2b87cf2cf.js",
-      "static/chunks/364-8754a32a79ea8a36.js",
-      "static/chunks/main-app-3f07e7da16e23694.js",
-      "static/css/52cf1406774dccd8.css",
-      "static/chunks/app/success/page-043c0e26d8bab155.js"
+    "/amazon/link/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/amazon/link/page.js"
     ]
   }
 }

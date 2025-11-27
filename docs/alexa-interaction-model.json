@@ -23,11 +23,17 @@
           "name": "BrainDumpIntent",
           "samples": [
             "dump my brain",
+            "dump my brain {task}",
             "brain dump",
+            "brain dump {task}",
             "add tasks",
+            "add tasks {task}",
             "capture my thoughts",
+            "capture my thoughts {task}",
             "I need to remember",
-            "add to my tasks"
+            "I need to remember {task}",
+            "add to my tasks",
+            "add to my tasks {task}"
           ],
           "slots": [
             {
@@ -128,6 +134,169 @@
               "samples": []
             }
           ]
+        },
+        {
+          "name": "TaskListIntent",
+          "samples": [
+            "what are my tasks",
+            "read my tasks",
+            "list my tasks",
+            "show my tasks",
+            "what tasks do I have"
+          ]
+        },
+        {
+          "name": "HighPriorityTasksIntent",
+          "samples": [
+            "what are my high priority tasks",
+            "show high priority",
+            "high priority tasks",
+            "what's high priority"
+          ]
+        },
+        {
+          "name": "ToDoListIntent",
+          "samples": [
+            "what's on my to-do list",
+            "read my to-do list",
+            "my to-do list",
+            "what do I need to do"
+          ]
+        },
+        {
+          "name": "PendingTasksIntent",
+          "samples": [
+            "what are my pending tasks",
+            "show pending",
+            "pending tasks",
+            "what's pending"
+          ]
+        },
+        {
+          "name": "WorkTasksIntent",
+          "samples": [
+            "what are my work tasks",
+            "read work tasks",
+            "work tasks",
+            "what work do I have"
+          ]
+        },
+        {
+          "name": "PersonalRemindersIntent",
+          "samples": [
+            "tell me my personal reminders",
+            "personal tasks",
+            "personal reminders",
+            "what are my personal reminders"
+          ]
+        },
+        {
+          "name": "WorkoutPlanIntent",
+          "samples": [
+            "what's my workout plan",
+            "fitness tasks",
+            "workout plan",
+            "what workouts do I have"
+          ]
+        },
+        {
+          "name": "OverdueTasksIntent",
+          "samples": [
+            "what's overdue",
+            "show overdue tasks",
+            "overdue tasks",
+            "what tasks are overdue"
+          ]
+        },
+        {
+          "name": "TasksDueTomorrowIntent",
+          "samples": [
+            "what's due tomorrow",
+            "tomorrow's tasks",
+            "what do I have tomorrow",
+            "tasks due tomorrow"
+          ]
+        },
+        {
+          "name": "TasksDueThisWeekIntent",
+          "samples": [
+            "what's due this week",
+            "this week's tasks",
+            "tasks due this week",
+            "what do I have this week"
+          ]
+        },
+        {
+          "name": "InProgressTasksIntent",
+          "samples": [
+            "what am I working on",
+            "in progress tasks",
+            "what's in progress",
+            "what tasks are in progress"
+          ]
+        },
+        {
+          "name": "CompletedTasksIntent",
+          "samples": [
+            "what have I completed",
+            "completed tasks",
+            "what's done",
+            "what tasks have I completed"
+          ]
+        },
+        {
+          "name": "AddTaskIntent",
+          "samples": [
+            "add {task}",
+            "add {task} to my to-do list",
+            "add high priority {task}",
+            "add {task} due tomorrow",
+            "add {task} to work",
+            "add urgent {task}",
+            "add {task} for today"
+          ],
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "MarkTaskCompleteIntent",
+          "samples": [
+            "mark {task} as done",
+            "complete {task}",
+            "mark {task} as complete",
+            "{task} is done",
+            "mark all today's tasks as done",
+            "complete all today's tasks"
+          ],
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
+        },
+        {
+          "name": "DeleteTaskIntent",
+          "samples": [
+            "delete {task}",
+            "remove {task}",
+            "delete completed tasks",
+            "remove completed tasks",
+            "delete all completed tasks"
+          ],
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            }
+          ]
         }
       ],
       "types": []
@@ -201,6 +370,57 @@
             }
           ],
           "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "AddTaskIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.TaskAdd"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "MarkTaskCompleteIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.TaskMark"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
+        },
+        {
+          "name": "DeleteTaskIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "confirmationRequired": false,
+              "elicitationRequired": true,
+              "prompts": {
+                "elicitation": "Elicit.Slot.1234567890.TaskDelete"
+              }
+            }
+          ],
+          "delegationStrategy": "ALWAYS"
         }
       ],
       "delegations": []
@@ -255,6 +475,45 @@
           {
             "type": "PlainText",
             "value": "Tell me the item name."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.TaskAdd",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What task would you like to add?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the task you want to add."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.TaskMark",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which task would you like to mark as complete?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the task name."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Slot.1234567890.TaskDelete",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "Which task would you like to delete?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the task name."
           }
         ]
       }

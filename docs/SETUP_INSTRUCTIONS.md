@@ -123,7 +123,7 @@ aws configure
 You'll be prompted for:
 - **AWS Access Key ID**: Your AWS access key
 - **AWS Secret Access Key**: Your AWS secret key
-- **Default region name**: `us-east-1` (or your preferred region)
+- **Default region name**: `eu-north-1` (or your preferred region)
 - **Default output format**: `json` (recommended)
 
 **Option 2: Using Environment Variables**
@@ -132,17 +132,17 @@ You'll be prompted for:
 # Windows PowerShell
 $env:AWS_ACCESS_KEY_ID="your-access-key-id"
 $env:AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-$env:AWS_DEFAULT_REGION="us-east-1"
+$env:AWS_DEFAULT_REGION="eu-north-1"
 
 # Windows CMD
 set AWS_ACCESS_KEY_ID=your-access-key-id
 set AWS_SECRET_ACCESS_KEY=your-secret-access-key
-set AWS_DEFAULT_REGION=us-east-1
+set AWS_DEFAULT_REGION=eu-north-1
 
 # Linux/Mac
 export AWS_ACCESS_KEY_ID="your-access-key-id"
 export AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-export AWS_DEFAULT_REGION="us-east-1"
+export AWS_DEFAULT_REGION="eu-north-1"
 ```
 
 **Option 3: Using AWS SSO**

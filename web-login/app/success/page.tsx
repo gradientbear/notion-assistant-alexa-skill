@@ -1,27 +1,10 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
 import styles from '../page.module.css'
 
 function SuccessContent() {
-  const searchParams = useSearchParams()
-  const token = searchParams.get('token')
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!token) {
-      setError('No token received')
-      return
-    }
-
-    // In a real implementation, you would:
-    // 1. Store the token securely
-    // 2. Associate it with the user's Amazon account
-    // 3. Complete the Alexa account linking flow
-    
-    // For now, show success message
-  }, [token])
+  // Token is now stored in database during callback, no need to check URL parameter
 
   return (
     <div className={styles.container}>
@@ -31,9 +14,24 @@ function SuccessContent() {
           Your Notion account has been linked successfully.
         </p>
         <div className={styles.success}>
-          <p>You can now use the Notion Data Alexa skill.</p>
+          <p><strong>✓ Notion workspace configured</strong></p>
+          <p style={{ marginTop: '12px', fontSize: '14px' }}>
+            We've automatically created:
+          </p>
+          <ul style={{ 
+            marginTop: '8px', 
+            marginLeft: '20px', 
+            fontSize: '14px',
+            textAlign: 'left',
+            display: 'inline-block'
+          }}>
+            <li>A "Privacy" page in your workspace</li>
+            <li>Tasks database for task management</li>
+            <li>Focus_Logs database for focus tracking</li>
+            <li>Energy_Logs database for energy tracking</li>
+          </ul>
           <p style={{ marginTop: '16px', fontSize: '14px', color: '#666' }}>
-            Go back to your Alexa app and try: "Alexa, open Notion Data"
+            You can now use the Notion Data Alexa skill. Try: "Alexa, open Notion Data"
           </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { getOAuthSession, deleteOAuthSession } from './session';
+import { getOAuthSession, deleteOAuthSession } from '../session';
+import { setupNotionWorkspace } from '../notion-setup';
 
 // Mark this route as dynamic since it uses searchParams
 export const dynamic = 'force-dynamic';
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
           .single();
 
         if (!existingUser) {
-          // Create user without Notion token
+          // Create user without Notion token - setup incomplete
           await supabase
             .from('users')
             .insert({
@@ -67,7 +68,17 @@ export async function GET(request: NextRequest) {
               email: session.email,
               license_key: session.license_key,
               notion_token: null,
+              notion_setup_complete: false,
             });
+        } else {
+          // Update existing user to mark setup as incomplete
+          await supabase
+            .from('users')
+            .update({
+              notion_setup_complete: false,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', existingUser.id);
         }
       }
 
@@ -79,7 +90,7 @@ export async function GET(request: NextRequest) {
       if (session.amazon_account_id) {
         // For Alexa, return error in OAuth2 format
         return NextResponse.json(
-          { error: 'access_denied', error_description: 'User denied Notion access' },
+          { error: 'access_denied', error_description: 'User denied Notion access. You can retry the connection later.' },
           { status: 400 }
         );
       }
@@ -130,7 +141,25 @@ export async function GET(request: NextRequest) {
 
     const { access_token } = await tokenResponse.json();
 
-    // Create or update user with Notion token
+    // Setup Notion workspace (create Privacy page and databases)
+    console.log('Starting Notion workspace setup...');
+    const setupResult = await setupNotionWorkspace(access_token);
+    console.log('Notion workspace setup result:', setupResult);
+    
+    if (!setupResult.success) {
+      console.error('Notion workspace setup failed:', setupResult);
+      // Continue anyway - user can retry later
+    }
+    
+    // Get auth user from session if available (for web flow)
+    let authUserId = session.auth_user_id || null;
+    
+    // If not in session, try to get from Supabase Auth (this won't work in server context, but keep for reference)
+    if (!authUserId) {
+      console.log('No auth_user_id in session, will use email for lookup');
+    }
+    
+    // Create or update user with Notion token and setup data
     if (session.amazon_account_id) {
       // Check if user exists
       const { data: existingUser } = await supabase
@@ -140,18 +169,23 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (existingUser) {
-        // Update existing user with Notion token
+        // Update existing user with Notion token and setup data
         await supabase
           .from('users')
           .update({
             email: session.email,
             license_key: session.license_key,
             notion_token: access_token,
+            notion_setup_complete: setupResult.success,
+            privacy_page_id: setupResult.privacyPageId,
+            tasks_db_id: setupResult.tasksDbId,
+            focus_logs_db_id: setupResult.focusLogsDbId,
+            energy_logs_db_id: setupResult.energyLogsDbId,
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingUser.id);
       } else {
-        // Create new user with Notion token
+        // Create new user with Notion token and setup data
         await supabase
           .from('users')
           .insert({
@@ -159,7 +193,81 @@ export async function GET(request: NextRequest) {
             email: session.email,
             license_key: session.license_key,
             notion_token: access_token,
+            notion_setup_complete: setupResult.success,
+            privacy_page_id: setupResult.privacyPageId,
+            tasks_db_id: setupResult.tasksDbId,
+            focus_logs_db_id: setupResult.focusLogsDbId,
+            energy_logs_db_id: setupResult.energyLogsDbId,
           });
+      }
+    } else {
+      // Web flow - update user by auth_user_id or email
+      let existingUser = null;
+      
+      if (authUserId) {
+        // Find by auth_user_id
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('auth_user_id', authUserId)
+          .single();
+        existingUser = data;
+      }
+      
+      if (!existingUser) {
+        // Fallback: find by email
+        const { data } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', session.email)
+          .single();
+        existingUser = data;
+      }
+
+      if (existingUser) {
+        const updateResult = await supabase
+          .from('users')
+          .update({
+            notion_token: access_token,
+            notion_setup_complete: setupResult.success,
+            privacy_page_id: setupResult.privacyPageId,
+            tasks_db_id: setupResult.tasksDbId,
+            focus_logs_db_id: setupResult.focusLogsDbId,
+            energy_logs_db_id: setupResult.energyLogsDbId,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', existingUser.id);
+        
+        if (updateResult.error) {
+          console.error('Error updating user with Notion data:', updateResult.error);
+        } else {
+          console.log('Successfully updated user with Notion setup data');
+        }
+      } else {
+        console.warn('User not found for Notion connection - auth_user_id:', authUserId, 'email:', session.email);
+        // Try to create user if we have enough info
+        if (authUserId || session.email) {
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              auth_user_id: authUserId,
+              email: session.email,
+              notion_token: access_token,
+              notion_setup_complete: setupResult.success,
+              privacy_page_id: setupResult.privacyPageId,
+              tasks_db_id: setupResult.tasksDbId,
+              focus_logs_db_id: setupResult.focusLogsDbId,
+              energy_logs_db_id: setupResult.energyLogsDbId,
+              license_key: session.license_key || '',
+              onboarding_complete: false,
+            });
+          
+          if (insertError) {
+            console.error('Error creating user with Notion data:', insertError);
+          } else {
+            console.log('Successfully created user with Notion setup data');
+          }
+        }
       }
     }
 
@@ -185,10 +293,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Regular web flow - redirect to success page
-    return NextResponse.redirect(
-      new URL('/success', request.url)
-    );
+    // Regular web flow - redirect to onboarding with success message
+    const redirectUrl = new URL('/onboarding', request.url);
+    if (setupResult.success) {
+      redirectUrl.searchParams.set('notion_connected', 'true');
+    }
+    return NextResponse.redirect(redirectUrl);
   } catch (error: any) {
     console.error('OAuth callback error:', error);
     return NextResponse.redirect(

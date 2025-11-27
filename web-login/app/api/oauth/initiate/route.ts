@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
-import { createOAuthSession } from './session';
+import { createOAuthSession } from '../session';
 
 export async function GET(request: NextRequest) {
   // Handle Alexa account linking - GET request with query parameters
@@ -98,35 +98,38 @@ export async function POST(request: NextRequest) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const { email, licenseKey, amazon_account_id } = await request.json();
+    const { email, licenseKey, amazon_account_id, auth_user_id } = await request.json();
 
-    if (!email || !licenseKey) {
+    if (!email) {
       return NextResponse.json(
-        { error: 'Email and license key are required' },
+        { error: 'Email is required' },
         { status: 400 }
       );
     }
 
-    // Validate license key
-    const { data: license, error: licenseError } = await supabase
-      .from('licenses')
-      .select('status')
-      .eq('license_key', licenseKey)
-      .single();
+    // License key is optional for web flow (will be set later)
+    // Only validate if provided
+    if (licenseKey) {
+      const { data: license, error: licenseError } = await supabase
+        .from('licenses')
+        .select('status')
+        .eq('license_key', licenseKey)
+        .single();
 
-    if (licenseError || !license || license.status !== 'active') {
-      return NextResponse.json(
-        { error: 'Invalid or inactive license key' },
-        { status: 401 }
-      );
+      if (licenseError || !license || license.status !== 'active') {
+        return NextResponse.json(
+          { error: 'Invalid or inactive license key' },
+          { status: 401 }
+        );
+      }
     }
 
     // Generate PKCE code verifier and state
     const codeVerifier = crypto.randomBytes(32).toString('base64url');
     const state = crypto.randomBytes(32).toString('hex');
 
-    // Store session in database
-    await createOAuthSession(state, email, licenseKey, amazon_account_id || null, codeVerifier);
+    // Store session in database (licenseKey is optional for web flow)
+    await createOAuthSession(state, email, licenseKey || '', amazon_account_id || null, codeVerifier, auth_user_id || null);
 
     // Build Notion OAuth URL
     const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');

@@ -19,7 +19,8 @@ export async function createOAuthSession(
   email: string,
   licenseKey: string,
   amazonAccountId: string | null,
-  codeVerifier: string | null
+  codeVerifier: string | null,
+  authUserId?: string | null
 ): Promise<OAuthSession> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
@@ -31,8 +32,9 @@ export async function createOAuthSession(
     .insert({
       state,
       email,
-      license_key: licenseKey,
+      license_key: licenseKey || null,
       amazon_account_id: amazonAccountId,
+      auth_user_id: authUserId || null,
       code_verifier: codeVerifier,
       expires_at: expiresAt,
     })

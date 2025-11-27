@@ -17,15 +17,41 @@ function ErrorContent() {
           {message}
         </div>
         {denied && (
-          <div className={styles.info} style={{ marginTop: '16px' }}>
-            <p>You can retry connecting your Notion account later. Some features of the skill may be limited without Notion access.</p>
+          <>
+            <div className={styles.info} style={{ marginTop: '16px' }}>
+              <p><strong>What happens next?</strong></p>
+              <p style={{ marginTop: '8px', fontSize: '14px' }}>
+                Your account has been registered, but Notion connection is incomplete. 
+                You can retry connecting your Notion account at any time.
+              </p>
+              <p style={{ marginTop: '12px', fontSize: '14px' }}>
+                When you connect, we'll automatically create:
+              </p>
+              <ul style={{ 
+                marginTop: '8px', 
+                marginLeft: '20px', 
+                fontSize: '14px',
+                textAlign: 'left',
+                display: 'inline-block'
+              }}>
+                <li>A "Privacy" page in your workspace</li>
+                <li>Tasks, Focus_Logs, and Energy_Logs databases</li>
+              </ul>
+            </div>
+            <div style={{ marginTop: '24px' }}>
+              <a href="/" className={styles.button} style={{ textDecoration: 'none', display: 'inline-block' }}>
+                Retry Connection
+              </a>
+            </div>
+          </>
+        )}
+        {!denied && (
+          <div style={{ marginTop: '24px' }}>
+            <a href="/" className={styles.button} style={{ textDecoration: 'none', display: 'inline-block' }}>
+              Try Again
+            </a>
           </div>
         )}
-        <div style={{ marginTop: '24px' }}>
-          <a href="/" className={styles.button} style={{ textDecoration: 'none', display: 'inline-block' }}>
-            {denied ? 'Retry Connection' : 'Try Again'}
-          </a>
-        </div>
       </div>
     </div>
   )
