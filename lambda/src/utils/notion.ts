@@ -809,15 +809,26 @@ export async function markTaskComplete(
   client: Client,
   pageId: string
 ): Promise<void> {
+  console.log('[markTaskComplete] Starting markTaskComplete for pageId:', pageId);
+  
   // First, check if the task is deleted and restore it if needed
   try {
+    console.log('[markTaskComplete] Retrieving page to check status...');
     const page = await client.pages.retrieve({ page_id: pageId });
     const props = (page as any).properties;
     const isDeleted = props.Deleted?.checkbox || false;
+    const currentStatus = props.Status?.select?.name || 'Unknown';
+    
+    console.log('[markTaskComplete] Current task state:', {
+      isDeleted,
+      currentStatus,
+      pageId
+    });
     
     if (isDeleted) {
       // Restore the task (set Deleted to false) and mark as complete
-      await withRetry(() =>
+      console.log('[markTaskComplete] Task is deleted, restoring and marking as complete');
+      const result = await withRetry(() =>
         client.pages.update({
           page_id: pageId,
           properties: {
@@ -830,9 +841,11 @@ export async function markTaskComplete(
           },
         })
       );
+      console.log('[markTaskComplete] Task restored and marked as complete');
     } else {
       // Just update the status
-      await withRetry(() =>
+      console.log('[markTaskComplete] Updating status to Done');
+      const result = await withRetry(() =>
         client.pages.update({
           page_id: pageId,
           properties: {
@@ -842,21 +855,39 @@ export async function markTaskComplete(
           },
         })
       );
+      console.log('[markTaskComplete] Status update call completed');
     }
   } catch (error: any) {
     // If we can't retrieve the page, try to update anyway (fallback)
-    console.warn('[markTaskComplete] Could not check deleted status, updating anyway:', error.message);
-    await withRetry(() =>
-      client.pages.update({
-        page_id: pageId,
-        properties: {
-          Status: {
-            select: { name: 'Done' },
+    console.warn('[markTaskComplete] Could not check deleted status, updating anyway:', {
+      message: error.message,
+      status: error.status,
+      code: error.code
+    });
+    
+    try {
+      const result = await withRetry(() =>
+        client.pages.update({
+          page_id: pageId,
+          properties: {
+            Status: {
+              select: { name: 'Done' },
+            },
           },
-        },
-      })
-    );
+        })
+      );
+      console.log('[markTaskComplete] Fallback status update completed');
+    } catch (fallbackError: any) {
+      console.error('[markTaskComplete] Fallback update also failed:', {
+        message: fallbackError.message,
+        status: fallbackError.status,
+        code: fallbackError.code
+      });
+      throw fallbackError; // Re-throw so the caller knows it failed
+    }
   }
+  
+  console.log('[markTaskComplete] markTaskComplete completed successfully');
 }
 
 /**

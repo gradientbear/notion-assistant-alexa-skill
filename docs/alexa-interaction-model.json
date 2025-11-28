@@ -277,12 +277,13 @@
           "samples": [
             "mark {task} as done",
             "mark {task} as complete",
+            "mark {task} done",
+            "mark {task} complete",
             "complete {task}",
             "{task} is done",
             "{task} is complete",
             "mark all today's tasks as done",
             "complete all today's tasks",
-            "finish {task}",
             "done with {task}",
             "{task} done",
             "mark the {task} as done",
@@ -290,10 +291,12 @@
             "mark my {task} as done",
             "mark my {task} as complete",
             "complete the {task}",
-            "finish the {task}",
-            "finish my {task}",
             "done with the {task}",
-            "done with my {task}"
+            "done with my {task}",
+            "alexa mark {task} as done",
+            "alexa mark {task} as complete",
+            "alexa complete {task}",
+            "mark finish {task} as done"
           ],
           "slots": [
             {
@@ -613,4 +616,3 @@
     ]
   }
 }
-

@@ -28,7 +28,9 @@ export class MarkTaskCompleteHandler implements RequestHandler {
   }
 
   async handle(handlerInput: HandlerInput) {
-    console.log('[MarkTaskCompleteHandler] Handler invoked');
+    console.log('[MarkTaskCompleteHandler] ========== HANDLER INVOKED ==========');
+    console.log('[MarkTaskCompleteHandler] Full request envelope:', JSON.stringify(handlerInput.requestEnvelope, null, 2));
+    
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
@@ -126,17 +128,62 @@ export class MarkTaskCompleteHandler implements RequestHandler {
         );
       }
 
-      console.log('[MarkTaskCompleteHandler] Calling markTaskComplete for task:', matchingTask.id);
-      await markTaskComplete(notionClient, matchingTask.id);
-      console.log('[MarkTaskCompleteHandler] Task marked as complete successfully');
-
-      return buildResponse(
-        handlerInput,
-        `Marked: ${matchingTask.name} as complete.`,
-        'What else would you like to do?'
-      );
-    } catch (error) {
-      console.error('Error marking task complete:', error);
+      console.log('[MarkTaskCompleteHandler] Calling markTaskComplete for task:', {
+        taskId: matchingTask.id,
+        taskName: matchingTask.name,
+        currentStatus: matchingTask.status
+      });
+      
+      try {
+        await markTaskComplete(notionClient, matchingTask.id);
+        
+        // Verify the update succeeded by retrieving the page
+        try {
+          const updatedPage = await notionClient.pages.retrieve({ page_id: matchingTask.id });
+          const updatedProps = (updatedPage as any).properties;
+          const actualStatus = updatedProps.Status?.select?.name || 'Unknown';
+          console.log('[MarkTaskCompleteHandler] Status update verified:', {
+            expectedStatus: 'Done',
+            actualStatus: actualStatus,
+            match: actualStatus === 'Done'
+          });
+          
+          if (actualStatus !== 'Done') {
+            console.error('[MarkTaskCompleteHandler] Status mismatch! Expected: Done, Got:', actualStatus);
+            return buildResponse(
+              handlerInput,
+              `I tried to mark ${matchingTask.name} as complete, but there was an issue. The task status is currently ${actualStatus}.`,
+              'What else would you like to do?'
+            );
+          }
+        } catch (verifyError: any) {
+          console.warn('[MarkTaskCompleteHandler] Could not verify status update:', verifyError.message);
+          // Continue anyway - the update might have succeeded
+        }
+        
+        console.log('[MarkTaskCompleteHandler] Task marked as complete successfully');
+        return buildResponse(
+          handlerInput,
+          `Marked: ${matchingTask.name} as complete.`,
+          'What else would you like to do?'
+        );
+      } catch (markError: any) {
+        console.error('[MarkTaskCompleteHandler] Error in markTaskComplete call:', {
+          message: markError?.message,
+          status: markError?.status,
+          code: markError?.code,
+          stack: markError?.stack
+        });
+        throw markError; // Re-throw to be caught by outer catch
+      }
+    } catch (error: any) {
+      console.error('[MarkTaskCompleteHandler] Error marking task complete:', error);
+      console.error('[MarkTaskCompleteHandler] Error details:', {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        stack: error?.stack
+      });
       return buildResponse(
         handlerInput,
         'I encountered an error marking your task as complete. Please try again.',

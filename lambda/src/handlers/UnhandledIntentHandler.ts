@@ -15,8 +15,12 @@ export class UnhandledIntentHandler implements RequestHandler {
   }
 
   async handle(handlerInput: HandlerInput) {
+    console.log('[UnhandledIntentHandler] ========== HANDLER INVOKED ==========');
     const request = handlerInput.requestEnvelope.request as any;
     const intentName = request.intent?.name;
+    
+    console.log('[UnhandledIntentHandler] Intent name:', intentName);
+    console.log('[UnhandledIntentHandler] Full request envelope:', JSON.stringify(handlerInput.requestEnvelope, null, 2));
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const conversationState = attributes.brainDumpState || 'initial';
     
