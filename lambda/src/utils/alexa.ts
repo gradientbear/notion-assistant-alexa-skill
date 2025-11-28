@@ -36,86 +36,72 @@ export function buildLinkAccountResponse(handlerInput: HandlerInput): Response {
  *   "delete the task" -> "task"
  *   "update my report" -> "report"
  */
-export function cleanTaskName(taskSlot: string): string {
-  if (!taskSlot || taskSlot.trim().length === 0) {
-    return taskSlot;
+export function cleanTaskName(raw: string): string {
+  if (!raw) return "";
+
+  let text = raw.trim().toLowerCase();
+
+  // Remove ONLY top-level command wrappers
+  // Do NOT remove verbs inside actual task names
+  const prefixPatterns = [
+    /^mark\s+/,
+    /^set\s+/,
+    /^update\s+/,
+    /^change\s+/,
+    /^complete\s+/,
+    /^finish\s+/,
+  ];
+
+  const suffixPatterns = [
+    /\s+as\s+done$/,
+    /\s+as\s+complete$/,
+    /\s+to\s+done$/,
+    /\s+done$/,
+    /\s+complete$/,
+  ];
+
+  for (const p of prefixPatterns) {
+    text = text.replace(p, "");
+  }
+  for (const s of suffixPatterns) {
+    text = text.replace(s, "");
   }
 
-  let cleaned = taskSlot.trim();
-  
-  // Remove common command prefixes
-  // Note: We don't remove "finish" alone because it's often part of task names (e.g., "finish quarterly report")
-  // We only remove it when it's clearly a command verb like "finish the task" or "finish my task"
-  const commandPrefixes = [
-    /^mark\s+/i,
-    /^mark\s+the\s+/i,
-    /^mark\s+my\s+/i,
-    /^mark\s+a\s+/i,
-    /^mark\s+an\s+/i,
-    /^complete\s+/i,
-    /^finish\s+the\s+/i,  // Only remove "finish the" not just "finish"
-    /^finish\s+my\s+/i,
-    /^finish\s+a\s+/i,
-    /^finish\s+an\s+/i,
-    /^do\s+/i,
-    /^do\s+the\s+/i,
-    /^do\s+my\s+/i,
-    /^do\s+a\s+/i,
-    /^do\s+an\s+/i,
-    /^delete\s+/i,
-    /^delete\s+the\s+/i,
-    /^delete\s+my\s+/i,
-    /^delete\s+a\s+/i,
-    /^delete\s+an\s+/i,
-    /^remove\s+/i,
-    /^remove\s+the\s+/i,
-    /^remove\s+my\s+/i,
-    /^remove\s+a\s+/i,
-    /^remove\s+an\s+/i,
-    /^update\s+/i,
-    /^update\s+the\s+/i,
-    /^update\s+my\s+/i,
-    /^update\s+a\s+/i,
-    /^update\s+an\s+/i,
-    /^change\s+/i,
-    /^change\s+the\s+/i,
-    /^change\s+my\s+/i,
-    /^change\s+a\s+/i,
-    /^change\s+an\s+/i,
-  ];
-  
-  // Remove common command suffixes
-  const commandSuffixes = [
-    /\s+as\s+done$/i,
-    /\s+as\s+complete$/i,
-    /\s+done$/i,
-    /\s+complete$/i,
-    /\s+finished$/i,
-    /\s+as\s+finished$/i,
-    /\s+as\s+completed$/i,
-    /\s+as\s+complete$/i,
-  ];
-  
-  // Apply prefix removal
-  for (const prefix of commandPrefixes) {
-    cleaned = cleaned.replace(prefix, '');
-  }
-  
-  // Apply suffix removal
-  for (const suffix of commandSuffixes) {
-    cleaned = cleaned.replace(suffix, '');
-  }
-  
-  // Clean up extra spaces
-  cleaned = cleaned.trim().replace(/\s+/g, ' ');
-  
-  // If cleaning removed everything, use original
-  if (!cleaned || cleaned.length === 0) {
-    cleaned = taskSlot.trim();
-  }
-  
-  return cleaned;
+  // Remove filler words, but only if they do NOT affect the meaning
+  const stopWords = ["the", "my", "a", "an", "some", "to"];
+  text = text
+    .split(/\s+/)
+    .filter((w) => !stopWords.includes(w))
+    .join(" ");
+
+  return text.trim();
 }
+
+function stem(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/ing$|ed$|s$/g, ""); // buy/buys/buying/bought → buy
+}
+
+function levenshtein(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array(b.length + 1).fill(0)
+  );
+
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] =
+        a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
 
 /**
  * Finds a matching task using a hybrid approach:
@@ -129,56 +115,63 @@ export function cleanTaskName(taskSlot: string): string {
  * - "report quarterly" matching "finish quarterly report" (word order)
  */
 export function findMatchingTask(
-  searchTerm: string,
-  tasks: Array<{ name: string; [key: string]: any }>
-): { name: string; [key: string]: any } | null {
-  if (!searchTerm || !tasks || tasks.length === 0) {
-    return null;
-  }
+  rawSearch: string,
+  tasks: Array<{ name: string }>
+) {
+  if (!rawSearch || tasks.length === 0) return null;
 
-  const searchLower = searchTerm.toLowerCase().trim();
-  const searchWords = searchLower.split(/\s+/).filter(w => w.length > 0);
+  const cleaned = cleanTaskName(rawSearch);
+  const search = cleaned.toLowerCase();
+  const searchWords = search.split(/\s+/).map(stem);
 
-  if (searchWords.length === 0) {
-    return null;
-  }
+  // Normalize task names
+  const normalizedTasks = tasks.map((t) => ({
+    ...t,
+    raw: t.name,
+    lower: t.name.toLowerCase(),
+    words: t.name
+      .toLowerCase()
+      .split(/\s+/)
+      .map(stem),
+  }));
 
-  // 1. Exact match (case-insensitive)
-  let match = tasks.find(task => task.name.toLowerCase() === searchLower);
-  if (match) {
-    console.log('[findMatchingTask] Exact match found:', match.name);
-    return match;
-  }
+  // 1. Exact match
+  let match = normalizedTasks.find((t) => t.lower === search);
+  if (match) return match;
 
-  // 2. Word token matching - all search words must be present in task name
-  // This handles cases like "quarterly report" matching "finish quarterly report"
-  match = tasks.find(task => {
-    const taskLower = task.name.toLowerCase();
-    const taskWords = taskLower.split(/\s+/);
-    
-    // Check if all search words are present in task name
-    return searchWords.every(searchWord => 
-      taskWords.some(taskWord => taskWord.includes(searchWord) || searchWord.includes(taskWord))
-    );
-  });
-  
-  if (match) {
-    console.log('[findMatchingTask] Word token match found:', match.name);
-    return match;
-  }
+  // 2. Exact stemmed match
+  match = normalizedTasks.find((t) => t.words.join(" ") === searchWords.join(" "));
+  if (match) return match;
 
-  // 3. Substring matching (bidirectional) - fallback
-  match = tasks.find(
-    task => task.name.toLowerCase().includes(searchLower) ||
-           searchLower.includes(task.name.toLowerCase())
+  // 3. All search words exist inside task words (bag-of-words)
+  match = normalizedTasks.find((t) =>
+    searchWords.every((w) => t.words.some((tw) => tw === w))
   );
-  
-  if (match) {
-    console.log('[findMatchingTask] Substring match found:', match.name);
-    return match;
-  }
+  if (match) return match;
 
-  console.log('[findMatchingTask] No match found for:', searchTerm);
+  // 4. Contains partial word (singular/plural, tense)
+  match = normalizedTasks.find((t) =>
+    searchWords.every((w) =>
+      t.words.some((tw) => tw.includes(w) || w.includes(tw))
+    )
+  );
+  if (match) return match;
+
+  // 5. Fuzzy word match (Levenshtein ≤ 2)
+  match = normalizedTasks.find((t) =>
+    searchWords.every((w) =>
+      t.words.some((tw) => levenshtein(w, tw) <= 2)
+    )
+  );
+  if (match) return match;
+
+  // 6. Substring match (final fallback)
+  match = normalizedTasks.find(
+    (t) => t.lower.includes(search) || search.includes(t.lower)
+  );
+  if (match) return match;
+
   return null;
 }
+
 
