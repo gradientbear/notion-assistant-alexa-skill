@@ -1,15 +1,16 @@
-# Notion Data Alexa Skill
+# Notion Data Alexa Skill (MVP)
 
-A private, premium Alexa Skill integrated with Notion API for voice-first task management and productivity tracking.
+A voice-first Alexa Skill integrated with Notion API for task management. This MVP version focuses on core CRUD operations for managing tasks in your Notion workspace.
 
-## 🎯 Features
+## 🎯 MVP Features
 
-- **Brain Dump**: Add multiple tasks via voice in a multi-turn conversation
-- **Priority List**: Get top 3 priority tasks sorted by priority and due date
-- **Focus Timer**: 25-minute Pomodoro timer with automatic Notion logging
-- **Energy Tracker**: Log energy levels (1-10) mapped to Low/Medium/High
-- **Schedule**: View today's tasks and overdue items
-- **Shopping List**: Add, read, and mark shopping items as complete
+- **Add Tasks**: Create new tasks in your Notion Tasks database
+- **List Tasks**: View your tasks with various filters (all, pending, completed, by priority, etc.)
+- **Update Tasks**: Mark tasks as complete or update their status
+- **Delete Tasks**: Remove tasks from your Notion database
+- **Connection Status**: Check if your Notion connection is working
+
+> **Note**: This is an MVP version focusing on core task CRUD operations. Additional features (Brain Dump, Focus Timer, Energy Tracker, etc.) are available in the codebase but disabled for MVP.
 
 ## 📁 Project Structure
 
@@ -62,7 +63,7 @@ cd ../web-login && npm install
 2. **Set up Supabase:**
    - Create a Supabase project
    - Run `docs/supabase-schema.sql` in SQL Editor
-   - Add license keys to `licenses` table
+   - Note: License keys are not required for MVP
 
 3. **Configure Notion OAuth:**
    - Create OAuth integration at https://www.notion.so/my-integrations
@@ -124,9 +125,18 @@ Or use GitHub Actions workflows for automatic deployment.
 
 See `.env.example` files in each directory for required environment variables.
 
-## 📝 License
+**Required for MVP:**
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_SERVICE_KEY` - Supabase service role key
+- `NOTION_CLIENT_ID` - Notion OAuth client ID
+- `NOTION_CLIENT_SECRET` - Notion OAuth client secret
+- `NOTION_REDIRECT_URI` - OAuth redirect URI
 
-Private - License key required for access. See `docs/SETUP_INSTRUCTIONS.md` for license key management.
+## 📝 MVP Notes
+
+- **No License Required**: This MVP version does not require license validation
+- **Core CRUD Only**: Focus on task management operations
+- **Simplified Onboarding**: Users only need to connect Notion and link Amazon account
 
 ## 🤝 Support
 

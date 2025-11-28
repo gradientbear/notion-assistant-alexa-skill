@@ -1,37 +1,41 @@
 import { SkillBuilders } from 'ask-sdk-core';
 import { RequestEnvelope } from 'ask-sdk-model';
 import { LaunchRequestHandler } from './handlers/LaunchRequestHandler';
-import { BrainDumpHandler } from './handlers/BrainDumpHandler';
-import { PriorityListHandler } from './handlers/PriorityListHandler';
 import { TaskListHandler } from './handlers/TaskListHandler';
 import { AddTaskHandler } from './handlers/AddTaskHandler';
 import { MarkTaskCompleteHandler } from './handlers/MarkTaskCompleteHandler';
-import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
 import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
-import { FocusTimerHandler } from './handlers/FocusTimerHandler';
-import { EnergyTrackerHandler } from './handlers/EnergyTrackerHandler';
-import { ScheduleHandler } from './handlers/ScheduleHandler';
-import { ShoppingListHandler } from './handlers/ShoppingListHandler';
+import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
+import { ConnectionStatusHandler } from './handlers/ConnectionStatusHandler';
+import { BrainDumpHandler } from './handlers/BrainDumpHandler';
+import { UnhandledIntentHandler } from './handlers/UnhandledIntentHandler';
 import { SessionEndedHandler } from './handlers/SessionEndedHandler';
 import { ErrorHandler } from './handlers/ErrorHandler';
-import { LicenseValidationInterceptor } from './interceptors/LicenseValidationInterceptor';
+// import { PriorityListHandler } from './handlers/PriorityListHandler';
+// import { FocusTimerHandler } from './handlers/FocusTimerHandler';
+// import { EnergyTrackerHandler } from './handlers/EnergyTrackerHandler';
+// import { ScheduleHandler } from './handlers/ScheduleHandler';
+// import { ShoppingListHandler } from './handlers/ShoppingListHandler';
 import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInterceptor';
 
 export const handler = SkillBuilders.custom()
   .addRequestHandlers(
     new LaunchRequestHandler(),
-    // Task management handlers (more specific first)
+    // MVP: Core Task CRUD operations only
     new TaskListHandler(),
+    new BrainDumpHandler(), // Must be before AddTaskHandler to handle BrainDumpIntent
     new AddTaskHandler(),
     new MarkTaskCompleteHandler(),
     new UpdateTaskStatusHandler(),
     new DeleteTaskHandler(),
-    new BrainDumpHandler(),
-    new PriorityListHandler(),
-    new FocusTimerHandler(),
-    new EnergyTrackerHandler(),
-    new ScheduleHandler(),
-    new ShoppingListHandler(),
+    new ConnectionStatusHandler(),
+    // MVP: Non-essential handlers disabled
+    // new PriorityListHandler(),
+    // new FocusTimerHandler(),
+    // new EnergyTrackerHandler(),
+    // new ScheduleHandler(),
+    // new ShoppingListHandler(),
+    new UnhandledIntentHandler(), // Must be before SessionEndedHandler
     new SessionEndedHandler()
   )
   .addRequestInterceptors(
@@ -52,6 +56,12 @@ export const handler = SkillBuilders.custom()
             console.log('[Request Interceptor] Intent name:', intent?.name);
             console.log('[Request Interceptor] Intent slots:', JSON.stringify(intent?.slots || {}));
             console.log('[Request Interceptor] Intent confirmation status:', intent?.confirmationStatus);
+            
+            // Also log raw input if available to help debug routing issues
+            const rawInput = (request as any).input?.text || (request as any).rawInput || '';
+            if (rawInput) {
+              console.log('[Request Interceptor] Raw input:', rawInput);
+            }
           }
         } catch (error: any) {
           console.error('[Request Interceptor] Error in logging:', error?.message);
@@ -59,8 +69,8 @@ export const handler = SkillBuilders.custom()
         }
       }
     },
-    // License validation can be disabled by setting DISABLE_LICENSE_VALIDATION=true
-    new LicenseValidationInterceptor(),
+    // License validation disabled for MVP - focus on CRUD operations only
+    // new LicenseValidationInterceptor(), // Disabled for MVP
     new NotionConnectionInterceptor()
   )
   .addErrorHandlers(new ErrorHandler())

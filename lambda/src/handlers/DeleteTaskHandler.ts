@@ -1,5 +1,5 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
-import { buildResponse } from '../utils/alexa';
+import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import {
   findDatabaseByName,
   getAllTasks,
@@ -11,21 +11,41 @@ import {
 
 export class DeleteTaskHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return (
-      handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
-      handlerInput.requestEnvelope.request.intent.name === 'DeleteTaskIntent'
-    );
+    const isIntentRequest = handlerInput.requestEnvelope.request.type === 'IntentRequest';
+    const intentName = isIntentRequest 
+      ? (handlerInput.requestEnvelope.request as any).intent?.name 
+      : null;
+    const canHandle = isIntentRequest && intentName === 'DeleteTaskIntent';
+    
+    if (isIntentRequest) {
+      console.log('[DeleteTaskHandler] canHandle check:', {
+        isIntentRequest,
+        intentName,
+        canHandle
+      });
+    }
+    
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
+    console.log('[DeleteTaskHandler] Handler invoked');
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
+    
+    console.log('[DeleteTaskHandler] Session check:', {
+      hasUser: !!user,
+      hasNotionClient: !!notionClient,
+      userId: user?.id
+    });
 
     if (!user || !notionClient) {
       return buildResponse(
         handlerInput,
-        'Please link your Notion account in the Alexa app to use this feature.',
+        'To delete tasks, you need to connect your Notion account. ' +
+        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Once connected, you can delete tasks from your Notion workspace.',
         'What would you like to do?'
       );
     }
@@ -74,19 +94,26 @@ export class DeleteTaskHandler implements RequestHandler {
         );
       }
 
-      const taskName = taskSlot.toLowerCase();
-      const allTasks = await getAllTasks(notionClient, tasksDbId);
+      // Clean up the task name by removing command words
+      const cleanedTaskName = cleanTaskName(taskSlot);
+      console.log('[DeleteTaskHandler] Original task slot:', taskSlot);
+      console.log('[DeleteTaskHandler] Cleaned task name:', cleanedTaskName);
 
-      // Fuzzy matching
-      const matchingTask = allTasks.find(
-        task => task.name.toLowerCase().includes(taskName) ||
-                taskName.includes(task.name.toLowerCase())
-      );
+      console.log('[DeleteTaskHandler] Searching for task:', cleanedTaskName);
+      
+      const allTasks = await getAllTasks(notionClient, tasksDbId);
+      console.log('[DeleteTaskHandler] Found tasks:', allTasks.length);
+      console.log('[DeleteTaskHandler] Task names:', allTasks.map(t => t.name));
+
+      // Hybrid matching: exact -> word token -> substring
+      const matchingTask = findMatchingTask(cleanedTaskName, allTasks);
+
+      console.log('[DeleteTaskHandler] Matching task:', matchingTask ? matchingTask.name : 'none found');
 
       if (!matchingTask) {
         return buildResponse(
           handlerInput,
-          `I couldn't find "${taskSlot}" in your tasks.`,
+          `I couldn't find "${cleanedTaskName}" in your tasks. Please try saying the full task name.`,
           'What else would you like to do?'
         );
       }

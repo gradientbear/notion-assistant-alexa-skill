@@ -60,9 +60,28 @@ export class BrainDumpHandler implements RequestHandler {
     console.log('[BrainDumpHandler] Conversation state:', conversationState);
     console.log('[BrainDumpHandler] Session attributes:', JSON.stringify(attributes));
 
-    // If we have a task slot value even in 'initial' state, treat it as collecting
-    const userUtterance = request.intent.slots?.task?.value;
+    // If we're in collecting state, try to extract task from various sources
+    // This handles cases where Alexa doesn't fill the task slot for follow-up utterances
+    let userUtterance = request.intent.slots?.task?.value;
     const hasTaskSlot = !!userUtterance && userUtterance.trim().length > 0;
+    
+    // If in collecting state and no task slot, try to get the raw utterance
+    if (conversationState === 'collecting' && !hasTaskSlot) {
+      // Try to get the raw input from the request
+      const rawInput = (request as any).input?.text || (request as any).rawInput;
+      if (rawInput) {
+        console.log('[BrainDumpHandler] No task slot, trying raw input:', rawInput);
+        userUtterance = rawInput;
+      }
+      
+      // Also check if the intent name itself contains useful info
+      // For follow-up utterances, Alexa might send them as different intents
+      if (!userUtterance && request.intent.name !== 'BrainDumpIntent') {
+        console.log('[BrainDumpHandler] Intent changed during collection:', request.intent.name);
+        // If we're collecting and get a different intent, treat it as a task
+        // This handles cases where Alexa doesn't match follow-ups to BrainDumpIntent
+      }
+    }
 
     if (conversationState === 'initial') {
       // If user provided tasks in the same turn, process them immediately
@@ -93,29 +112,65 @@ export class BrainDumpHandler implements RequestHandler {
         attributes.brainDumpTasks = [];
       }
 
-      // Use the task slot value if available
-      const taskValue = userUtterance || request.intent.slots?.task?.value;
-
-      console.log('[BrainDumpHandler] User utterance/task value:', taskValue);
-
+      // Use the task slot value if available, or try to extract from utterance
+      let taskValue = userUtterance || request.intent.slots?.task?.value;
+      
+      // If no task value but we're collecting, try to get it from the request envelope
       if (!taskValue || taskValue.trim().length === 0) {
-        console.log('[BrainDumpHandler] No task value found');
-        return buildResponse(
-          handlerInput,
-          'I didn\'t catch that. What tasks would you like to add?',
-          'Tell me the tasks, or say done when finished.'
-        );
+        // Try to extract from request envelope
+        const requestEnvelope = handlerInput.requestEnvelope as any;
+        const rawInput = requestEnvelope.request?.input?.text || 
+                        requestEnvelope.request?.rawInput ||
+                        requestEnvelope.request?.intent?.slots?.task?.value;
+        
+        if (rawInput) {
+          console.log('[BrainDumpHandler] Extracted task from raw input:', rawInput);
+          taskValue = rawInput;
+        }
       }
 
+      console.log('[BrainDumpHandler] User utterance/task value:', taskValue);
+      console.log('[BrainDumpHandler] Full request envelope:', JSON.stringify(handlerInput.requestEnvelope, null, 2));
+
+      if (!taskValue || taskValue.trim().length === 0) {
+        console.log('[BrainDumpHandler] No task value found after all extraction attempts');
+        // If we're in collecting state, ask them to repeat
+        if (conversationState === 'collecting') {
+          return buildResponse(
+            handlerInput,
+            'I didn\'t catch that task. Could you repeat it?',
+            'Tell me the task again, or say done when finished.'
+          );
+        } else {
+          return buildResponse(
+            handlerInput,
+            'I didn\'t catch that. What tasks would you like to add?',
+            'Tell me the tasks, or say done when finished.'
+          );
+        }
+      }
+
+      // Clean up task name - remove "add" prefix if present
+      // This handles cases where Alexa captures "add finish the report" instead of "finish the report"
+      let cleanedTaskValue = taskValue.trim();
+      const addPrefixPattern = /^add\s+/i;
+      if (addPrefixPattern.test(cleanedTaskValue)) {
+        cleanedTaskValue = cleanedTaskValue.replace(addPrefixPattern, '').trim();
+        console.log('[BrainDumpHandler] Removed "add" prefix from task:', {
+          original: taskValue,
+          cleaned: cleanedTaskValue
+        });
+      }
+      
       // Parse multiple tasks from a single utterance (split by "and", comma, etc.)
       const taskSeparators = /\s+(and|,|, and)\s+/i;
-      const tasksFromUtterance = taskValue.split(taskSeparators).filter(
+      const tasksFromUtterance = cleanedTaskValue.split(taskSeparators).filter(
         (part, index) => index % 2 === 0 && part.trim().length > 0
       ).map(task => task.trim());
       
       // If splitting didn't work, use the whole value as a single task
       if (tasksFromUtterance.length === 0) {
-        tasksFromUtterance.push(taskValue.trim());
+        tasksFromUtterance.push(cleanedTaskValue);
       }
 
       console.log('[BrainDumpHandler] Parsed tasks:', tasksFromUtterance);
@@ -236,10 +291,42 @@ export class BrainDumpHandler implements RequestHandler {
         }
       }
 
-      // Single task - add to collection
+      // Single task - add to collection and save immediately
       const tasks = attributes.brainDumpTasks || [];
       const taskToAdd = tasksFromUtterance[0] || taskValue;
       tasks.push(taskToAdd);
+      
+      // Find tasks database
+      console.log('[BrainDumpHandler] Looking for Tasks database...');
+      const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
+      console.log('[BrainDumpHandler] Tasks database ID:', tasksDbId);
+      
+      if (!tasksDbId) {
+        attributes.brainDumpState = 'initial';
+        handlerInput.attributesManager.setSessionAttributes(attributes);
+        return buildResponse(
+          handlerInput,
+          'I couldn\'t find your Tasks database in Notion. ' +
+          'Please make sure it exists and try again.',
+          'What would you like to do?'
+        );
+      }
+
+      // Save the task immediately to Notion
+      try {
+        console.log('[BrainDumpHandler] Adding task to Notion:', taskToAdd);
+        await addTask(notionClient, tasksDbId, taskToAdd);
+        console.log('[BrainDumpHandler] Successfully added task to Notion:', taskToAdd);
+      } catch (error: any) {
+        console.error('[BrainDumpHandler] Error adding task to Notion:', error);
+        console.error('[BrainDumpHandler] Error details:', {
+          message: error?.message,
+          status: error?.status,
+          code: error?.code
+        });
+        // Continue anyway - task is in collection, user can try again
+      }
+      
       attributes.brainDumpTasks = tasks;
       attributes.brainDumpState = 'collecting'; // Ensure state is set
       handlerInput.attributesManager.setSessionAttributes(attributes);
@@ -247,7 +334,7 @@ export class BrainDumpHandler implements RequestHandler {
       console.log('[BrainDumpHandler] Task added to collection, total tasks:', tasks.length);
       return buildResponse(
         handlerInput,
-        `Got it. Added "${taskToAdd}". What else?`,
+        `Got it. Added "${taskToAdd}" to your Notion database. What else?`,
         'Tell me another task, or say done when finished.'
       );
     }

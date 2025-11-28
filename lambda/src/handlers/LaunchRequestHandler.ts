@@ -4,7 +4,8 @@ import {
   RequestInterceptor,
 } from 'ask-sdk-core';
 import { Request } from 'ask-sdk-model';
-import { getUserByAmazonId, validateLicense } from '../utils/database';
+import { getUserByAmazonId } from '../utils/database';
+// import { validateLicense } from '../utils/database'; // Disabled for MVP
 import { buildSimpleResponse, buildResponse, buildLinkAccountResponse } from '../utils/alexa';
 
 export class LaunchRequestHandler implements RequestHandler {
@@ -21,7 +22,7 @@ export class LaunchRequestHandler implements RequestHandler {
       console.log('[LaunchRequestHandler] No userId found');
       return buildSimpleResponse(
         handlerInput,
-        'Welcome to Notion Data. Please enable the skill in your Alexa app.'
+        'Welcome to Notion Data. Please enable the skill in your Alexa app to get started.'
       );
     }
 
@@ -38,29 +39,29 @@ export class LaunchRequestHandler implements RequestHandler {
     
     if (!user) {
       console.log('[LaunchRequestHandler] User not found in database');
-      return buildSimpleResponse(
+      return buildResponse(
         handlerInput,
-        'Welcome to Notion Data. Please link your account using the Alexa app. ' +
-        'You will need your email and license key to complete setup.'
+        'Welcome to Notion Data! To get started, you need to link your account. ' +
+        'Open the Alexa app on your phone, go to Skills, find Notion Data, and click Link Account. ' +
+        'You\'ll need to sign in to your web account first. ' +
+        'Would you like help setting up your account?',
+        'Would you like help setting up your account?'
       );
     }
 
-    // Skip license validation if DISABLE_LICENSE_VALIDATION is set to 'true'
-    if (process.env.DISABLE_LICENSE_VALIDATION !== 'true') {
-      const isValidLicense = await validateLicense(user.license_key);
-      if (!isValidLicense) {
-        console.log('[LaunchRequestHandler] Invalid license');
-        return buildSimpleResponse(
-          handlerInput,
-          'Your license key is invalid or has been deactivated. Please contact support.'
-        );
-      }
-    }
+    // License validation disabled for MVP - focus on CRUD operations only
 
     // Check if Notion is connected
     if (!user.notion_token) {
       console.log('[LaunchRequestHandler] No notion_token found - returning link account response');
-      return buildLinkAccountResponse(handlerInput);
+      return buildResponse(
+        handlerInput,
+        'To use Notion Data, you need to connect your Notion account. ' +
+        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Once connected, I can help you manage your tasks in Notion. ' +
+        'Would you like help connecting your account?',
+        'Would you like help connecting your account?'
+      );
     }
     
     console.log('[LaunchRequestHandler] User has notion_token - proceeding with welcome message');
@@ -72,9 +73,9 @@ export class LaunchRequestHandler implements RequestHandler {
 
     return buildResponse(
       handlerInput,
-      'Welcome to Notion Data. You can ask me to dump your brain, ' +
-      'check your priorities, start a focus timer, log your energy, ' +
-      'view your schedule, or manage your shopping list. What would you like to do?',
+      'Welcome to Notion Data! I can help you manage your tasks. ' +
+      'You can add tasks, list your tasks, mark them complete, update their status, or delete them. ' +
+      'You can also check your connection status. What would you like to do?',
       'What would you like to do?'
     );
   }

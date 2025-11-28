@@ -276,14 +276,24 @@
           "name": "MarkTaskCompleteIntent",
           "samples": [
             "mark {task} as done",
-            "complete {task}",
             "mark {task} as complete",
+            "complete {task}",
             "{task} is done",
+            "{task} is complete",
             "mark all today's tasks as done",
             "complete all today's tasks",
             "finish {task}",
             "done with {task}",
-            "{task} done"
+            "{task} done",
+            "mark the {task} as done",
+            "mark the {task} as complete",
+            "mark my {task} as done",
+            "mark my {task} as complete",
+            "complete the {task}",
+            "finish the {task}",
+            "finish my {task}",
+            "done with the {task}",
+            "done with my {task}"
           ],
           "slots": [
             {
@@ -319,11 +329,27 @@
             "start {task}",
             "begin {task}",
             "set {task} to in-progress",
-            "move {task} to in-progress"
+            "move {task} to in-progress",
+            "set {task} to to do",
+            "set {task} to todo",
+            "move {task} to to do",
+            "move {task} to todo",
+            "set {task} to done",
+            "move {task} to done",
+            "set {task} status to {status}",
+            "change {task} status to {status}",
+            "update {task} status to {status}",
+            "set {task} to {status}",
+            "move {task} to {status}"
           ],
           "slots": [
             {
               "name": "task",
+              "type": "AMAZON.SearchQuery",
+              "samples": []
+            },
+            {
+              "name": "status",
               "type": "AMAZON.SearchQuery",
               "samples": []
             }

@@ -29,10 +29,15 @@ export async function getUserByAmazonId(amazonAccountId: string): Promise<User |
     .from('users')
     .select('*')
     .eq('amazon_account_id', amazonAccountId)
-    .single();
+    .maybeSingle(); // Use maybeSingle() to handle "no rows found" gracefully
 
   if (error) {
-    console.error('[getUserByAmazonId] Supabase error:', error);
+    // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
+    if (error.code !== 'PGRST116') {
+      console.error('[getUserByAmazonId] Supabase error:', error);
+    } else {
+      console.log('[getUserByAmazonId] No user found (expected for new users)');
+    }
     return null;
   }
 
@@ -161,7 +166,7 @@ export async function getUserByEmailAndLicense(
     .select('*')
     .eq('email', email)
     .eq('license_key', licenseKey)
-    .single();
+    .maybeSingle(); // Use maybeSingle() to handle "no rows found" gracefully
 
   if (error || !data) {
     return null;

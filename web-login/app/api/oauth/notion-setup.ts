@@ -49,15 +49,15 @@ async function getUserWorkspace(client: Client): Promise<string | null> {
 }
 
 /**
- * Create a Privacy page in the user's private workspace
+ * Create a Notion Data page in the user's private workspace
  * This page will be created at the workspace root level (private space)
  */
 async function createPrivacyPage(client: Client): Promise<string | null> {
   try {
-    // First, try to find if Privacy page already exists
+    // First, try to find if Notion Data page already exists
     const searchResponse = await withRetry(() =>
       client.search({
-        query: 'Privacy',
+        query: 'Notion Data',
         filter: {
           property: 'object',
           value: 'page',
@@ -71,16 +71,16 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
         // Check title in properties or in title array
         const title = item.properties?.title?.title?.[0]?.plain_text || 
                      item.title?.[0]?.plain_text;
-        return title === 'Privacy';
+        return title === 'Notion Data';
       }
     );
 
     if (existingPage) {
-      console.log('Privacy page already exists, using existing page');
+      console.log('Notion Data page already exists, using existing page');
       return (existingPage as any).id;
     }
 
-    // Find the workspace root page to create Privacy page in private space
+    // Find the workspace root page to create Notion Data page in private space
     // Search for pages at the workspace level (not nested)
     const workspaceSearch = await withRetry(() =>
       client.search({
@@ -131,7 +131,7 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
       throw new Error('Could not find a parent page in workspace');
     }
 
-    // Create new Privacy page in the private workspace
+    // Create new Notion Data page in the private workspace
     // This will be a private page (not shared) by default
     const pageResponse = await withRetry(() =>
       client.pages.create({
@@ -143,7 +143,7 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
           title: [
             {
               text: {
-                content: 'Privacy',
+                content: 'Notion Data',
               },
             },
           ],
@@ -152,10 +152,10 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
       })
     );
 
-    console.log('Successfully created Privacy page:', pageResponse.id);
+    console.log('Successfully created Notion Data page:', pageResponse.id);
     return pageResponse.id;
   } catch (error) {
-    console.error('Error creating Privacy page:', error);
+    console.error('Error creating Notion Data page:', error);
     return null;
   }
 }
@@ -239,6 +239,9 @@ async function createTasksDatabase(
           },
           Notes: {
             rich_text: {},
+          },
+          Deleted: {
+            checkbox: {},
           },
         },
       })
@@ -430,7 +433,7 @@ async function createEnergyLogsDatabase(
 
 /**
  * Complete Notion setup for a user:
- * 1. Create Privacy page
+ * 1. Create Notion Data page
  * 2. Create three databases (Tasks, Focus_Logs, Energy_Logs)
  * Returns an object with all created IDs
  */
@@ -447,28 +450,28 @@ export async function setupNotionWorkspace(
     console.log('=== Starting Notion Workspace Setup ===');
     const client = new Client({ auth: accessToken });
 
-    // Step 1: Create Privacy page
-    console.log('Step 1: Creating Privacy page...');
+    // Step 1: Create Notion Data page
+    console.log('Step 1: Creating Notion Data page...');
     const privacyPageId = await createPrivacyPage(client);
     if (!privacyPageId) {
-      throw new Error('Failed to create Privacy page');
+      throw new Error('Failed to create Notion Data page');
     }
-    console.log('✓ Privacy page created:', privacyPageId);
+    console.log('✓ Notion Data page created:', privacyPageId);
 
     // Verify the page exists and wait a moment for Notion to process it
     try {
       const pageInfo = await client.pages.retrieve({ page_id: privacyPageId });
-      console.log('✓ Privacy page verified:', pageInfo.id);
+      console.log('✓ Notion Data page verified:', pageInfo.id);
     } catch (error: any) {
-      console.warn('Warning: Could not verify Privacy page:', error.message);
+      console.warn('Warning: Could not verify Notion Data page:', error.message);
     }
 
     // Wait a bit for Notion to fully process the page before creating databases
     console.log('Waiting for Notion to process the page...');
     await sleep(2000);
 
-    // Step 2: Create databases on the Privacy page
-    console.log('Step 2: Creating databases on Privacy page...');
+    // Step 2: Create databases on the Notion Data page
+    console.log('Step 2: Creating databases on Notion Data page...');
     const tasksDbId = await createTasksDatabase(client, privacyPageId);
     console.log('Tasks DB result:', tasksDbId ? `✓ Created: ${tasksDbId}` : '✗ Failed');
     

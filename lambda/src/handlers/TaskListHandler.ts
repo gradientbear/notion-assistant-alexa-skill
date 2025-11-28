@@ -16,11 +16,12 @@ import {
 
 export class TaskListHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    const intentName = handlerInput.requestEnvelope.request.type === 'IntentRequest'
-      ? handlerInput.requestEnvelope.request.intent.name
+    const isIntentRequest = handlerInput.requestEnvelope.request.type === 'IntentRequest';
+    const intentName = isIntentRequest
+      ? (handlerInput.requestEnvelope.request as any).intent?.name
       : null;
 
-    return intentName !== null && [
+    const supportedIntents = [
       'TaskListIntent',
       'HighPriorityTasksIntent',
       'ToDoListIntent',
@@ -33,18 +34,40 @@ export class TaskListHandler implements RequestHandler {
       'TasksDueThisWeekIntent',
       'InProgressTasksIntent',
       'CompletedTasksIntent',
-    ].includes(intentName);
+    ];
+    
+    const canHandle = intentName !== null && supportedIntents.includes(intentName);
+    
+    if (isIntentRequest) {
+      console.log('[TaskListHandler] canHandle check:', {
+        isIntentRequest,
+        intentName,
+        canHandle,
+        isSupported: intentName ? supportedIntents.includes(intentName) : false
+      });
+    }
+    
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
+    console.log('[TaskListHandler] Handler invoked');
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
+    
+    console.log('[TaskListHandler] Session check:', {
+      hasUser: !!user,
+      hasNotionClient: !!notionClient,
+      userId: user?.id
+    });
 
     if (!user || !notionClient) {
       return buildResponse(
         handlerInput,
-        'Please link your Notion account in the Alexa app to use this feature.',
+        'To view your tasks, you need to connect your Notion account. ' +
+        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Once connected, I can show you your tasks from Notion.',
         'What would you like to do?'
       );
     }

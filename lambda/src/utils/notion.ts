@@ -60,7 +60,7 @@ export async function addTask(
   priority: 'High' | 'Medium' | 'Low' = 'Medium',
   category: 'Work' | 'Personal' | 'Fitness' | 'Shopping' = 'Personal',
   dueDate?: string
-): Promise<void> {
+): Promise<string> {
   const properties: any = {
     'Task Name': {
       title: [{ text: { content: taskName } }],
@@ -85,12 +85,63 @@ export async function addTask(
     };
   }
 
-  await withRetry(() =>
-    client.pages.create({
-      parent: { database_id: databaseId },
-      properties,
-    })
-  );
+  try {
+    const response = await withRetry(() =>
+      client.pages.create({
+        parent: { database_id: databaseId },
+        properties,
+      })
+    );
+    
+    // Verify the page was created
+    if (!response || !response.id) {
+      console.error('[addTask] Failed to create task - no page ID in response:', response);
+      throw new Error('Failed to create task in Notion: No page ID returned');
+    }
+    
+    console.log('[addTask] Task created successfully:', {
+      pageId: response.id,
+      taskName,
+      databaseId
+    });
+    
+    // Small delay to ensure Notion has processed the creation
+    await sleep(200);
+    
+    // Verify the page was actually created by trying to retrieve it
+    try {
+      const verifyResponse = await withRetry(() =>
+        client.pages.retrieve({ page_id: response.id })
+      );
+      if (verifyResponse && verifyResponse.id === response.id) {
+        console.log('[addTask] Task verified - page exists:', response.id);
+      } else {
+        console.warn('[addTask] Task verification failed - page may not exist:', {
+          expectedId: response.id,
+          retrievedId: verifyResponse?.id
+        });
+      }
+    } catch (verifyError: any) {
+      console.error('[addTask] Failed to verify task creation:', {
+        pageId: response.id,
+        error: verifyError?.message,
+        status: verifyError?.status
+      });
+      // Don't throw - the page was created, verification is just a check
+    }
+    
+    return response.id;
+  } catch (error: any) {
+    console.error('[addTask] Error creating task:', {
+      taskName,
+      databaseId,
+      error: error?.message,
+      status: error?.status,
+      code: error?.code,
+      body: error?.body
+    });
+    throw error;
+  }
 }
 
 export async function getTopPriorityTasks(
@@ -758,16 +809,54 @@ export async function markTaskComplete(
   client: Client,
   pageId: string
 ): Promise<void> {
-  await withRetry(() =>
-    client.pages.update({
-      page_id: pageId,
-      properties: {
-        Status: {
-          select: { name: 'Done' },
+  // First, check if the task is deleted and restore it if needed
+  try {
+    const page = await client.pages.retrieve({ page_id: pageId });
+    const props = (page as any).properties;
+    const isDeleted = props.Deleted?.checkbox || false;
+    
+    if (isDeleted) {
+      // Restore the task (set Deleted to false) and mark as complete
+      await withRetry(() =>
+        client.pages.update({
+          page_id: pageId,
+          properties: {
+            Deleted: {
+              checkbox: false,
+            },
+            Status: {
+              select: { name: 'Done' },
+            },
+          },
+        })
+      );
+    } else {
+      // Just update the status
+      await withRetry(() =>
+        client.pages.update({
+          page_id: pageId,
+          properties: {
+            Status: {
+              select: { name: 'Done' },
+            },
+          },
+        })
+      );
+    }
+  } catch (error: any) {
+    // If we can't retrieve the page, try to update anyway (fallback)
+    console.warn('[markTaskComplete] Could not check deleted status, updating anyway:', error.message);
+    await withRetry(() =>
+      client.pages.update({
+        page_id: pageId,
+        properties: {
+          Status: {
+            select: { name: 'Done' },
+          },
         },
-      },
-    })
-  );
+      })
+    );
+  }
 }
 
 /**
@@ -931,14 +1020,14 @@ export async function getUserWorkspace(client: Client): Promise<string | null> {
 }
 
 /**
- * Create a Privacy page in the user's workspace
+ * Create a Notion Data page in the user's workspace
  */
 export async function createPrivacyPage(client: Client): Promise<string | null> {
   try {
-    // First, try to find if Privacy page already exists
+    // First, try to find if Notion Data page already exists
     const searchResponse = await withRetry(() =>
       client.search({
-        query: 'Privacy',
+        query: 'Notion Data',
         filter: {
           property: 'object',
           value: 'page',
@@ -952,7 +1041,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
         // Check title in properties or in title array
         const title = item.properties?.title?.title?.[0]?.plain_text || 
                      item.title?.[0]?.plain_text;
-        return title === 'Privacy';
+        return title === 'Notion Data';
       }
     );
 
@@ -990,7 +1079,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
       throw new Error('Could not find a parent page in workspace');
     }
 
-    // Create new Privacy page as child of workspace page
+    // Create new Notion Data page as child of workspace page
     const pageResponse = await withRetry(() =>
       client.pages.create({
         parent: {
@@ -1001,7 +1090,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
           title: [
             {
               text: {
-                content: 'Privacy',
+                content: 'Notion Data',
               },
             },
           ],
@@ -1011,7 +1100,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
 
     return pageResponse.id;
   } catch (error) {
-    console.error('Error creating Privacy page:', error);
+    console.error('Error creating Notion Data page:', error);
     return null;
   }
 }
@@ -1259,7 +1348,7 @@ export async function createEnergyLogsDatabase(
 
 /**
  * Complete Notion setup for a user:
- * 1. Create Privacy page
+ * 1. Create Notion Data page
  * 2. Create three databases (Tasks, Focus_Logs, Energy_Logs)
  * Returns an object with all created IDs
  */
@@ -1272,13 +1361,13 @@ export async function setupNotionWorkspace(
   energyLogsDbId: string | null;
 }> {
   try {
-    // Step 1: Create Privacy page
+    // Step 1: Create Notion Data page
     const privacyPageId = await createPrivacyPage(client);
     if (!privacyPageId) {
-      throw new Error('Failed to create Privacy page');
+      throw new Error('Failed to create Notion Data page');
     }
 
-    // Step 2: Create databases on the Privacy page
+    // Step 2: Create databases on the Notion Data page
     const tasksDbId = await createTasksDatabase(client, privacyPageId);
     const focusLogsDbId = await createFocusLogsDatabase(client, privacyPageId);
     const energyLogsDbId = await createEnergyLogsDatabase(client, privacyPageId);

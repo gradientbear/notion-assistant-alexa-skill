@@ -8,10 +8,15 @@ export class ErrorHandler implements AskErrorHandler {
 
   async handle(handlerInput: HandlerInput) {
     const error = (handlerInput as any).error;
+    const request = handlerInput.requestEnvelope.request;
+    const requestType = request.type;
+    
     console.error('[ErrorHandler] Error caught:', {
       name: error?.name,
       message: error?.message,
       stack: error?.stack,
+      requestType,
+      intentName: requestType === 'IntentRequest' ? (request as any).intent?.name : null,
       error: JSON.stringify(error)
     });
 
@@ -37,6 +42,18 @@ export class ErrorHandler implements AskErrorHandler {
       return buildSimpleResponse(
         handlerInput,
         'Please link your account in the Alexa app to use this skill.'
+      );
+    }
+
+    // Check if this is an unhandled intent (no handler matched)
+    if (requestType === 'IntentRequest' && !error) {
+      const intentName = (request as any).intent?.name;
+      console.error('[ErrorHandler] Unhandled intent:', intentName);
+      return buildSimpleResponse(
+        handlerInput,
+        'I\'m not sure how to help with that. ' +
+        'You can add tasks, list tasks, mark them complete, update them, or delete them. ' +
+        'What would you like to do?'
       );
     }
 

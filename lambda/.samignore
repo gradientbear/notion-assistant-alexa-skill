@@ -1,0 +1,16 @@
+# SAM ignore file - excludes files from SAM build
+node_modules
+*.test.ts
+*.test.js
+__tests__
+.git
+.gitignore
+README.md
+*.md
+.env
+.env.local
+coverage
+.nyc_output
+.vscode
+.idea
+

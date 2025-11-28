@@ -9,6 +9,7 @@ export class AddTaskHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
     
+    // Only handle AddTaskIntent - BrainDumpIntent is handled by BrainDumpHandler
     const canHandle = isIntentRequest && intentName === 'AddTaskIntent';
     
     if (isIntentRequest) {
@@ -40,7 +41,9 @@ export class AddTaskHandler implements RequestHandler {
         console.warn('[AddTaskHandler] Missing user or Notion client');
         return buildResponse(
           handlerInput,
-          'Please link your Notion account in the Alexa app to use this feature.',
+          'To add tasks, you need to connect your Notion account. ' +
+          'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+          'Once connected, you can add tasks to your Notion workspace.',
           'What would you like to do?'
         );
       }
@@ -105,8 +108,9 @@ export class AddTaskHandler implements RequestHandler {
         databaseId: tasksDbId
       });
 
+      let pageId: string;
       try {
-        await addTask(
+        pageId = await addTask(
           notionClient,
           tasksDbId,
           parsed.taskName,
@@ -114,13 +118,18 @@ export class AddTaskHandler implements RequestHandler {
           parsed.category || 'Personal',
           parsed.dueDate
         );
-        console.log('[AddTaskHandler] Task added successfully to Notion');
+        console.log('[AddTaskHandler] Task added successfully to Notion:', {
+          pageId,
+          taskName: parsed.taskName,
+          databaseId: tasksDbId
+        });
       } catch (notionError: any) {
         console.error('[AddTaskHandler] Notion API error:', {
           message: notionError?.message,
           status: notionError?.status,
           code: notionError?.code,
-          body: notionError?.body
+          body: notionError?.body,
+          stack: notionError?.stack
         });
         throw notionError; // Re-throw to be caught by outer catch
       }

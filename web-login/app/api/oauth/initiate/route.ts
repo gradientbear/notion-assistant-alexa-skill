@@ -107,22 +107,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // License key is optional for web flow (will be set later)
-    // Only validate if provided
-    if (licenseKey) {
-      const { data: license, error: licenseError } = await supabase
-        .from('licenses')
-        .select('status')
-        .eq('license_key', licenseKey)
-        .single();
-
-      if (licenseError || !license || license.status !== 'active') {
-        return NextResponse.json(
-          { error: 'Invalid or inactive license key' },
-          { status: 401 }
-        );
-      }
-    }
+    // License validation disabled for MVP - license key is optional and not validated
 
     // Generate PKCE code verifier and state
     const codeVerifier = crypto.randomBytes(32).toString('base64url');

@@ -180,17 +180,37 @@ export async function GET(request: NextRequest) {
     }
     
     // Create or update user with Notion token and setup data
+    console.log('=== Starting User Database Update ===');
+    console.log('Session data:', {
+      amazon_account_id: session.amazon_account_id,
+      auth_user_id: session.auth_user_id,
+      email: session.email,
+      has_license_key: !!session.license_key
+    });
+    console.log('Setup result:', {
+      success: setupResult.success,
+      privacyPageId: setupResult.privacyPageId,
+      tasksDbId: setupResult.tasksDbId,
+      focusLogsDbId: setupResult.focusLogsDbId,
+      energyLogsDbId: setupResult.energyLogsDbId
+    });
+
     if (session.amazon_account_id) {
-      // Check if user exists
-      const { data: existingUser } = await supabase
+      // Alexa flow - update by amazon_account_id
+      console.log('Alexa flow: Looking up user by amazon_account_id:', session.amazon_account_id);
+      const { data: existingUser, error: lookupError } = await supabase
         .from('users')
         .select('*')
         .eq('amazon_account_id', session.amazon_account_id)
-        .single();
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error('Error looking up user by amazon_account_id:', lookupError);
+      }
 
       if (existingUser) {
-        // Update existing user with Notion token and setup data
-        await supabase
+        console.log('Found existing user:', existingUser.id);
+        const { data: updateData, error: updateError } = await supabase
           .from('users')
           .update({
             email: session.email,
@@ -203,10 +223,18 @@ export async function GET(request: NextRequest) {
             energy_logs_db_id: setupResult.energyLogsDbId,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', existingUser.id);
+          .eq('id', existingUser.id)
+          .select();
+        
+        if (updateError) {
+          console.error('❌ Error updating user (Alexa flow):', updateError);
+          console.error('Update error details:', JSON.stringify(updateError, null, 2));
+        } else {
+          console.log('✅ Successfully updated user (Alexa flow):', updateData);
+        }
       } else {
-        // Create new user with Notion token and setup data
-        await supabase
+        console.log('User not found, creating new user (Alexa flow)');
+        const { data: insertData, error: insertError } = await supabase
           .from('users')
           .insert({
             amazon_account_id: session.amazon_account_id,
@@ -218,34 +246,59 @@ export async function GET(request: NextRequest) {
             tasks_db_id: setupResult.tasksDbId,
             focus_logs_db_id: setupResult.focusLogsDbId,
             energy_logs_db_id: setupResult.energyLogsDbId,
-          });
+          })
+          .select();
+        
+        if (insertError) {
+          console.error('❌ Error creating user (Alexa flow):', insertError);
+          console.error('Insert error details:', JSON.stringify(insertError, null, 2));
+        } else {
+          console.log('✅ Successfully created user (Alexa flow):', insertData);
+        }
       }
     } else {
       // Web flow - update user by auth_user_id or email
+      console.log('Web flow: Looking up user by auth_user_id or email');
       let existingUser = null;
+      let lookupMethod = '';
       
       if (authUserId) {
-        // Find by auth_user_id
-        const { data } = await supabase
+        console.log('Trying to find user by auth_user_id:', authUserId);
+        const { data, error: lookupError } = await supabase
           .from('users')
           .select('*')
           .eq('auth_user_id', authUserId)
-          .single();
-        existingUser = data;
+          .maybeSingle();
+        
+        if (lookupError) {
+          console.error('Error looking up by auth_user_id:', lookupError);
+        } else if (data) {
+          existingUser = data;
+          lookupMethod = 'auth_user_id';
+          console.log('✅ Found user by auth_user_id:', data.id);
+        }
       }
       
-      if (!existingUser) {
-        // Fallback: find by email
-        const { data } = await supabase
+      if (!existingUser && session.email) {
+        console.log('Trying to find user by email:', session.email);
+        const { data, error: lookupError } = await supabase
           .from('users')
           .select('*')
           .eq('email', session.email)
-          .single();
-        existingUser = data;
+          .maybeSingle();
+        
+        if (lookupError) {
+          console.error('Error looking up by email:', lookupError);
+        } else if (data) {
+          existingUser = data;
+          lookupMethod = 'email';
+          console.log('✅ Found user by email:', data.id);
+        }
       }
 
       if (existingUser) {
-        const updateResult = await supabase
+        console.log(`Updating existing user (found by ${lookupMethod}):`, existingUser.id);
+        const { data: updateData, error: updateError } = await supabase
           .from('users')
           .update({
             notion_token: access_token,
@@ -256,18 +309,31 @@ export async function GET(request: NextRequest) {
             energy_logs_db_id: setupResult.energyLogsDbId,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', existingUser.id);
+          .eq('id', existingUser.id)
+          .select();
         
-        if (updateResult.error) {
-          console.error('Error updating user with Notion data:', updateResult.error);
+        if (updateError) {
+          console.error('❌ Error updating user (Web flow):', updateError);
+          console.error('Update error details:', JSON.stringify(updateError, null, 2));
+          console.error('Update query details:', {
+            user_id: existingUser.id,
+            notion_token_length: access_token?.length,
+            setup_success: setupResult.success
+          });
         } else {
-          console.log('Successfully updated user with Notion setup data');
+          console.log('✅ Successfully updated user (Web flow):', updateData);
         }
       } else {
-        console.warn('User not found for Notion connection - auth_user_id:', authUserId, 'email:', session.email);
+        console.warn('⚠️ User not found for Notion connection');
+        console.warn('Lookup attempted with:', {
+          auth_user_id: authUserId,
+          email: session.email
+        });
+        
         // Try to create user if we have enough info
         if (authUserId || session.email) {
-          const { error: insertError } = await supabase
+          console.log('Attempting to create new user...');
+          const { data: insertData, error: insertError } = await supabase
             .from('users')
             .insert({
               auth_user_id: authUserId,
@@ -280,16 +346,27 @@ export async function GET(request: NextRequest) {
               energy_logs_db_id: setupResult.energyLogsDbId,
               license_key: session.license_key || '',
               onboarding_complete: false,
-            });
+            })
+            .select();
           
           if (insertError) {
-            console.error('Error creating user with Notion data:', insertError);
+            console.error('❌ Error creating user (Web flow):', insertError);
+            console.error('Insert error details:', JSON.stringify(insertError, null, 2));
+            console.error('Insert data attempted:', {
+              auth_user_id: authUserId,
+              email: session.email,
+              has_notion_token: !!access_token,
+              has_license_key: !!session.license_key
+            });
           } else {
-            console.log('Successfully created user with Notion setup data');
+            console.log('✅ Successfully created user (Web flow):', insertData);
           }
+        } else {
+          console.error('❌ Cannot create user: missing both auth_user_id and email');
         }
       }
     }
+    console.log('=== User Database Update Complete ===');
 
     // Clean up session
     await deleteOAuthSession(state);

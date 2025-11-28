@@ -9,6 +9,7 @@ type OnboardingStep = 'amazon' | 'notion' | 'license' | 'complete'
 
 interface User {
   id: string
+  auth_user_id: string | null
   email: string
   notion_token: string | null
   notion_setup_complete: boolean
@@ -33,7 +34,7 @@ export default function OnboardingPage() {
     // Check if coming back from Notion OAuth
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.get('notion_connected') === 'true') {
-      setMessage('Notion connected successfully! Privacy page and databases created.')
+      setMessage('Notion connected successfully! Notion Data page and databases created.')
       // Remove the query parameter
       window.history.replaceState({}, '', '/onboarding')
     }
@@ -144,7 +145,7 @@ export default function OnboardingPage() {
       const userData = await response.json()
       setUser(userData)
 
-      // Determine current step - Notion first (optional), then Amazon, then License
+      // Determine current step - Notion first (optional), then Amazon (MVP: no license required)
       if (userData.onboarding_complete) {
         router.push('/dashboard')
         return
@@ -152,8 +153,25 @@ export default function OnboardingPage() {
         setCurrentStep('notion')
       } else if (!userData.amazon_account_id) {
         setCurrentStep('amazon')
-      } else if (!userData.license_key) {
-        setCurrentStep('license')
+      } else {
+        // All required steps complete - auto-complete onboarding
+        setCurrentStep('complete')
+        // Mark onboarding as complete in database
+        try {
+          const session = await supabase.auth.getSession()
+          const token = session.data.session?.access_token
+          if (token) {
+            await fetch('/api/users/complete-onboarding', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            })
+          }
+        } catch (err) {
+          console.warn('Failed to auto-complete onboarding:', err)
+        }
       }
 
       setLoading(false)
@@ -167,19 +185,34 @@ export default function OnboardingPage() {
   const handleNotionConnect = async () => {
     setProcessing(true)
     try {
+      // Get the actual auth_user_id from Supabase Auth
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      
+      if (!authUser) {
+        setError('Please sign in to connect Notion')
+        setProcessing(false)
+        return
+      }
+
       const response = await fetch('/api/oauth/initiate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          email: user?.email,
-          auth_user_id: user?.id 
+          email: user?.email || authUser.email,
+          auth_user_id: authUser.id // Use Supabase Auth user ID
         }),
       })
 
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to initiate Notion connection')
+      }
+
       const { authUrl } = await response.json()
       window.location.href = authUrl
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error initiating Notion OAuth:', error)
+      setError(error.message || 'Failed to connect Notion. Please try again.')
       setProcessing(false)
     }
   }
@@ -190,18 +223,15 @@ export default function OnboardingPage() {
     router.push('/amazon/link')
   }
 
-  const handleLicenseKey = async () => {
-    setProcessing(true)
-    // Redirect to license key page
-    router.push('/license')
-  }
+  // License step removed for MVP
 
   const handleSkipNotion = async () => {
     // Allow user to skip Notion connection and proceed to next step
     if (!user?.amazon_account_id) {
       setCurrentStep('amazon')
-    } else if (!user?.license_key) {
-      setCurrentStep('license')
+    } else {
+      // All steps complete
+      setCurrentStep('complete')
     }
   }
 
@@ -220,13 +250,6 @@ export default function OnboardingPage() {
       description: 'Connect your Amazon account to enable the Alexa skill',
       completed: !!user?.amazon_account_id,
       action: handleAmazonLink,
-    },
-    {
-      id: 'license' as OnboardingStep,
-      title: 'Enter License Key',
-      description: 'Provide your license key to activate the skill',
-      completed: !!user?.license_key,
-      action: handleLicenseKey,
     },
   ]
 
@@ -379,7 +402,7 @@ export default function OnboardingPage() {
                   <strong>What we'll create in your Notion workspace:</strong>
                 </p>
                 <ul className="list-disc list-inside text-sm text-green-700 mt-2 space-y-1">
-                  <li>A "Privacy" page in your Notion workspace</li>
+                  <li>A "Notion Data" page in your Notion workspace</li>
                   <li>Tasks database for task management</li>
                   <li>Focus_Logs database for focus tracking</li>
                   <li>Energy_Logs database for energy tracking</li>

@@ -37,7 +37,7 @@ function ErrorContent() {
                 textAlign: 'left',
                 display: 'inline-block'
               }}>
-                <li>A "Privacy" page in your workspace</li>
+                <li>A "Notion Data" page in your workspace</li>
                 <li>Tasks, Focus_Logs, and Energy_Logs databases</li>
               </ul>
             </div>
@@ -75,7 +75,7 @@ function ErrorContent() {
                 textAlign: 'left',
                 display: 'inline-block'
               }}>
-                <li>A "Privacy" page in your workspace</li>
+                <li>A "Notion Data" page in your workspace</li>
                 <li>Tasks, Focus_Logs, and Energy_Logs databases</li>
               </ul>
             </div>

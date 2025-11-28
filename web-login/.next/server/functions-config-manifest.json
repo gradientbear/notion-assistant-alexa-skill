@@ -1,1 +1,0 @@
-{"version":1,"functions":{"/api/users/complete-onboarding":{},"/api/auth/sync-user":{},"/api/oauth/initiate":{},"/api/oauth/callback":{},"/api/users/update-license":{},"/api/users/me":{},"/auth/callback":{},"/api/users/link-amazon":{},"/api/validate-license":{}}}

@@ -1,5 +1,5 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
-import { buildResponse } from '../utils/alexa';
+import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import {
   findDatabaseByName,
   getAllTasks,
@@ -10,21 +10,41 @@ import {
 
 export class MarkTaskCompleteHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return (
-      handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
-      handlerInput.requestEnvelope.request.intent.name === 'MarkTaskCompleteIntent'
-    );
+    const isIntentRequest = handlerInput.requestEnvelope.request.type === 'IntentRequest';
+    const intentName = isIntentRequest 
+      ? (handlerInput.requestEnvelope.request as any).intent?.name 
+      : null;
+    const canHandle = isIntentRequest && intentName === 'MarkTaskCompleteIntent';
+    
+    if (isIntentRequest) {
+      console.log('[MarkTaskCompleteHandler] canHandle check:', {
+        isIntentRequest,
+        intentName,
+        canHandle
+      });
+    }
+    
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
+    console.log('[MarkTaskCompleteHandler] Handler invoked');
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
+    
+    console.log('[MarkTaskCompleteHandler] Session check:', {
+      hasUser: !!user,
+      hasNotionClient: !!notionClient,
+      userId: user?.id
+    });
 
     if (!user || !notionClient) {
       return buildResponse(
         handlerInput,
-        'Please link your Notion account in the Alexa app to use this feature.',
+        'To mark tasks as complete, you need to connect your Notion account. ' +
+        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Once connected, you can manage your tasks.',
         'What would you like to do?'
       );
     }
@@ -32,6 +52,8 @@ export class MarkTaskCompleteHandler implements RequestHandler {
     try {
       const request = handlerInput.requestEnvelope.request as any;
       const taskSlot = request.intent.slots?.task?.value;
+      
+      console.log('[MarkTaskCompleteHandler] Full request envelope:', JSON.stringify(handlerInput.requestEnvelope, null, 2));
 
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {
@@ -77,24 +99,36 @@ export class MarkTaskCompleteHandler implements RequestHandler {
         );
       }
 
-      const taskName = taskSlot.toLowerCase();
-      const allTasks = await getAllTasks(notionClient, tasksDbId);
+      // Clean up the task name by removing command words
+      const cleanedTaskName = cleanTaskName(taskSlot);
+      
+      console.log('[MarkTaskCompleteHandler] Original task slot:', taskSlot);
+      console.log('[MarkTaskCompleteHandler] Cleaned task name:', cleanedTaskName);
 
-      // Fuzzy matching
-      const matchingTask = allTasks.find(
-        task => task.name.toLowerCase().includes(taskName) ||
-                taskName.includes(task.name.toLowerCase())
-      );
+      console.log('[MarkTaskCompleteHandler] Searching for task:', cleanedTaskName);
+      
+      const allTasks = await getAllTasks(notionClient, tasksDbId);
+      console.log('[MarkTaskCompleteHandler] Found tasks:', allTasks.length);
+      console.log('[MarkTaskCompleteHandler] Task names:', allTasks.map(t => t.name));
+      console.log('[MarkTaskCompleteHandler] Task statuses:', allTasks.map(t => ({ name: t.name, status: t.status })));
+
+      // Hybrid matching: exact -> word token -> substring
+      const matchingTask = findMatchingTask(cleanedTaskName, allTasks);
+
+      console.log('[MarkTaskCompleteHandler] Matching task:', matchingTask ? { name: matchingTask.name, id: matchingTask.id, status: matchingTask.status } : 'none found');
 
       if (!matchingTask) {
+        console.log('[MarkTaskCompleteHandler] No matching task found');
         return buildResponse(
           handlerInput,
-          `I couldn't find "${taskSlot}" in your tasks.`,
+          `I couldn't find "${cleanedTaskName}" in your tasks. Please try saying the full task name.`,
           'What else would you like to do?'
         );
       }
 
+      console.log('[MarkTaskCompleteHandler] Calling markTaskComplete for task:', matchingTask.id);
       await markTaskComplete(notionClient, matchingTask.id);
+      console.log('[MarkTaskCompleteHandler] Task marked as complete successfully');
 
       return buildResponse(
         handlerInput,

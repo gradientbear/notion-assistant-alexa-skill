@@ -25,7 +25,7 @@ function SuccessContent() {
             textAlign: 'left',
             display: 'inline-block'
           }}>
-            <li>A "Privacy" page in your workspace</li>
+            <li>A "Notion Data" page in your workspace</li>
             <li>Tasks database for task management</li>
             <li>Focus_Logs database for focus tracking</li>
             <li>Energy_Logs database for energy tracking</li>
