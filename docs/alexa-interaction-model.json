@@ -336,20 +336,26 @@
             "move {task} to todo",
             "set {task} to done",
             "move {task} to done",
-            "set {task} status to {status}",
-            "change {task} status to {status}",
-            "update {task} status to {status}",
-            "set {task} to {status}",
-            "move {task} to {status}"
+            "set {task} to complete",
+            "move {task} to complete",
+            "change {task} to to do",
+            "change {task} to todo",
+            "change {task} to in progress",
+            "change {task} to done",
+            "change {task} to complete",
+            "update {task} to to do",
+            "update {task} to todo",
+            "update {task} to in progress",
+            "update {task} to done",
+            "update {task} to complete",
+            "reset {task} to to do",
+            "reset {task} to todo",
+            "mark {task} as to do",
+            "mark {task} as todo"
           ],
           "slots": [
             {
               "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            },
-            {
-              "name": "status",
               "type": "AMAZON.SearchQuery",
               "samples": []
             }

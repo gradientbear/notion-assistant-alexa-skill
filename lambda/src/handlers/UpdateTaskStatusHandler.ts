@@ -187,7 +187,8 @@ export class UpdateTaskStatusHandler implements RequestHandler {
         statusSlot: statusSlot,
         rawInput: rawInput,
         utterance: utterance,
-        allText: allText
+        allText: allText,
+        fullRequestLower: fullRequestLower.substring(0, 500) // First 500 chars for logging
       });
       
       // Detect target status from various sources
@@ -205,14 +206,69 @@ export class UpdateTaskStatusHandler implements RequestHandler {
         }
       }
       
-      // 2. Check utterance for status keywords
+      // 2. Check utterance for status keywords - prioritize explicit status phrases
       if (!targetStatus) {
-        if (allText.includes('to do') || allText.includes('todo') || allText.includes('set to to do')) {
-          targetStatus = 'To Do';
-        } else if (allText.includes('in progress') || allText.includes('in-progress') || allText.includes('start') || allText.includes('begin')) {
+        // Priority 1: Check for explicit "to [status]" patterns in fullRequestLower (most comprehensive)
+        if (fullRequestLower.includes('to in progress') || fullRequestLower.includes('to in-progress')) {
           targetStatus = 'In Progress';
-        } else if (allText.includes('done') || allText.includes('complete') || allText.includes('as done') || allText.includes('as complete')) {
+          console.log('[UpdateTaskStatusHandler] Detected "In Progress" from "to in progress" pattern in fullRequestLower');
+        } else if (fullRequestLower.includes('to to do') || fullRequestLower.includes('to todo')) {
+          targetStatus = 'To Do';
+          console.log('[UpdateTaskStatusHandler] Detected "To Do" from "to to do" pattern in fullRequestLower');
+        } else if (fullRequestLower.includes('to done') || fullRequestLower.includes('to complete')) {
           targetStatus = 'Done';
+          console.log('[UpdateTaskStatusHandler] Detected "Done" from "to done" pattern in fullRequestLower');
+        }
+        
+        // Priority 2: Check for "set/move [task] to [status]" patterns
+        if (!targetStatus) {
+          if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
+              fullRequestLower.includes('in progress')) {
+            targetStatus = 'In Progress';
+            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from "set/move ... in progress" pattern');
+          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
+                     (fullRequestLower.includes('to do') || fullRequestLower.includes('todo'))) {
+            targetStatus = 'To Do';
+            console.log('[UpdateTaskStatusHandler] Detected "To Do" from "set/move ... to do" pattern');
+          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
+                     (fullRequestLower.includes('done') || fullRequestLower.includes('complete'))) {
+            targetStatus = 'Done';
+            console.log('[UpdateTaskStatusHandler] Detected "Done" from "set/move ... done" pattern');
+          }
+        }
+        
+        // Priority 3: Check allText and other sources
+        if (!targetStatus) {
+          if (allText.includes('to in progress') || allText.includes('to in-progress')) {
+            targetStatus = 'In Progress';
+            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from allText');
+          } else if (allText.includes('to to do') || allText.includes('to todo')) {
+            targetStatus = 'To Do';
+            console.log('[UpdateTaskStatusHandler] Detected "To Do" from allText');
+          } else if (allText.includes('to done') || allText.includes('to complete')) {
+            targetStatus = 'Done';
+            console.log('[UpdateTaskStatusHandler] Detected "Done" from allText');
+          } else if (rawInputLower.includes('to in progress') || rawInputLower.includes('to in-progress')) {
+            targetStatus = 'In Progress';
+            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from rawInput');
+          } else if (utteranceLower.includes('to in progress') || utteranceLower.includes('to in-progress')) {
+            targetStatus = 'In Progress';
+            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from utterance');
+          }
+        }
+        
+        // Priority 4: Fallback to general keywords (less specific)
+        if (!targetStatus) {
+          if (allText.includes('in progress') || allText.includes('in-progress') || allText.includes('start') || allText.includes('begin')) {
+            targetStatus = 'In Progress';
+            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from keywords (fallback)');
+          } else if (allText.includes('to do') || allText.includes('todo')) {
+            targetStatus = 'To Do';
+            console.log('[UpdateTaskStatusHandler] Detected "To Do" from keywords (fallback)');
+          } else if (allText.includes('done') || allText.includes('complete')) {
+            targetStatus = 'Done';
+            console.log('[UpdateTaskStatusHandler] Detected "Done" from keywords (fallback)');
+          }
         }
       }
       
