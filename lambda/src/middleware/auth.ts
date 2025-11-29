@@ -2,7 +2,7 @@ import { RequestInterceptor, HandlerInput } from 'ask-sdk-core';
 import { Response } from 'ask-sdk-model';
 import { buildLinkAccountResponse } from '../utils/alexa';
 import { verifyAccessToken, isLegacyToken, parseLegacyToken } from '../utils/jwt';
-import { getUserByAmazonId } from '../utils/database';
+import { getUserByAmazonId, getUserByAuthUserId } from '../utils/database';
 import { createNotionClient } from '../utils/notion';
 
 const INTROSPECT_URL = process.env.INTROSPECT_URL || 'https://notion-data-user.vercel.app/api/auth/introspect';
@@ -32,8 +32,8 @@ export class AuthInterceptor implements RequestInterceptor {
       const request = handlerInput.requestEnvelope.request;
       const requestType = request.type;
 
-      // Skip for LaunchRequest and SessionEndedRequest (handled separately)
-      if (requestType === 'LaunchRequest' || requestType === 'SessionEndedRequest') {
+      // Only skip SessionEndedRequest - we need to validate tokens for LaunchRequest too
+      if (requestType === 'SessionEndedRequest') {
         return;
       }
 
@@ -46,19 +46,34 @@ export class AuthInterceptor implements RequestInterceptor {
         const userId = handlerInput.requestEnvelope.session?.user?.userId;
         
         if (userId) {
-          const user = await getUserByAmazonId(userId);
-          if (user) {
-            attributes.user = user;
-            if (user.notion_token) {
-              attributes.notionClient = createNotionClient(user.notion_token);
+          console.log('[AuthInterceptor] Attempting legacy lookup for userId:', userId);
+          try {
+            const user = await getUserByAmazonId(userId);
+            if (user) {
+              attributes.user = user;
+              if (user.notion_token) {
+                attributes.notionClient = createNotionClient(user.notion_token);
+              }
+              handlerInput.attributesManager.setSessionAttributes(attributes);
+              console.log('[AuthInterceptor] Legacy lookup successful');
+              return;
+            } else {
+              console.log('[AuthInterceptor] Legacy lookup found no user');
             }
-            handlerInput.attributesManager.setSessionAttributes(attributes);
-            console.log('[AuthInterceptor] Legacy lookup successful');
-            return;
+          } catch (lookupError: any) {
+            console.error('[AuthInterceptor] Legacy lookup error:', lookupError);
+            // Continue to let handler deal with it
           }
         }
 
         // No token and no user found - require account linking
+        // For LaunchRequest, we'll let the handler deal with it (don't throw)
+        // For other requests, throw to trigger error handler
+        if (requestType === 'LaunchRequest') {
+          console.log('[AuthInterceptor] LaunchRequest with no token/user - letting handler deal with it');
+          return; // Let LaunchRequestHandler handle the LinkAccount response
+        }
+        
         console.log('[AuthInterceptor] No token and no user found, requiring account linking');
         throw new Error('LINK_ACCOUNT_REQUIRED');
       }
@@ -127,17 +142,20 @@ export class AuthInterceptor implements RequestInterceptor {
         throw new Error('LICENSE_INACTIVE');
       }
 
-      // Get full user record from database
-      const dbModule = await import('../utils/database');
-      const supabase = dbModule.supabase;
-      const { data: user, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userInfo.user_id || userInfo.auth_user_id)
-        .single();
+      // Get full user record from database using auth_user_id (OAuth2 flow)
+      // Priority: Use auth_user_id from token, fallback to user_id
+      const authUserId = userInfo.auth_user_id || userInfo.user_id;
+      
+      if (!authUserId) {
+        console.error('[AuthInterceptor] No auth_user_id or user_id in token');
+        throw new Error('USER_NOT_FOUND');
+      }
 
-      if (userError || !user) {
-        console.error('[AuthInterceptor] User not found:', userError);
+      console.log('[AuthInterceptor] Looking up user by auth_user_id:', authUserId);
+      const user = await getUserByAuthUserId(authUserId);
+
+      if (!user) {
+        console.error('[AuthInterceptor] User not found with auth_user_id:', authUserId);
         throw new Error('USER_NOT_FOUND');
       }
 

@@ -123,6 +123,12 @@ export default function DashboardPage() {
   };
 
   const handleLinkAlexa = () => {
+    // Open Alexa skill page in new tab/window
+    // Users can click "Enable" or "Link Account" from there
+    const alexaSkillUrl = 'https://www.amazon.com/alexa-skills/dp/B0XXXXXXX'; // Replace with actual skill URL
+    window.open(alexaSkillUrl, '_blank');
+    
+    // Also show instructions modal or redirect to instructions page
     router.push('/alexa/link');
   };
 

@@ -155,7 +155,7 @@ function AlexaLinkContent() {
     );
   }
 
-  // Case B: Normal visitor (no Alexa params)
+  // Case B: Normal visitor (no Alexa params) - Flow A (Web-first)
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -163,31 +163,65 @@ function AlexaLinkContent() {
       <div className="flex items-center justify-center px-4 py-12">
         <Card className="w-full max-w-md">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Link Alexa Device</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Link Your Alexa Device</h1>
             <p className="text-gray-600">
-              To link your Alexa device, you must start the process from the Alexa App
+              Complete the steps below to connect your Alexa device
             </p>
           </div>
 
           <div className="space-y-4 mb-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 mb-2">How to Link:</h3>
-              <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
-                <li>Open the Alexa App on your phone</li>
-                <li>Go to Skills & Games</li>
-                <li>Find "Notion Data" skill</li>
-                <li>Tap "Enable" or "Link Account"</li>
-                <li>Follow the on-screen instructions</li>
+              <h3 className="font-semibold text-gray-900 mb-3">Step-by-Step Instructions:</h3>
+              <ol className="text-sm text-gray-700 space-y-3 list-decimal list-inside">
+                <li>
+                  <strong>Open the Alexa App</strong> on your phone or tablet
+                </li>
+                <li>
+                  <strong>Go to Skills & Games</strong> (tap the menu icon, then "Skills & Games")
+                </li>
+                <li>
+                  <strong>Search for "Notion Data"</strong> skill
+                </li>
+                <li>
+                  <strong>Tap "Enable"</strong> or <strong>"Link Account"</strong>
+                </li>
+                <li>
+                  <strong>Sign in</strong> if prompted (you're already set up!)
+                </li>
+                <li>
+                  <strong>Complete the linking</strong> - it should be instant since you're already prepared
+                </li>
               </ol>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-800">
+                <strong>✓ You're all set!</strong> Your Notion account is connected and your license is active. 
+                The linking process will be quick and seamless.
+              </p>
             </div>
           </div>
 
-          <Button
-            onClick={() => router.push('/dashboard')}
-            className="w-full"
-          >
-            Back to Dashboard
-          </Button>
+          <div className="space-y-3">
+            <Button
+              onClick={() => {
+                // Try to open Alexa app or skill page
+                // On mobile, this might open the app; on desktop, opens web page
+                const alexaSkillUrl = 'https://alexa.amazon.com/spa/index.html#skills/dp/B0XXXXXXX'; // Replace with actual skill ID
+                window.open(alexaSkillUrl, '_blank');
+              }}
+              className="w-full"
+            >
+              Open Alexa App
+            </Button>
+            <Button
+              onClick={() => router.push('/dashboard')}
+              variant="outline"
+              className="w-full"
+            >
+              Back to Dashboard
+            </Button>
+          </div>
         </Card>
       </div>
     </div>

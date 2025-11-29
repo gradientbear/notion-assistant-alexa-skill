@@ -10,71 +10,77 @@ import { buildSimpleResponse, buildResponse, buildLinkAccountResponse } from '..
 
 export class LaunchRequestHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
+    const canHandle = handlerInput.requestEnvelope.request.type === 'LaunchRequest';
+    console.log('[LaunchRequestHandler] canHandle:', canHandle);
+    return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
+    console.log('[LaunchRequestHandler] ========== HANDLER INVOKED ==========');
     try {
       const userId = handlerInput.requestEnvelope.session?.user?.userId;
+      const accessToken = (handlerInput.requestEnvelope.context?.System?.user as any)?.accessToken;
       
       console.log('[LaunchRequestHandler] userId:', userId);
+      console.log('[LaunchRequestHandler] has accessToken:', !!accessToken);
       
-      if (!userId) {
-        console.log('[LaunchRequestHandler] No userId found');
-        return buildSimpleResponse(
-          handlerInput,
-          'Welcome to Notion Data. Please enable the skill in your Alexa app to get started.'
-        );
-      }
+      // PRIORITY 1: Check if AuthInterceptor already validated token and attached user
+      // (AuthInterceptor runs before handlers, so user should be in session attributes if token is valid)
+      let attributes = handlerInput.attributesManager.getSessionAttributes();
+      let user = attributes.user;
+      
+      if (user) {
+        console.log('[LaunchRequestHandler] User found in session attributes (OAuth2 flow)');
+      } else if (accessToken) {
+        // Token exists but user not in session - AuthInterceptor may have failed
+        // This shouldn't happen, but if it does, require re-linking
+        console.log('[LaunchRequestHandler] Access token exists but user not in session - requiring account linking');
+        return buildLinkAccountResponse(handlerInput);
+      } else {
+        // PRIORITY 2: No token - check for legacy user lookup (backward compatibility)
+        console.log('[LaunchRequestHandler] No access token - trying legacy lookup');
+        
+        if (!userId) {
+          console.log('[LaunchRequestHandler] No userId found');
+          return buildLinkAccountResponse(handlerInput);
+        }
 
-      // Check if user exists - with timeout to prevent hanging
-      let user = null;
-      try {
-        console.log('[LaunchRequestHandler] Starting user lookup...');
-        
-        // Use Promise.race with proper timeout handling
-        const userLookupPromise = getUserByAmazonId(userId).catch((err) => {
-          console.error('[LaunchRequestHandler] getUserByAmazonId promise rejected:', err);
-          return null;
-        });
-        
-        const timeoutPromise = new Promise<null>((resolve) => 
-          setTimeout(() => {
-            console.warn('[LaunchRequestHandler] Database query timeout after 2 seconds');
-            resolve(null);
-          }, 2000)
-        );
-        
-        user = await Promise.race([userLookupPromise, timeoutPromise]);
-        console.log('[LaunchRequestHandler] User lookup completed, user found:', !!user);
-      } catch (dbError: any) {
-        console.error('[LaunchRequestHandler] Database error when looking up user:', {
-          message: dbError?.message,
-          stack: dbError?.stack,
-          name: dbError?.name
-        });
-        // Continue with user = null - will show setup message
-        user = null;
+        // Legacy fallback: Look up by amazon_account_id
+        try {
+          console.log('[LaunchRequestHandler] Starting legacy user lookup...');
+          user = await getUserByAmazonId(userId);
+          console.log('[LaunchRequestHandler] Legacy lookup completed, user found:', !!user);
+          
+          if (user) {
+            // Store user in session for backward compatibility
+            attributes.user = user;
+            if (user.notion_token) {
+              const { createNotionClient } = await import('../utils/notion');
+              attributes.notionClient = createNotionClient(user.notion_token);
+            }
+            handlerInput.attributesManager.setSessionAttributes(attributes);
+          }
+        } catch (dbError: any) {
+          console.error('[LaunchRequestHandler] Database error when looking up user:', {
+            message: dbError?.message,
+            stack: dbError?.stack,
+            name: dbError?.name
+          });
+          user = null;
+        }
       }
       
       console.log('[LaunchRequestHandler] User lookup result:', {
         found: !!user,
         hasNotionToken: !!user?.notion_token,
         notionTokenLength: user?.notion_token?.length || 0,
-        notionTokenPreview: user?.notion_token ? user.notion_token.substring(0, 10) + '...' : 'null/empty',
         email: user?.email
       });
       
+      // PRIORITY 3: No user found - require account linking
       if (!user) {
-        console.log('[LaunchRequestHandler] User not found in database');
-        return buildResponse(
-          handlerInput,
-          'Welcome to Notion Data! To get started, you need to link your account. ' +
-          'Open the Alexa app on your phone, go to Skills, find Notion Data, and click Link Account. ' +
-          'You\'ll need to sign in to your web account first. ' +
-          'Would you like help setting up your account?',
-          'Would you like help setting up your account?'
-        );
+        console.log('[LaunchRequestHandler] User not found - requiring account linking');
+        return buildLinkAccountResponse(handlerInput);
       }
 
       // License validation disabled for MVP - focus on CRUD operations only
@@ -82,20 +88,29 @@ export class LaunchRequestHandler implements RequestHandler {
       // Check if Notion is connected
       if (!user.notion_token) {
         console.log('[LaunchRequestHandler] No notion_token found - returning link account response');
-        return buildResponse(
-          handlerInput,
-          'To use Notion Data, you need to connect your Notion account. ' +
-          'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
-          'Once connected, I can help you manage your tasks in Notion. ' +
-          'Would you like help connecting your account?',
-          'Would you like help connecting your account?'
-        );
+        try {
+          const response = buildResponse(
+            handlerInput,
+            'To use Notion Data, you need to connect your Notion account. ' +
+            'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+            'Once connected, I can help you manage your tasks in Notion. ' +
+            'Would you like help connecting your account?',
+            'Would you like help connecting your account?'
+          );
+          console.log('[LaunchRequestHandler] Returning Notion connection required response');
+          return response;
+        } catch (buildError: any) {
+          console.error('[LaunchRequestHandler] Error building Notion response:', buildError);
+          return handlerInput.responseBuilder
+            .speak('Please connect your Notion account in the Alexa app.')
+            .withShouldEndSession(true)
+            .getResponse();
+        }
       }
       
       console.log('[LaunchRequestHandler] User has notion_token - proceeding with welcome message');
 
-      // Store user in session
-      const attributes = handlerInput.attributesManager.getSessionAttributes();
+      // Store user in session (attributes already declared above)
       attributes.user = user;
       handlerInput.attributesManager.setSessionAttributes(attributes);
 

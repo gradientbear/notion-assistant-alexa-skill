@@ -107,6 +107,9 @@ const lambdaHandler = skillBuilder
 
 // Wrap the handler to catch auth errors
 export const handler = async (event: any, context: any, callback: any) => {
+  // Ensure Lambda waits for all async operations to complete
+  context.callbackWaitsForEmptyEventLoop = true;
+  
   try {
     console.log('='.repeat(80));
     console.log('[LAMBDA HANDLER] Lambda function entry point');
@@ -116,9 +119,16 @@ export const handler = async (event: any, context: any, callback: any) => {
     
     // Call the actual skill handler
     const skillHandler = lambdaHandler.lambda();
-    const result = await skillHandler(event, context, callback);
+    const result: any = await skillHandler(event, context, callback);
     
-    console.log('[LAMBDA HANDLER] Handler completed');
+    console.log('[LAMBDA HANDLER] Handler completed, result type:', typeof result);
+    
+    // The skill handler should always return a response
+    // If it doesn't, the SDK will handle it, but we log for debugging
+    if (result != null && typeof result === 'object' && 'response' in result) {
+      console.log('[LAMBDA HANDLER] Result has response property');
+    }
+    
     return result;
   } catch (error: any) {
     console.error('[LAMBDA HANDLER] Fatal error at entry point:', {
@@ -132,6 +142,16 @@ export const handler = async (event: any, context: any, callback: any) => {
       return error.response;
     }
     
-    throw error;
+    // Return error response instead of throwing
+    return {
+      version: '1.0',
+      response: {
+        outputSpeech: {
+          type: 'PlainText',
+          text: 'Welcome to Notion Data. I encountered an error. Please try again.'
+        },
+        shouldEndSession: true
+      }
+    };
   }
 };

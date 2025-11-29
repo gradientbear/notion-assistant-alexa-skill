@@ -22,6 +22,65 @@ if (!supabaseUrl || !supabaseKey) {
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
 console.log('[Database] Supabase client created successfully');
 
+/**
+ * Get user by Supabase Auth user ID (OAuth2 flow)
+ * This is the primary method for OAuth2 users
+ */
+export async function getUserByAuthUserId(authUserId: string): Promise<User | null> {
+  console.log('[getUserByAuthUserId] Looking up user with auth_user_id:', authUserId);
+  
+  try {
+    const queryPromise = supabase
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
+      setTimeout(() => {
+        console.warn('[getUserByAuthUserId] Query timeout after 1.5 seconds');
+        resolve({ data: null, error: { code: 'TIMEOUT' } });
+      }, 1500);
+    });
+
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    const { data, error } = result as any;
+
+    if (error) {
+      if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
+        console.error('[getUserByAuthUserId] Supabase error:', error);
+      } else if (error.code === 'PGRST116') {
+        console.log('[getUserByAuthUserId] No user found (expected for new users)');
+      }
+      return null;
+    }
+
+    if (!data) {
+      console.log('[getUserByAuthUserId] No user found with auth_user_id:', authUserId);
+      return null;
+    }
+
+    console.log('[getUserByAuthUserId] User found:', {
+      id: data.id,
+      email: data.email,
+      hasNotionToken: !!data.notion_token,
+      notionTokenLength: data.notion_token?.length || 0
+    });
+
+    return data as User;
+  } catch (err: any) {
+    console.error('[getUserByAuthUserId] Unexpected error:', {
+      message: err?.message,
+      stack: err?.stack
+    });
+    return null;
+  }
+}
+
+/**
+ * Get user by Amazon account ID (Legacy fallback)
+ * Only used for backward compatibility with old users who haven't migrated to OAuth2
+ */
 export async function getUserByAmazonId(amazonAccountId: string): Promise<User | null> {
   console.log('[getUserByAmazonId] Looking up user with amazon_account_id:', amazonAccountId);
   
