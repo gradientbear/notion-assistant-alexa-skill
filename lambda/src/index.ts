@@ -119,17 +119,52 @@ export const handler = async (event: any, context: any, callback: any) => {
     
     // Call the actual skill handler
     const skillHandler = lambdaHandler.lambda();
-    const result: any = await skillHandler(event, context, callback);
+    console.log('[LAMBDA HANDLER] Calling skill handler...');
     
-    console.log('[LAMBDA HANDLER] Handler completed, result type:', typeof result);
-    
-    // The skill handler should always return a response
-    // If it doesn't, the SDK will handle it, but we log for debugging
-    if (result != null && typeof result === 'object' && 'response' in result) {
-      console.log('[LAMBDA HANDLER] Result has response property');
+    try {
+      const result: any = await skillHandler(event, context, callback);
+      
+      console.log('[LAMBDA HANDLER] Handler completed, result type:', typeof result);
+      console.log('[LAMBDA HANDLER] Result:', result ? JSON.stringify(result).substring(0, 200) : 'null/undefined');
+      
+      // If result is undefined, return a fallback response
+      if (!result) {
+        console.error('[LAMBDA HANDLER] WARNING: Handler returned null/undefined!');
+        return {
+          version: '1.0',
+          response: {
+            outputSpeech: {
+              type: 'PlainText',
+              text: 'Welcome to Notion Data. Please link your account in the Alexa app to continue.'
+            },
+            card: {
+              type: 'LinkAccount'
+            },
+            shouldEndSession: true
+          }
+        };
+      }
+      
+      return result;
+    } catch (skillError: any) {
+      console.error('[LAMBDA HANDLER] Skill handler error:', {
+        message: skillError?.message,
+        stack: skillError?.stack,
+        name: skillError?.name
+      });
+      
+      // Return fallback response on error
+      return {
+        version: '1.0',
+        response: {
+          outputSpeech: {
+            type: 'PlainText',
+            text: 'Welcome to Notion Data. I encountered an error. Please try again.'
+          },
+          shouldEndSession: true
+        }
+      };
     }
-    
-    return result;
   } catch (error: any) {
     console.error('[LAMBDA HANDLER] Fatal error at entry point:', {
       message: error?.message,

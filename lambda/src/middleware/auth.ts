@@ -45,6 +45,14 @@ export class AuthInterceptor implements RequestInterceptor {
         console.log('[AuthInterceptor] No access token, falling back to legacy lookup');
         const userId = handlerInput.requestEnvelope.session?.user?.userId;
         
+        // For LaunchRequest, skip the async lookup here - let LaunchRequestHandler do it
+        // This prevents the handler from completing before the async operation finishes
+        if (requestType === 'LaunchRequest') {
+          console.log('[AuthInterceptor] LaunchRequest with no token - letting handler deal with it');
+          return; // Let LaunchRequestHandler handle the lookup and LinkAccount response
+        }
+        
+        // For other request types, do the legacy lookup
         if (userId) {
           console.log('[AuthInterceptor] Attempting legacy lookup for userId:', userId);
           try {
@@ -62,18 +70,11 @@ export class AuthInterceptor implements RequestInterceptor {
             }
           } catch (lookupError: any) {
             console.error('[AuthInterceptor] Legacy lookup error:', lookupError);
-            // Continue to let handler deal with it
+            // Continue to throw error
           }
         }
 
         // No token and no user found - require account linking
-        // For LaunchRequest, we'll let the handler deal with it (don't throw)
-        // For other requests, throw to trigger error handler
-        if (requestType === 'LaunchRequest') {
-          console.log('[AuthInterceptor] LaunchRequest with no token/user - letting handler deal with it');
-          return; // Let LaunchRequestHandler handle the LinkAccount response
-        }
-        
         console.log('[AuthInterceptor] No token and no user found, requiring account linking');
         throw new Error('LINK_ACCOUNT_REQUIRED');
       }
@@ -177,13 +178,21 @@ export class AuthInterceptor implements RequestInterceptor {
       console.log('[AuthInterceptor] Token validated successfully for user:', userInfo.email);
     } catch (error: any) {
       console.error('[AuthInterceptor] Error:', error);
+      console.error('[AuthInterceptor] Error stack:', error?.stack);
 
       // Handle specific error types by storing error in attributes
       // The error handler will catch these
       attributes.authError = error.message;
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
-      // Re-throw to be caught by error handler
+      // For LaunchRequest, don't throw - let the handler deal with it
+      const requestType = handlerInput.requestEnvelope.request.type;
+      if (requestType === 'LaunchRequest') {
+        console.log('[AuthInterceptor] LaunchRequest - not throwing error, letting handler deal with it');
+        return; // Don't throw, let LaunchRequestHandler handle it
+      }
+
+      // Re-throw to be caught by error handler (for non-LaunchRequest)
       if (error.message === 'LINK_ACCOUNT_REQUIRED' || 
           error.message === 'TOKEN_INVALID' || 
           error.message === 'USER_NOT_FOUND') {

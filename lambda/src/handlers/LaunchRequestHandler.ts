@@ -48,7 +48,9 @@ export class LaunchRequestHandler implements RequestHandler {
         // Legacy fallback: Look up by amazon_account_id
         try {
           console.log('[LaunchRequestHandler] Starting legacy user lookup...');
-          user = await getUserByAmazonId(userId);
+          const lookupPromise = getUserByAmazonId(userId);
+          console.log('[LaunchRequestHandler] Awaiting getUserByAmazonId...');
+          user = await lookupPromise;
           console.log('[LaunchRequestHandler] Legacy lookup completed, user found:', !!user);
           
           if (user) {
@@ -59,6 +61,9 @@ export class LaunchRequestHandler implements RequestHandler {
               attributes.notionClient = createNotionClient(user.notion_token);
             }
             handlerInput.attributesManager.setSessionAttributes(attributes);
+            console.log('[LaunchRequestHandler] User stored in session attributes');
+          } else {
+            console.log('[LaunchRequestHandler] No user found from legacy lookup');
           }
         } catch (dbError: any) {
           console.error('[LaunchRequestHandler] Database error when looking up user:', {
@@ -67,6 +72,7 @@ export class LaunchRequestHandler implements RequestHandler {
             name: dbError?.name
           });
           user = null;
+          console.log('[LaunchRequestHandler] Set user to null after error');
         }
       }
       
@@ -80,7 +86,13 @@ export class LaunchRequestHandler implements RequestHandler {
       // PRIORITY 3: No user found - require account linking
       if (!user) {
         console.log('[LaunchRequestHandler] User not found - requiring account linking');
-        return buildLinkAccountResponse(handlerInput);
+        const linkResponse = buildLinkAccountResponse(handlerInput);
+        console.log('[LaunchRequestHandler] LinkAccount response built:', {
+          hasResponse: !!linkResponse,
+          type: typeof linkResponse
+        });
+        console.log('[LaunchRequestHandler] Returning LinkAccount response');
+        return linkResponse;
       }
 
       // License validation disabled for MVP - focus on CRUD operations only
