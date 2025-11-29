@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
   }
 
   // Redirect to onboarding
-  return NextResponse.redirect(new URL('/onboarding', request.url))
+      return NextResponse.redirect(new URL('/dashboard', request.url))
 }
 

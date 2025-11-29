@@ -390,8 +390,8 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Regular web flow - redirect to onboarding with success message
-    const redirectUrl = new URL('/onboarding', request.url);
+    // Regular web flow - redirect to dashboard with success message
+    const redirectUrl = new URL('/dashboard', request.url);
     if (setupResult.success) {
       redirectUrl.searchParams.set('notion_connected', 'true');
     }

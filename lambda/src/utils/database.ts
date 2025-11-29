@@ -25,35 +25,54 @@ console.log('[Database] Supabase client created successfully');
 export async function getUserByAmazonId(amazonAccountId: string): Promise<User | null> {
   console.log('[getUserByAmazonId] Looking up user with amazon_account_id:', amazonAccountId);
   
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('amazon_account_id', amazonAccountId)
-    .maybeSingle(); // Use maybeSingle() to handle "no rows found" gracefully
+  try {
+    // Add timeout wrapper to prevent hanging
+    const queryPromise = supabase
+      .from('users')
+      .select('*')
+      .eq('amazon_account_id', amazonAccountId)
+      .maybeSingle(); // Use maybeSingle() to handle "no rows found" gracefully
 
-  if (error) {
-    // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
-    if (error.code !== 'PGRST116') {
-      console.error('[getUserByAmazonId] Supabase error:', error);
-    } else {
-      console.log('[getUserByAmazonId] No user found (expected for new users)');
+    const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
+      setTimeout(() => {
+        console.warn('[getUserByAmazonId] Query timeout after 1.5 seconds');
+        resolve({ data: null, error: { code: 'TIMEOUT' } });
+      }, 1500);
+    });
+
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    const { data, error } = result as any;
+
+    if (error) {
+      // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
+      if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
+        console.error('[getUserByAmazonId] Supabase error:', error);
+      } else if (error.code === 'PGRST116') {
+        console.log('[getUserByAmazonId] No user found (expected for new users)');
+      }
+      return null;
     }
+
+    if (!data) {
+      console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
+      return null;
+    }
+
+    console.log('[getUserByAmazonId] User found:', {
+      id: data.id,
+      email: data.email,
+      hasNotionToken: !!data.notion_token,
+      notionTokenLength: data.notion_token?.length || 0
+    });
+
+    return data as User;
+  } catch (err: any) {
+    console.error('[getUserByAmazonId] Unexpected error:', {
+      message: err?.message,
+      stack: err?.stack
+    });
     return null;
   }
-
-  if (!data) {
-    console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
-    return null;
-  }
-
-  console.log('[getUserByAmazonId] User found:', {
-    id: data.id,
-    email: data.email,
-    hasNotionToken: !!data.notion_token,
-    notionTokenLength: data.notion_token?.length || 0
-  });
-
-  return data as User;
 }
 
 export async function createUser(

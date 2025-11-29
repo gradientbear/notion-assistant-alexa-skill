@@ -31,14 +31,22 @@ export class LaunchRequestHandler implements RequestHandler {
       let user = null;
       try {
         console.log('[LaunchRequestHandler] Starting user lookup...');
-        // Add timeout to prevent hanging
-        const userLookupPromise = getUserByAmazonId(userId);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Database query timeout')), 3000)
+        
+        // Use Promise.race with proper timeout handling
+        const userLookupPromise = getUserByAmazonId(userId).catch((err) => {
+          console.error('[LaunchRequestHandler] getUserByAmazonId promise rejected:', err);
+          return null;
+        });
+        
+        const timeoutPromise = new Promise<null>((resolve) => 
+          setTimeout(() => {
+            console.warn('[LaunchRequestHandler] Database query timeout after 2 seconds');
+            resolve(null);
+          }, 2000)
         );
         
-        user = await Promise.race([userLookupPromise, timeoutPromise]) as any;
-        console.log('[LaunchRequestHandler] User lookup completed');
+        user = await Promise.race([userLookupPromise, timeoutPromise]);
+        console.log('[LaunchRequestHandler] User lookup completed, user found:', !!user);
       } catch (dbError: any) {
         console.error('[LaunchRequestHandler] Database error when looking up user:', {
           message: dbError?.message,
@@ -91,13 +99,16 @@ export class LaunchRequestHandler implements RequestHandler {
       attributes.user = user;
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
-      return buildResponse(
+      const response = buildResponse(
         handlerInput,
         'Welcome to Notion Data! I can help you manage your tasks. ' +
         'You can add tasks, list your tasks, mark them complete, update their status, or delete them. ' +
         'You can also check your connection status. What would you like to do?',
         'What would you like to do?'
       );
+      
+      console.log('[LaunchRequestHandler] Returning welcome response');
+      return response;
     } catch (error: any) {
       console.error('[LaunchRequestHandler] Unexpected error:', {
         message: error?.message,
@@ -106,12 +117,23 @@ export class LaunchRequestHandler implements RequestHandler {
       });
       
       // ALWAYS return a response, even on error
-      return buildResponse(
-        handlerInput,
-        'Welcome to Notion Data! I encountered an issue connecting to your account. ' +
-        'Please try again in a moment, or open the Alexa app to check your account settings.',
-        'What would you like to do?'
-      );
+      try {
+        const errorResponse = buildResponse(
+          handlerInput,
+          'Welcome to Notion Data! I encountered an issue connecting to your account. ' +
+          'Please try again in a moment, or open the Alexa app to check your account settings.',
+          'What would you like to do?'
+        );
+        console.log('[LaunchRequestHandler] Returning error response');
+        return errorResponse;
+      } catch (responseError: any) {
+        console.error('[LaunchRequestHandler] Failed to build error response:', responseError);
+        // Last resort - return a simple response
+        return handlerInput.responseBuilder
+          .speak('Welcome to Notion Data. Please try again later.')
+          .withShouldEndSession(true)
+          .getResponse();
+      }
     }
   }
 }

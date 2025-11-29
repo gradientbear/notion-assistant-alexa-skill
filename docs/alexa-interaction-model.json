@@ -262,7 +262,10 @@
             "remind me {task}",
             "add {task} to shopping",
             "add {task} to fitness",
-            "add {task} to personal"
+            "add {task} to personal",
+            "please add {task}",
+            "create {task}",
+            "add a new task {task}"
           ],
           "slots": [
             {
@@ -296,7 +299,23 @@
             "alexa mark {task} as done",
             "alexa mark {task} as complete",
             "alexa complete {task}",
-            "mark finish {task} as done"
+            "finish {task}",
+            "i finished {task}",
+            "i'm done with {task}",
+            "please mark {task} as done",
+            "could you complete {task}",
+            "mark {task} as finished",
+            "finish the task {task}",
+            "mark {task} as all done",
+            "mark {task} as fully complete",
+            "i completed {task}",
+            "set {task} status to done",
+            "set {task} as done now",
+            "complete task {task}",
+            "mark {task} as fully done",
+            "mark prepare presentation as done",
+            "mark buy fruits as done",
+            "mark finish quarterly report as done"
           ],
           "slots": [
             {
@@ -354,7 +373,15 @@
             "reset {task} to to do",
             "reset {task} to todo",
             "mark {task} as to do",
-            "mark {task} as todo"
+            "mark {task} as todo",
+            "finish {task}",
+            "complete {task}",
+            "start working on {task}",
+            "begin working on {task}",
+            "please set {task} to done",
+            "please set {task} to in progress",
+            "set {task} status to done",
+            "set {task} status to in progress"
           ],
           "slots": [
             {

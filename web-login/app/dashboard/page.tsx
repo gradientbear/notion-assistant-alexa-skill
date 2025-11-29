@@ -1,153 +1,232 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { FaCheckCircle, FaTimesCircle } from 'react-icons/fa'
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { Header } from '@/app/components/Header';
+import { Step } from '@/app/components/Step';
+import { Button } from '@/app/components/Button';
+import { Card } from '@/app/components/Card';
 
 interface User {
-  email: string
-  notion_token: string | null
-  notion_setup_complete: boolean
-  amazon_account_id: string | null
-  license_key: string | null
-  onboarding_complete: boolean
+  id: string;
+  email: string;
+  notion_setup_complete: boolean;
+  license_key: string | null;
+  amazon_account_id: string | null;
+}
+
+interface License {
+  status: string;
 }
 
 export default function DashboardPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<User | null>(null)
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [licenseActive, setLicenseActive] = useState(false);
+  const [checkingLicense, setCheckingLicense] = useState(false);
 
   useEffect(() => {
-    checkUser()
-  }, [])
+    checkAuth();
+  }, []);
 
-  const checkUser = async () => {
+  useEffect(() => {
+    // Check if coming back from Notion OAuth
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('notion_connected') === 'true' && user) {
+      // Refresh user data to show updated status
+      fetchUserData();
+      // Remove the query parameter
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, [user]);
+
+  const checkAuth = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      router.push('/auth/login');
+      return;
+    }
+    await fetchUserData();
+  };
+
+  const fetchUserData = async () => {
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser()
+      setLoading(true);
       
+      // Get auth user
+      const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) {
-        router.push('/?mode=signin')
-        return
+        router.push('/auth/login');
+        return;
       }
 
+      // Get user from database
       const response = await fetch('/api/users/me', {
         headers: {
           'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
-      })
+      });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch user')
+        throw new Error('Failed to fetch user data');
       }
 
-      const userData = await response.json()
-      setUser(userData)
+      const userData: User = await response.json();
+      setUser(userData);
 
-      // If onboarding not complete, redirect
-      if (!userData.onboarding_complete) {
-        router.push('/onboarding')
-        return
+      // Check license status if license_key exists
+      if (userData.license_key) {
+        await checkLicenseStatus(userData.license_key);
       }
-
-      setLoading(false)
     } catch (error) {
-      console.error('Error checking user:', error)
-      router.push('/?mode=signin')
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoading(false);
     }
-  }
+  };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/?mode=signin')
-  }
+  const checkLicenseStatus = async (licenseKey: string) => {
+    try {
+      setCheckingLicense(true);
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return;
+      }
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const client = createClient(supabaseUrl, supabaseAnonKey);
+      
+      const { data: license } = await client
+        .from('licenses')
+        .select('status')
+        .eq('license_key', licenseKey)
+        .single();
+
+      setLicenseActive(license?.status === 'active');
+    } catch (error) {
+      console.error('Error checking license:', error);
+    } finally {
+      setCheckingLicense(false);
+    }
+  };
+
+  const handleConnectNotion = () => {
+    router.push('/notion/connect');
+  };
+
+  const handleBuyLicense = () => {
+    router.push('/billing');
+  };
+
+  const handleLinkAlexa = () => {
+    router.push('/alexa/link');
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-gray-600">Loading...</div>
+      <div className="min-h-screen bg-gray-50">
+        <Header />
+        <div className="flex items-center justify-center h-64">
+          <div className="text-gray-600">Loading...</div>
+        </div>
       </div>
-    )
+    );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="bg-white rounded-2xl shadow-xl p-8 mb-6">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-              <p className="text-gray-600 mt-1">Welcome back, {user?.email}</p>
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
-            >
-              Sign Out
-            </button>
-          </div>
-
-          {/* Status Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="border-2 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                {user?.notion_setup_complete ? (
-                  <FaCheckCircle className="text-green-500" />
-                ) : (
-                  <FaTimesCircle className="text-red-500" />
-                )}
-                <h3 className="font-semibold text-gray-900">Notion</h3>
-              </div>
-              <p className="text-sm text-gray-600">
-                {user?.notion_setup_complete ? 'Connected' : 'Not Connected'}
-              </p>
-            </div>
-
-            <div className="border-2 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                {user?.amazon_account_id ? (
-                  <FaCheckCircle className="text-green-500" />
-                ) : (
-                  <FaTimesCircle className="text-red-500" />
-                )}
-                <h3 className="font-semibold text-gray-900">Amazon</h3>
-              </div>
-              <p className="text-sm text-gray-600">
-                {user?.amazon_account_id ? 'Linked' : 'Not Linked'}
-              </p>
-            </div>
-
-            <div className="border-2 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                {user?.license_key ? (
-                  <FaCheckCircle className="text-green-500" />
-                ) : (
-                  <FaTimesCircle className="text-red-500" />
-                )}
-                <h3 className="font-semibold text-gray-900">License</h3>
-              </div>
-              <p className="text-sm text-gray-600">
-                {user?.license_key ? 'Active' : 'Not Activated'}
-              </p>
-            </div>
-          </div>
-
-          {/* Ready Status */}
-          {user?.onboarding_complete && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <FaCheckCircle className="text-green-500 text-xl" />
-                <h3 className="font-semibold text-green-900">All Set!</h3>
-              </div>
-              <p className="text-sm text-green-700">
-                Your Notion Data Alexa skill is ready to use. Try saying: "Alexa, open Notion Data"
-              </p>
-            </div>
-          )}
+    <div className="min-h-screen bg-gray-50">
+      <Header />
+      
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Notion Data</h1>
+          <p className="text-gray-600">Complete the steps below to get started</p>
         </div>
-      </div>
-    </div>
-  )
-}
 
+        <Card className="p-8">
+          <div className="space-y-8">
+            {/* Step 1 - Account Created */}
+            <Step
+              number={1}
+              title="Account Created"
+              description="Your account has been successfully created"
+              status="complete"
+            />
+
+            {/* Step 2 - Connect Notion */}
+            <Step
+              number={2}
+              title="Connect Notion"
+              description="Link your Notion workspace to create and manage tasks"
+              status={user.notion_setup_complete ? 'complete' : 'current'}
+            >
+              {!user.notion_setup_complete && (
+                <Button onClick={handleConnectNotion}>
+                  Connect Notion
+                </Button>
+              )}
+            </Step>
+
+            {/* Step 3 - Buy License */}
+            <Step
+              number={3}
+              title="Buy License"
+              description="Purchase a lifetime license to activate your account"
+              status={
+                licenseActive
+                  ? 'complete'
+                  : user.license_key && !licenseActive
+                  ? 'current'
+                  : !user.license_key
+                  ? 'current'
+                  : 'pending'
+              }
+            >
+              {!licenseActive && (
+                <Button onClick={handleBuyLicense}>
+                  Buy License
+                </Button>
+              )}
+            </Step>
+
+            {/* Step 4 - Link Alexa */}
+            <Step
+              number={4}
+              title="Link Alexa"
+              description="Connect your Alexa device to start using voice commands"
+              status={
+                user.amazon_account_id
+                  ? 'complete'
+                  : user.notion_setup_complete && licenseActive
+                  ? 'current'
+                  : 'pending'
+              }
+            >
+              {user.notion_setup_complete && licenseActive && !user.amazon_account_id && (
+                <Button onClick={handleLinkAlexa}>
+                  Link Alexa
+                </Button>
+              )}
+              {user.amazon_account_id && (
+                <p className="text-sm text-green-600 font-medium">✓ Alexa account linked</p>
+              )}
+              {(!user.notion_setup_complete || !licenseActive) && (
+                <p className="text-sm text-gray-500">
+                  Complete previous steps to enable Alexa linking
+                </p>
+              )}
+            </Step>
+          </div>
+        </Card>
+      </main>
+    </div>
+  );
+}

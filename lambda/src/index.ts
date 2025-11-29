@@ -17,8 +17,12 @@ import { ErrorHandler } from './handlers/ErrorHandler';
 // import { ScheduleHandler } from './handlers/ScheduleHandler';
 // import { ShoppingListHandler } from './handlers/ShoppingListHandler';
 import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInterceptor';
+import { AuthInterceptor, handleAuthError } from './middleware/auth';
 
-export const handler = SkillBuilders.custom()
+const skillBuilder = SkillBuilders.custom();
+
+// Create the skill handler with all interceptors
+const lambdaHandler = skillBuilder
   .addRequestHandlers(
     new LaunchRequestHandler(),
     // MVP: Core Task CRUD operations only
@@ -45,8 +49,11 @@ export const handler = SkillBuilders.custom()
         try {
           const request = handlerInput.requestEnvelope.request;
           const userId = handlerInput.requestEnvelope.session?.user?.userId;
+          const accessToken = (handlerInput.requestEnvelope.context?.System?.user as any)?.accessToken;
+          
           console.log('[Request Interceptor] Request type:', request.type);
           console.log('[Request Interceptor] User ID:', userId);
+          console.log('[Request Interceptor] Has access token:', !!accessToken);
           console.log('[Request Interceptor] Request ID:', handlerInput.requestEnvelope.request.requestId);
           console.log('[Request Interceptor] Session ID:', handlerInput.requestEnvelope.session?.sessionId);
           
@@ -69,11 +76,62 @@ export const handler = SkillBuilders.custom()
         }
       }
     },
+    // Auth interceptor - validates JWT tokens and attaches user info
+    new AuthInterceptor(),
     // License validation disabled for MVP - focus on CRUD operations only
     // new LicenseValidationInterceptor(), // Disabled for MVP
     new NotionConnectionInterceptor()
   )
-  .addErrorHandlers(new ErrorHandler())
-  .withCustomUserAgent('notion-assistant-skill/v1.0')
-  .lambda();
+  .addErrorHandlers(
+    // Custom error handler that checks for auth errors
+    {
+      canHandle() {
+        return true;
+      },
+      async handle(handlerInput: any) {
+        const error = (handlerInput as any).error;
+        
+        // Check if it's an auth error
+        const authResponse = handleAuthError(error, handlerInput);
+        if (authResponse) {
+          return authResponse;
+        }
+        
+        // Fall through to default error handler
+        return new ErrorHandler().handle(handlerInput);
+      }
+    },
+    new ErrorHandler()
+  )
+  .withCustomUserAgent('notion-assistant-skill/v1.0');
 
+// Wrap the handler to catch auth errors
+export const handler = async (event: any, context: any, callback: any) => {
+  try {
+    console.log('='.repeat(80));
+    console.log('[LAMBDA HANDLER] Lambda function entry point');
+    console.log('[LAMBDA HANDLER] Event received:', JSON.stringify(event).substring(0, 500));
+    console.log('[LAMBDA HANDLER] Context:', JSON.stringify(context).substring(0, 500));
+    console.log('='.repeat(80));
+    
+    // Call the actual skill handler
+    const skillHandler = lambdaHandler.lambda();
+    const result = await skillHandler(event, context, callback);
+    
+    console.log('[LAMBDA HANDLER] Handler completed');
+    return result;
+  } catch (error: any) {
+    console.error('[LAMBDA HANDLER] Fatal error at entry point:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name
+    });
+    
+    // If it's an auth error, return the response
+    if (error?.response) {
+      return error.response;
+    }
+    
+    throw error;
+  }
+};
