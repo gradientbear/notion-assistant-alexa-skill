@@ -4,7 +4,7 @@
 
 1. AWS CLI configured with your profile
 2. SAM CLI installed (`sam --version`)
-3. Node.js 20.x installed
+3. Node.js 22.x installed
 4. All dependencies installed (`npm install`)
 
 ## Build and Deploy Steps

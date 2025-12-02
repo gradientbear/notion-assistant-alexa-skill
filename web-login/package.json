@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/build.ps1",
     "start": "next start",
     "lint": "next lint",
     "deploy": "vercel --prod"
@@ -23,7 +24,7 @@
     "stripe": "^20.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "autoprefixer": "^10.4.0",

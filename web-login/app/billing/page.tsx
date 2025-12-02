@@ -19,7 +19,7 @@ export default function BillingPage() {
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      router.push('/auth/login');
+      router.push('/');
       return;
     }
   };
@@ -35,37 +35,24 @@ export default function BillingPage() {
         throw new Error('Not authenticated');
       }
 
-      // Get Stripe price ID from environment or use a default
-      // In production, this should come from your Stripe product configuration
-      const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || '';
-
-      if (!priceId) {
-        throw new Error('Stripe price ID not configured. Please contact support.');
-      }
-
-      // Create checkout session
-      const response = await fetch('/api/stripe/create-checkout-session', {
+      // Phase 1: Generate JWT token directly (skip Stripe payment)
+      const response = await fetch('/api/billing/generate-test-token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({
-          priceId,
-          successUrl: `${window.location.origin}/billing/success`,
-          cancelUrl: `${window.location.origin}/billing`,
-        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error_description || errorData.error || 'Failed to create checkout session');
+        throw new Error(errorData.error_description || errorData.error || 'Failed to generate token');
       }
 
-      const { url } = await response.json();
-
-      // Redirect to Stripe Checkout
-      window.location.href = url;
+      const result = await response.json();
+      
+      // Redirect to dashboard with success message
+      router.push('/dashboard?token_generated=true');
     } catch (err: any) {
       setError(err.message || 'An error occurred');
       setLoading(false);

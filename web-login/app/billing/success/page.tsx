@@ -17,7 +17,7 @@ export default function BillingSuccessPage() {
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      router.push('/auth/login');
+      router.push('/');
       return;
     }
   };

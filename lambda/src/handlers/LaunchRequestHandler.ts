@@ -48,10 +48,11 @@ export class LaunchRequestHandler implements RequestHandler {
         // Legacy fallback: Look up by amazon_account_id
         try {
           console.log('[LaunchRequestHandler] Starting legacy user lookup...');
-          const lookupPromise = getUserByAmazonId(userId);
-          console.log('[LaunchRequestHandler] Awaiting getUserByAmazonId...');
-          user = await lookupPromise;
-          console.log('[LaunchRequestHandler] Legacy lookup completed, user found:', !!user);
+          console.log('[LaunchRequestHandler] Calling getUserByAmazonId with userId:', userId);
+          const lookupStartTime = Date.now();
+          user = await getUserByAmazonId(userId);
+          const lookupElapsed = Date.now() - lookupStartTime;
+          console.log('[LaunchRequestHandler] Legacy lookup completed in', lookupElapsed, 'ms, user found:', !!user);
           
           if (user) {
             // Store user in session for backward compatibility

@@ -11,4 +11,4 @@ To fix:
 1. Go to Supabase Dashboard → Settings → API
 2. Copy the "Project URL" (not the dashboard URL)
 3. Update NEXT_PUBLIC_SUPABASE_URL in Vercel
-4. Redeploy your application`);function s(){let e=process.env.SUPABASE_SERVICE_KEY||"",t="https://ptasyynqqlvrbhqmtvhl.supabase.co";if(!e||!t)throw Error("Missing SUPABASE_SERVICE_KEY or NEXT_PUBLIC_SUPABASE_URL");return(0,o.eI)(t,e)}(0,o.eI)(a,n)}};var t=require("../../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),o=t.X(0,[942,786,851,415,284],()=>r(6507));module.exports=o})();
+4. Redeploy your application`);function s(){let e=process.env.SUPABASE_SERVICE_KEY||"",t="https://ptasyynqqlvrbhqmtvhl.supabase.co";if(!e||!t)throw Error("Missing SUPABASE_SERVICE_KEY or NEXT_PUBLIC_SUPABASE_URL");return(0,o.createClient)(t,e)}(0,o.createClient)(a,n)}};var t=require("../../../../webpack-runtime.js");t.C(e);var r=e=>t(t.s=e),o=t.X(0,[942,786,851,415,284],()=>r(6507));module.exports=o})();

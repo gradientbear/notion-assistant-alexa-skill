@@ -19,6 +19,14 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    // Log the full request for debugging
+    console.log('[OAuth Token] Full request:', {
+      url: request.url,
+      method: request.method,
+      contentType: request.headers.get('content-type'),
+      headers: Object.fromEntries(request.headers.entries()),
+    });
+    
     // Parse request body (form-encoded or JSON)
     let body: any;
     const contentType = request.headers.get('content-type');
@@ -26,23 +34,71 @@ export async function POST(request: NextRequest) {
     if (contentType?.includes('application/x-www-form-urlencoded')) {
       const formData = await request.formData();
       body = Object.fromEntries(formData.entries());
+      console.log('[OAuth Token] Parsed form data:', Object.keys(body));
     } else {
       body = await request.json();
+      console.log('[OAuth Token] Parsed JSON body:', Object.keys(body));
     }
 
     const grantType = body.grant_type;
-    const clientId = body.client_id;
-    const clientSecret = body.client_secret;
+    const clientId = body.client_id?.trim(); // Trim whitespace
+    const clientSecret = body.client_secret?.trim(); // Trim whitespace
 
     // Validate client credentials
-    if (clientId !== process.env.ALEXA_OAUTH_CLIENT_ID) {
+    const expectedClientId = process.env.ALEXA_OAUTH_CLIENT_ID?.trim(); // Trim whitespace
+    const expectedClientSecret = process.env.ALEXA_OAUTH_CLIENT_SECRET?.trim(); // Trim whitespace
+
+    // Log for debugging (don't log actual secrets in production)
+    console.log('[OAuth Token] Client validation:', {
+      clientIdReceived: clientId ? `${clientId.substring(0, 8)}...` : 'missing',
+      clientIdExpected: expectedClientId ? `${expectedClientId.substring(0, 8)}...` : 'missing',
+      clientSecretReceived: clientSecret ? '***' : 'missing',
+      clientSecretExpected: expectedClientSecret ? '***' : 'missing',
+      clientIdMatch: clientId === expectedClientId,
+      hasClientIdEnv: !!expectedClientId,
+      hasClientSecretEnv: !!expectedClientSecret
+    });
+
+    if (!clientId) {
+      return NextResponse.json(
+        { error: 'invalid_client', error_description: 'Missing client_id parameter' },
+        { status: 401 }
+      );
+    }
+
+    if (!expectedClientId) {
+      console.error('[OAuth Token] ALEXA_OAUTH_CLIENT_ID environment variable is not set');
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
+    if (clientId !== expectedClientId) {
+      console.error('[OAuth Token] Client ID mismatch');
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client_id' },
         { status: 401 }
       );
     }
 
-    if (clientSecret !== process.env.ALEXA_OAUTH_CLIENT_SECRET) {
+    if (!clientSecret) {
+      return NextResponse.json(
+        { error: 'invalid_client', error_description: 'Missing client_secret parameter' },
+        { status: 401 }
+      );
+    }
+
+    if (!expectedClientSecret) {
+      console.error('[OAuth Token] ALEXA_OAUTH_CLIENT_SECRET environment variable is not set');
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+
+    if (clientSecret !== expectedClientSecret) {
+      console.error('[OAuth Token] Client secret mismatch');
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client_secret' },
         { status: 401 }

@@ -49,17 +49,27 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       const request = handlerInput.requestEnvelope.request as any;
-      const taskSlot = request.intent.slots?.task?.value;
+      const slots = request.intent.slots || {};
+      
+      // Get slot values - use new slot names
+      const taskNameSlot = slots.taskName?.value;
+      const categorySlot = slots.category?.value;
+      const prioritySlot = slots.priority?.value;
+      const dueDateSlot = slots.dueDate?.value;
+      const recurrenceSlot = slots.recurrence?.value;
 
       console.log('[AddTaskHandler] Handler invoked');
       console.log('[AddTaskHandler] Intent name:', request.intent.name);
-      console.log('[AddTaskHandler] Task slot value:', taskSlot);
-      console.log('[AddTaskHandler] Full request:', JSON.stringify({
-        intent: request.intent.name,
-        slots: request.intent.slots
-      }));
+      console.log('[AddTaskHandler] Slots:', {
+        taskName: taskNameSlot,
+        category: categorySlot,
+        priority: prioritySlot,
+        dueDate: dueDateSlot,
+        recurrence: recurrenceSlot
+      });
 
-      if (!taskSlot || taskSlot.trim().length === 0) {
+      // Task name is required
+      if (!taskNameSlot || taskNameSlot.trim().length === 0) {
         return buildResponse(
           handlerInput,
           'What task would you like to add?',
@@ -76,35 +86,59 @@ export class AddTaskHandler implements RequestHandler {
         );
       }
 
-      // Parse task properties from utterance
-      const parsed = parseTaskFromUtterance(taskSlot);
-      console.log('[AddTaskHandler] Parsed task:', JSON.stringify(parsed));
-      
-      // Additional validation
-      if (!parsed || !parsed.taskName) {
-        console.error('[AddTaskHandler] Parsing returned invalid result:', parsed);
-        return buildResponse(
-          handlerInput,
-          'I couldn\'t understand the task name. Please try again.',
-          'What task would you like to add?'
-        );
-      }
-      
-      if (!parsed.taskName || parsed.taskName.trim().length === 0) {
-        console.error('[AddTaskHandler] Empty task name after parsing. Original:', taskSlot);
-        return buildResponse(
-          handlerInput,
-          'I couldn\'t understand the task name. Please try again.',
-          'What task would you like to add?'
-        );
+      // Normalize slot values
+      const normalizePriority = (p: string | undefined): 'low' | 'normal' | 'high' | 'urgent' => {
+        if (!p) return 'normal';
+        const normalized = p.toLowerCase();
+        if (normalized === 'medium') return 'normal';
+        if (['low', 'normal', 'high', 'urgent'].includes(normalized)) {
+          return normalized as any;
+        }
+        return 'normal';
+      };
+
+      const normalizeCategory = (c: string | undefined): 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general' => {
+        if (!c) return 'personal';
+        const normalized = c.toLowerCase();
+        const valid = ['work', 'personal', 'shopping', 'fitness', 'health', 'notes', 'general'];
+        if (valid.includes(normalized)) return normalized as any;
+        return 'personal';
+      };
+
+      const normalizeRecurrence = (r: string | undefined): 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' => {
+        if (!r) return 'none';
+        const normalized = r.toLowerCase();
+        const valid = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
+        if (valid.includes(normalized)) return normalized as any;
+        return 'none';
+      };
+
+      // Parse due date from slot or utterance
+      let dueDate: string | undefined = undefined;
+      if (dueDateSlot) {
+        // Alexa provides dates in ISO format or relative dates
+        try {
+          const date = new Date(dueDateSlot);
+          if (!isNaN(date.getTime())) {
+            dueDate = date.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          console.warn('[AddTaskHandler] Could not parse due date:', dueDateSlot);
+        }
       }
 
-      // Add task with parsed properties
+      const taskName = taskNameSlot.trim();
+      const priority = normalizePriority(prioritySlot);
+      const category = normalizeCategory(categorySlot);
+      const recurrence = normalizeRecurrence(recurrenceSlot);
+
+      // Add task with slot values
       console.log('[AddTaskHandler] Adding task to Notion:', {
-        name: parsed.taskName,
-        priority: parsed.priority || 'Medium',
-        category: parsed.category || 'Personal',
-        dueDate: parsed.dueDate,
+        name: taskName,
+        priority,
+        category,
+        dueDate,
+        recurrence,
         databaseId: tasksDbId
       });
 
@@ -113,14 +147,15 @@ export class AddTaskHandler implements RequestHandler {
         pageId = await addTask(
           notionClient,
           tasksDbId,
-          parsed.taskName,
-          parsed.priority || 'Medium',
-          parsed.category || 'Personal',
-          parsed.dueDate
+          taskName,
+          priority,
+          category,
+          dueDate,
+          recurrence
         );
         console.log('[AddTaskHandler] Task added successfully to Notion:', {
           pageId,
-          taskName: parsed.taskName,
+          taskName,
           databaseId: tasksDbId
         });
       } catch (notionError: any) {
@@ -135,19 +170,21 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       // Build confirmation message
-      let confirmation = `Added: ${parsed.taskName}`;
+      let confirmation = `Added: ${taskName}`;
       
-      if (parsed.priority === 'High') {
-        confirmation = `Added high priority task: ${parsed.taskName}`;
-      } else if (parsed.priority === 'Low') {
-        confirmation = `Added low priority task: ${parsed.taskName}`;
+      if (priority === 'urgent') {
+        confirmation = `Added urgent task: ${taskName}`;
+      } else if (priority === 'high') {
+        confirmation = `Added high priority task: ${taskName}`;
+      } else if (priority === 'low') {
+        confirmation = `Added low priority task: ${taskName}`;
       }
 
-      if (parsed.dueDate) {
-        const dueDate = new Date(parsed.dueDate);
+      if (dueDate) {
+        const dueDateObj = new Date(dueDate);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const dueDateOnly = new Date(dueDate);
+        const dueDateOnly = new Date(dueDateObj);
         dueDateOnly.setHours(0, 0, 0, 0);
 
         if (dueDateOnly.getTime() === today.getTime()) {
@@ -155,12 +192,16 @@ export class AddTaskHandler implements RequestHandler {
         } else if (dueDateOnly.getTime() === today.getTime() + 86400000) {
           confirmation += ', due tomorrow';
         } else {
-          confirmation += `, due ${dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+          confirmation += `, due ${dueDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
         }
       }
 
-      if (parsed.category && parsed.category !== 'Personal') {
-        confirmation += ` to ${parsed.category.toLowerCase()}`;
+      if (category && category !== 'personal') {
+        confirmation += ` to ${category}`;
+      }
+
+      if (recurrence && recurrence !== 'none') {
+        confirmation += `, recurring ${recurrence}`;
       }
 
       confirmation += '.';
@@ -184,4 +225,5 @@ export class AddTaskHandler implements RequestHandler {
     }
   }
 }
+
 

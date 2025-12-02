@@ -19,7 +19,7 @@ export default function NotionConnectPage() {
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      router.push('/auth/login');
+      router.push('/');
       return;
     }
   };

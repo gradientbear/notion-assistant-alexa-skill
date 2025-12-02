@@ -191,7 +191,10 @@ export async function GET(request: NextRequest) {
       success: setupResult.success,
       privacyPageId: setupResult.privacyPageId,
       tasksDbId: setupResult.tasksDbId,
-      focusLogsDbId: setupResult.focusLogsDbId,
+      shoppingDbId: setupResult.shoppingDbId,
+      workoutsDbId: setupResult.workoutsDbId,
+      mealsDbId: setupResult.mealsDbId,
+      notesDbId: setupResult.notesDbId,
       energyLogsDbId: setupResult.energyLogsDbId
     });
 
@@ -219,7 +222,10 @@ export async function GET(request: NextRequest) {
             notion_setup_complete: setupResult.success,
             privacy_page_id: setupResult.privacyPageId,
             tasks_db_id: setupResult.tasksDbId,
-            focus_logs_db_id: setupResult.focusLogsDbId,
+            shopping_db_id: setupResult.shoppingDbId,
+            workouts_db_id: setupResult.workoutsDbId,
+            meals_db_id: setupResult.mealsDbId,
+            notes_db_id: setupResult.notesDbId,
             energy_logs_db_id: setupResult.energyLogsDbId,
             updated_at: new Date().toISOString(),
           })
@@ -244,7 +250,10 @@ export async function GET(request: NextRequest) {
             notion_setup_complete: setupResult.success,
             privacy_page_id: setupResult.privacyPageId,
             tasks_db_id: setupResult.tasksDbId,
-            focus_logs_db_id: setupResult.focusLogsDbId,
+            shopping_db_id: setupResult.shoppingDbId,
+            workouts_db_id: setupResult.workoutsDbId,
+            meals_db_id: setupResult.mealsDbId,
+            notes_db_id: setupResult.notesDbId,
             energy_logs_db_id: setupResult.energyLogsDbId,
           })
           .select();
@@ -305,7 +314,10 @@ export async function GET(request: NextRequest) {
             notion_setup_complete: setupResult.success,
             privacy_page_id: setupResult.privacyPageId,
             tasks_db_id: setupResult.tasksDbId,
-            focus_logs_db_id: setupResult.focusLogsDbId,
+            shopping_db_id: setupResult.shoppingDbId,
+            workouts_db_id: setupResult.workoutsDbId,
+            meals_db_id: setupResult.mealsDbId,
+            notes_db_id: setupResult.notesDbId,
             energy_logs_db_id: setupResult.energyLogsDbId,
             updated_at: new Date().toISOString(),
           })
@@ -342,7 +354,10 @@ export async function GET(request: NextRequest) {
               notion_setup_complete: setupResult.success,
               privacy_page_id: setupResult.privacyPageId,
               tasks_db_id: setupResult.tasksDbId,
-              focus_logs_db_id: setupResult.focusLogsDbId,
+              shopping_db_id: setupResult.shoppingDbId,
+              workouts_db_id: setupResult.workoutsDbId,
+              meals_db_id: setupResult.mealsDbId,
+              notes_db_id: setupResult.notesDbId,
               energy_logs_db_id: setupResult.energyLogsDbId,
               license_key: session.license_key || '',
               onboarding_complete: false,

@@ -44,7 +44,7 @@ A voice-first Alexa Skill integrated with Notion API for task management. This M
 
 ### Prerequisites
 
-- Node.js 20.x+
+- Node.js 22.x+
 - AWS Account with CLI configured
 - Supabase account
 - Notion account

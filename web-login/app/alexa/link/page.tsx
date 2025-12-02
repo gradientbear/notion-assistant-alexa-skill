@@ -60,6 +60,14 @@ function AlexaLinkContent() {
     }
   };
 
+  useEffect(() => {
+    // Redirect to sign-in if not authenticated and no Alexa params
+    if (!checkingAuth && !isAuthenticated && !hasAlexaParams) {
+      const currentUrl = window.location.href;
+      router.push(`/?tab=login&redirect=${encodeURIComponent(currentUrl)}`);
+    }
+  }, [checkingAuth, isAuthenticated, hasAlexaParams, router]);
+
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -98,13 +106,13 @@ function AlexaLinkContent() {
 
               <div className="space-y-4">
                 <Button
-                  onClick={() => router.push(`/auth/login?redirect=${encodeURIComponent(currentUrl)}`)}
+                  onClick={() => router.push(`/?tab=login&redirect=${encodeURIComponent(currentUrl)}`)}
                   className="w-full"
                 >
                   Sign In
                 </Button>
                 <Button
-                  onClick={() => router.push(`/auth/signup?redirect=${encodeURIComponent(currentUrl)}`)}
+                  onClick={() => router.push(`/?tab=signup&redirect=${encodeURIComponent(currentUrl)}`)}
                   variant="outline"
                   className="w-full"
                 >
@@ -156,6 +164,11 @@ function AlexaLinkContent() {
   }
 
   // Case B: Normal visitor (no Alexa params) - Flow A (Web-first)
+  // Safety check: redirect if not authenticated (shouldn't reach here due to useEffect, but just in case)
+  if (!isAuthenticated) {
+    return null; // useEffect will handle redirect
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -205,14 +218,13 @@ function AlexaLinkContent() {
           <div className="space-y-3">
             <Button
               onClick={() => {
-                // Try to open Alexa app or skill page
-                // On mobile, this might open the app; on desktop, opens web page
-                const alexaSkillUrl = 'https://alexa.amazon.com/spa/index.html#skills/dp/B0XXXXXXX'; // Replace with actual skill ID
-                window.open(alexaSkillUrl, '_blank');
+                // Open Alexa skills page - user can search for the skill
+                const alexaSkillsUrl = 'https://alexa.amazon.com/spa/index.html#skills';
+                window.open(alexaSkillsUrl, '_blank');
               }}
               className="w-full"
             >
-              Open Alexa App
+              Open Alexa Skills
             </Button>
             <Button
               onClick={() => router.push('/dashboard')}

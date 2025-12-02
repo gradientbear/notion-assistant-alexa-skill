@@ -1,114 +1,6 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
-import { findDatabaseByName, getAllTasks, markTaskComplete } from '../utils/notion';
-import { Client } from '@notionhq/client';
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
-
-async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  retries: number = MAX_RETRIES
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (error: any) {
-    if (retries > 0 && (error.status === 429 || error.status >= 500)) {
-      await sleep(RETRY_DELAY);
-      return withRetry(fn, retries - 1);
-    }
-    throw error;
-  }
-}
-
-async function updateTaskStatus(
-  client: Client,
-  pageId: string,
-  status: 'To Do' | 'In Progress' | 'Done'
-): Promise<void> {
-  console.log('[updateTaskStatus] Starting update:', { pageId, targetStatus: status });
-  
-  // First, check if the task is deleted and restore it if needed
-  try {
-    const page = await client.pages.retrieve({ page_id: pageId });
-    const props = (page as any).properties;
-    const isDeleted = props.Deleted?.checkbox || false;
-    const currentStatus = props.Status?.select?.name || 'Unknown';
-    
-    console.log('[updateTaskStatus] Current task state:', {
-      isDeleted,
-      currentStatus,
-      targetStatus: status
-    });
-    
-    if (isDeleted) {
-      // Restore the task (set Deleted to false) and update status
-      console.log('[updateTaskStatus] Restoring deleted task and updating status');
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Deleted: {
-              checkbox: false,
-            },
-            Status: {
-              select: { name: status },
-            },
-          },
-        })
-      );
-      console.log('[updateTaskStatus] Task restored and status updated');
-      return;
-    } else {
-      // Just update the status
-      console.log('[updateTaskStatus] Updating status only');
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Status: {
-              select: { name: status },
-            },
-          },
-        })
-      );
-      console.log('[updateTaskStatus] Status update call completed');
-      return;
-    }
-  } catch (error: any) {
-    // If we can't retrieve the page, try to update anyway (fallback)
-    console.warn('[updateTaskStatus] Could not check deleted status, updating anyway:', {
-      message: error.message,
-      status: error.status,
-      code: error.code
-    });
-    
-    try {
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Status: {
-              select: { name: status },
-            },
-          },
-        })
-      );
-      console.log('[updateTaskStatus] Fallback status update completed');
-    } catch (fallbackError: any) {
-      console.error('[updateTaskStatus] Fallback update also failed:', {
-        message: fallbackError.message,
-        status: fallbackError.status,
-        code: fallbackError.code
-      });
-      throw fallbackError; // Re-throw so the caller knows it failed
-    }
-  }
-}
+import { findDatabaseByName, getAllTasks, updateTaskStatus, markTaskComplete } from '../utils/notion';
 
 export class UpdateTaskStatusHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -157,21 +49,23 @@ export class UpdateTaskStatusHandler implements RequestHandler {
     try {
       const request = handlerInput.requestEnvelope.request as any;
       const intentName = request.intent?.name;
-      const taskSlot = request.intent.slots?.task?.value;
-      const statusSlot = request.intent.slots?.status?.value;
+      const slots = request.intent.slots || {};
+      const taskNameSlot = slots.taskName?.value;
+      const statusSlot = slots.status?.value;
 
       console.log('[UpdateTaskStatusHandler] Intent name:', intentName);
-      console.log('[UpdateTaskStatusHandler] Task slot:', taskSlot);
+      console.log('[UpdateTaskStatusHandler] Task slot:', taskNameSlot);
       console.log('[UpdateTaskStatusHandler] Status slot:', statusSlot);
       console.log('[UpdateTaskStatusHandler] Full request envelope:', JSON.stringify(handlerInput.requestEnvelope, null, 2));
 
+      const fullRequestString = JSON.stringify(handlerInput.requestEnvelope.request);
+      const fullRequestLower = fullRequestString.toLowerCase();
+      
       // PRIMARY HANDLING: Check if this is a "mark X as done" request
       // This handles cases where "mark X as done" is routed to UpdateTaskStatusIntent
       // We check this FIRST before doing any status detection
-      if (taskSlot) {
-        const taskSlotLower = taskSlot.toLowerCase();
-        const fullRequestString = JSON.stringify(handlerInput.requestEnvelope.request);
-        const fullRequestLower = fullRequestString.toLowerCase();
+      if (taskNameSlot) {
+        const taskSlotLower = taskNameSlot?.toLowerCase() || '';
         
         // Get raw input/utterance for better detection
         const rawInput = (request as any).input?.text || 
@@ -221,7 +115,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
           }
           
           // Clean the task name - remove "mark", "as done", "as complete" etc.
-          let cleanedTaskName = cleanTaskName(taskSlot);
+          let cleanedTaskName = cleanTaskName(taskNameSlot);
           
           // Additional cleaning for "mark as done" patterns
           cleanedTaskName = cleanedTaskName
@@ -301,7 +195,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
         }
       }
 
-      if (!taskSlot || taskSlot.trim().length === 0) {
+      if (!taskNameSlot || taskNameSlot.trim().length === 0) {
         return buildResponse(
           handlerInput,
           'Which task would you like to update?',
@@ -318,162 +212,29 @@ export class UpdateTaskStatusHandler implements RequestHandler {
         );
       }
 
-      // Detect target status from:
-      // 1. Status slot (if provided)
-      // 2. Task slot or utterance (e.g., "set task to done")
-      // 3. Current task status (smart defaults)
-      
-      const taskSlotLower = taskSlot.toLowerCase();
-      const statusSlotLower = statusSlot?.toLowerCase() || '';
-      
-      // Try to get the original utterance from various sources
-      const rawInput = (request as any).input?.text || 
-                     (handlerInput.requestEnvelope.request as any).rawInput || 
-                     (handlerInput.requestEnvelope.request as any).input?.originalText ||
-                     '';
-      const rawInputLower = rawInput.toLowerCase();
-      
-      // Also check the full request envelope for any utterance data
-      const requestEnvelope = handlerInput.requestEnvelope as any;
-      const utterance = requestEnvelope.request?.input?.text || 
-                       requestEnvelope.request?.rawInput || 
-                       '';
-      const utteranceLower = utterance.toLowerCase();
-      
-      // Combine all sources for detection
-      const allText = `${taskSlotLower} ${statusSlotLower} ${rawInputLower} ${utteranceLower}`.toLowerCase();
-      
-      // Also check the full request envelope for any utterance data
-      const fullRequest = handlerInput.requestEnvelope.request as any;
-      const fullRequestString = JSON.stringify(fullRequest);
-      const fullRequestLower = fullRequestString.toLowerCase();
-      
-      console.log('[UpdateTaskStatusHandler] Detection check:', {
-        taskSlot: taskSlot,
-        statusSlot: statusSlot,
-        rawInput: rawInput,
-        utterance: utterance,
-        allText: allText,
-        fullRequestLower: fullRequestLower.substring(0, 500), // First 500 chars for logging
-        hasToDone: fullRequestLower.includes('to done'),
-        hasToComplete: fullRequestLower.includes('to complete'),
-        hasToInProgress: fullRequestLower.includes('to in progress'),
-        hasToToDo: fullRequestLower.includes('to to do') || fullRequestLower.includes('to todo')
-      });
-      
-      // Detect target status from various sources
-      let targetStatus: 'To Do' | 'In Progress' | 'Done' | null = null;
-      
-      // 1. Check status slot first
-      if (statusSlot) {
-        const statusLower = statusSlotLower;
-        if (statusLower.includes('to do') || statusLower.includes('todo') || statusLower === 'to do') {
-          targetStatus = 'To Do';
-        } else if (statusLower.includes('in progress') || statusLower.includes('in-progress') || statusLower === 'in progress') {
-          targetStatus = 'In Progress';
-        } else if (statusLower.includes('done') || statusLower.includes('complete')) {
-          targetStatus = 'Done';
-        }
-      }
-      
-      // 2. Check utterance for status keywords - prioritize explicit status phrases
-      // This MUST happen before smart defaults to respect user's explicit intent
-      if (!targetStatus) {
-        // Priority 1: Check for explicit "to [status]" patterns in fullRequestLower (most comprehensive)
-        // This is the most reliable pattern - user explicitly says "to in progress", "to done", etc.
-        if (fullRequestLower.includes('to in progress') || fullRequestLower.includes('to in-progress')) {
-          targetStatus = 'In Progress';
-          console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "In Progress" from "to in progress" pattern');
-        } else if (fullRequestLower.includes('to to do') || fullRequestLower.includes('to todo')) {
-          targetStatus = 'To Do';
-          console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "To Do" from "to to do" pattern');
-        } else if (fullRequestLower.includes('to done') || fullRequestLower.includes('to complete')) {
-          targetStatus = 'Done';
-          console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "Done" from "to done" pattern');
-        }
-        
-        // Priority 2: Check for "set/move [task] to [status]" patterns
-        // User says "set X to in progress" or "move X to done"
-        if (!targetStatus) {
-          if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
-              (fullRequestLower.includes('to in progress') || fullRequestLower.includes('to in-progress') || 
-               fullRequestLower.includes('in progress'))) {
-            targetStatus = 'In Progress';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "In Progress" from "set/move ... to in progress" pattern');
-          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
-                     (fullRequestLower.includes('to to do') || fullRequestLower.includes('to todo') ||
-                      fullRequestLower.includes('to do') || fullRequestLower.includes('todo'))) {
-            targetStatus = 'To Do';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "To Do" from "set/move ... to do" pattern');
-          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) && 
-                     (fullRequestLower.includes('to done') || fullRequestLower.includes('to complete') ||
-                      fullRequestLower.includes('done') || fullRequestLower.includes('complete'))) {
-            targetStatus = 'Done';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "Done" from "set/move ... done" pattern');
-          }
-        }
-        
-        // Priority 3: Check allText and other sources for explicit patterns
-        if (!targetStatus) {
-          if (allText.includes('to in progress') || allText.includes('to in-progress')) {
-            targetStatus = 'In Progress';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "In Progress" from allText');
-          } else if (allText.includes('to to do') || allText.includes('to todo')) {
-            targetStatus = 'To Do';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "To Do" from allText');
-          } else if (allText.includes('to done') || allText.includes('to complete')) {
-            targetStatus = 'Done';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "Done" from allText');
-          } else if (rawInputLower.includes('to in progress') || rawInputLower.includes('to in-progress')) {
-            targetStatus = 'In Progress';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "In Progress" from rawInput');
-          } else if (utteranceLower.includes('to in progress') || utteranceLower.includes('to in-progress')) {
-            targetStatus = 'In Progress';
-            console.log('[UpdateTaskStatusHandler] Detected EXPLICIT "In Progress" from utterance');
-          }
-        }
-        
-        // Priority 4: Fallback to general keywords (less specific, but still explicit)
-        // Only use if no explicit "to [status]" pattern was found
-        if (!targetStatus) {
-          // Check for standalone status keywords in context of "set" or "move"
-          if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) &&
-              (allText.includes('in progress') || allText.includes('in-progress') || allText.includes('start') || allText.includes('begin'))) {
-            targetStatus = 'In Progress';
-            console.log('[UpdateTaskStatusHandler] Detected "In Progress" from keywords with set/move');
-          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) &&
-                     (allText.includes('to do') || allText.includes('todo'))) {
-            targetStatus = 'To Do';
-            console.log('[UpdateTaskStatusHandler] Detected "To Do" from keywords with set/move');
-          } else if ((fullRequestLower.includes('set') || fullRequestLower.includes('move')) &&
-                     (allText.includes('done') || allText.includes('complete'))) {
-            targetStatus = 'Done';
-            console.log('[UpdateTaskStatusHandler] Detected "Done" from keywords with set/move');
-          }
-        }
-      }
-      
-      // 3. Check for "as done" or "as complete" patterns
-      const isMarkingComplete = taskSlotLower.includes('as done') || 
-                               taskSlotLower.includes('as complete') ||
-                               rawInputLower.includes('as done') ||
-                               rawInputLower.includes('as complete') ||
-                               utteranceLower.includes('as done') ||
-                               utteranceLower.includes('as complete') ||
-                               fullRequestLower.includes('as done') ||
-                               fullRequestLower.includes('as complete') ||
-                               (allText.includes('mark') && (allText.includes('done') || allText.includes('complete'))) ||
-                               (fullRequestLower.includes('mark') && (fullRequestLower.includes('done') || fullRequestLower.includes('complete')));
-      
-      if (isMarkingComplete && !targetStatus) {
-        targetStatus = 'Done';
+      // Get status from slot - normalize to new format
+      if (!statusSlot) {
+        return buildResponse(
+          handlerInput,
+          'What status would you like to set?',
+          'Tell me the status: to do, in progress, or done.'
+        );
       }
 
-      // Clean up the task name by removing command words
-      const cleanedTaskName = cleanTaskName(taskSlot);
-      console.log('[UpdateTaskStatusHandler] Original task slot:', taskSlot);
-      console.log('[UpdateTaskStatusHandler] Cleaned task name:', cleanedTaskName);
-      console.log('[UpdateTaskStatusHandler] Is marking complete:', isMarkingComplete);
+      const normalizeStatus = (s: string): 'to do' | 'in progress' | 'done' => {
+        const normalized = s.toLowerCase();
+        if (normalized === 'to do' || normalized === 'todo' || normalized === 'to-do') return 'to do';
+        if (normalized === 'in progress' || normalized === 'in-progress' || normalized === 'doing') return 'in progress';
+        if (normalized === 'done' || normalized === 'complete' || normalized === 'completed') return 'done';
+        return 'to do'; // default
+      };
+
+      const targetStatus = normalizeStatus(statusSlot);
+
+      // Clean up the task name
+      const cleanedTaskName = cleanTaskName(taskNameSlot || '');
+      console.log('[UpdateTaskStatusHandler] Task name:', cleanedTaskName);
+      console.log('[UpdateTaskStatusHandler] Target status:', targetStatus);
 
       console.log('[UpdateTaskStatusHandler] Searching for task:', cleanedTaskName);
       
@@ -515,88 +276,58 @@ export class UpdateTaskStatusHandler implements RequestHandler {
         (fullRequestLower.includes('set') && fullRequestLower.includes('in progress')) ||
         (fullRequestLower.includes('set') && fullRequestLower.includes('done')) ||
         (fullRequestLower.includes('set') && fullRequestLower.includes('to do')) ||
-        (fullRequestLower.includes('set') && fullRequestLower.includes('todo')) ||
-        allText.includes('to in progress') ||
-        allText.includes('to done') ||
-        allText.includes('to to do');
+        (fullRequestLower.includes('set') && fullRequestLower.includes('todo'));
       
-      if (hasExplicitStatusInUtterance && !targetStatus) {
+      let finalTargetStatus = targetStatus;
+      if (hasExplicitStatusInUtterance && !finalTargetStatus) {
         // Re-detect if we missed it
         if (fullRequestLower.includes('to in progress') || fullRequestLower.includes('to in-progress') ||
             (fullRequestLower.includes('set') && fullRequestLower.includes('in progress'))) {
-          targetStatus = 'In Progress';
+          finalTargetStatus = 'in progress';
           isExplicitStatus = true;
-          console.log('[UpdateTaskStatusHandler] Re-detected explicit "In Progress" from utterance');
+          console.log('[UpdateTaskStatusHandler] Re-detected explicit "in progress" from utterance');
         } else if (fullRequestLower.includes('to done') || fullRequestLower.includes('to complete') ||
                    (fullRequestLower.includes('set') && fullRequestLower.includes('done'))) {
-          targetStatus = 'Done';
+          finalTargetStatus = 'done';
           isExplicitStatus = true;
-          console.log('[UpdateTaskStatusHandler] Re-detected explicit "Done" from utterance');
+          console.log('[UpdateTaskStatusHandler] Re-detected explicit "done" from utterance');
         } else if (fullRequestLower.includes('to to do') || fullRequestLower.includes('to todo') ||
                    (fullRequestLower.includes('set') && (fullRequestLower.includes('to do') || fullRequestLower.includes('todo')))) {
-          targetStatus = 'To Do';
+          finalTargetStatus = 'to do';
           isExplicitStatus = true;
-          console.log('[UpdateTaskStatusHandler] Re-detected explicit "To Do" from utterance');
+          console.log('[UpdateTaskStatusHandler] Re-detected explicit "to do" from utterance');
         }
       }
       
-      // Only use smart defaults if NO explicit status was detected
-      // CRITICAL: Smart defaults should NEVER override explicit user intent
-      if (!targetStatus && !isExplicitStatus) {
-        console.log('[UpdateTaskStatusHandler] No explicit status detected, using smart defaults');
-        // Smart defaults:
-        // - If "To Do" → set to "In Progress" (natural next step)
-        // - If "In Progress" → set to "Done" (natural next step)
-        // - If "Done" → set to "To Do" (restart cycle)
-        if (currentStatus === 'To Do') {
-          targetStatus = 'In Progress';
-        } else if (currentStatus === 'In Progress') {
-          targetStatus = 'Done';
-        } else if (currentStatus === 'Done') {
-          targetStatus = 'To Do';
-        } else {
-          // Default to "In Progress" if status is unknown
-          targetStatus = 'In Progress';
-        }
-      } else if (targetStatus) {
-        console.log('[UpdateTaskStatusHandler] Explicit status detected:', {
-          targetStatus,
-          currentStatus,
-          willRespectExplicitStatus: true
-        });
-      }
-      
-      // Ensure targetStatus is never null at this point
-      if (!targetStatus) {
+      // Ensure finalTargetStatus is never null at this point
+      if (!finalTargetStatus) {
         // Final fallback - should never reach here, but safety check
-        console.warn('[UpdateTaskStatusHandler] targetStatus is still null, defaulting to In Progress');
-        targetStatus = 'In Progress';
+        console.warn('[UpdateTaskStatusHandler] targetStatus is still null, defaulting to in progress');
+        finalTargetStatus = 'in progress';
       }
 
       console.log('[UpdateTaskStatusHandler] Final status decision:', {
         statusSlot: statusSlot,
-        detectedStatus: targetStatus,
+        detectedStatus: finalTargetStatus,
         currentStatus: matchingTask.status,
         isExplicitStatus,
         hasExplicitStatusInUtterance,
-        isMarkingComplete,
-        willUpdateTo: targetStatus,
-        willChangeStatus: targetStatus !== currentStatus,
-        usingSmartDefaults: !isExplicitStatus && !hasExplicitStatusInUtterance
+        willUpdateTo: finalTargetStatus,
+        willChangeStatus: finalTargetStatus !== currentStatus
       });
       
       // If explicit status matches current status, log but still update (user's explicit request)
-      if (isExplicitStatus && targetStatus === currentStatus) {
+      if (isExplicitStatus && finalTargetStatus === currentStatus) {
         console.log('[UpdateTaskStatusHandler] Explicit status matches current status, updating anyway per user request');
       }
 
       // Update to the target status
-      if (targetStatus === 'Done') {
+      if (finalTargetStatus === 'done') {
         console.log('[UpdateTaskStatusHandler] Marking task as complete:', {
           taskId: matchingTask.id,
           taskName: matchingTask.name,
           currentStatus: matchingTask.status,
-          targetStatus: targetStatus
+          targetStatus: finalTargetStatus
         });
         await markTaskComplete(notionClient, matchingTask.id);
         console.log('[UpdateTaskStatusHandler] Task marked as complete successfully');
@@ -610,11 +341,11 @@ export class UpdateTaskStatusHandler implements RequestHandler {
           taskId: matchingTask.id,
           taskName: matchingTask.name,
           currentStatus: matchingTask.status,
-          targetStatus: targetStatus
+          targetStatus: finalTargetStatus
         });
         
         try {
-          await updateTaskStatus(notionClient, matchingTask.id, targetStatus);
+          await updateTaskStatus(notionClient, matchingTask.id, finalTargetStatus as 'to do' | 'in progress' | 'done');
           
           // Verify the update succeeded by retrieving the page
           try {
@@ -622,16 +353,16 @@ export class UpdateTaskStatusHandler implements RequestHandler {
             const updatedProps = (updatedPage as any).properties;
             const actualStatus = updatedProps.Status?.select?.name || 'Unknown';
             console.log('[UpdateTaskStatusHandler] Status update verified:', {
-              expectedStatus: targetStatus,
+              expectedStatus: finalTargetStatus,
               actualStatus: actualStatus,
-              match: actualStatus === targetStatus
+              match: actualStatus === finalTargetStatus
             });
             
-            if (actualStatus !== targetStatus) {
-              console.error('[UpdateTaskStatusHandler] Status mismatch! Expected:', targetStatus, 'Got:', actualStatus);
+            if (actualStatus !== finalTargetStatus) {
+              console.error('[UpdateTaskStatusHandler] Status mismatch! Expected:', finalTargetStatus, 'Got:', actualStatus);
               return buildResponse(
                 handlerInput,
-                `I tried to update ${matchingTask.name} to ${targetStatus}, but there was an issue. The task status is currently ${actualStatus}.`,
+                `I tried to update ${matchingTask.name} to ${finalTargetStatus}, but there was an issue. The task status is currently ${actualStatus}.`,
                 'What else would you like to do?'
               );
             }
@@ -641,10 +372,9 @@ export class UpdateTaskStatusHandler implements RequestHandler {
           }
           
           console.log('[UpdateTaskStatusHandler] Task status updated successfully');
-          const statusText = targetStatus === 'To Do' ? 'to do' : 'in progress';
           return buildResponse(
             handlerInput,
-            `Updated: ${matchingTask.name} to ${statusText}.`,
+            `Updated: ${matchingTask.name} to ${finalTargetStatus}.`,
             'What else would you like to do?'
           );
         } catch (updateError: any) {
