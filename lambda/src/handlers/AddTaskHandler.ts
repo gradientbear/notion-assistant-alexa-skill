@@ -9,8 +9,11 @@ export class AddTaskHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
     
-    // Only handle AddTaskIntent - BrainDumpIntent is handled by BrainDumpHandler
-    const canHandle = isIntentRequest && intentName === 'AddTaskIntent';
+    // Handle both AddTaskPhraseIntent and AddTaskStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'AddTaskPhraseIntent' || 
+      intentName === 'AddTaskStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[AddTaskHandler] canHandle check:', {
@@ -42,7 +45,7 @@ export class AddTaskHandler implements RequestHandler {
         return buildResponse(
           handlerInput,
           'To add tasks, you need to connect your Notion account. ' +
-          'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+          'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
           'Once connected, you can add tasks to your Notion workspace.',
           'What would you like to do?'
         );
@@ -51,8 +54,8 @@ export class AddTaskHandler implements RequestHandler {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
       
-      // Get slot values - use new slot names
-      const taskNameSlot = slots.taskName?.value;
+      // Get slot values - handle both Phrase (taskName) and Structured (taskNameValue) intents
+      const taskNameSlot = slots.taskName?.value || slots.taskNameValue?.value;
       const categorySlot = slots.category?.value;
       const prioritySlot = slots.priority?.value;
       const dueDateSlot = slots.dueDate?.value;

@@ -9,8 +9,11 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
     
-    // Only handle UpdateTaskStatusIntent - MarkTaskCompleteIntent should be handled by MarkTaskCompleteHandler
-    const canHandle = isIntentRequest && intentName === 'UpdateTaskStatusIntent';
+    // Handle both UpdateTaskStatusPhraseIntent and UpdateTaskStatusStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'UpdateTaskStatusPhraseIntent' || 
+      intentName === 'UpdateTaskStatusStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[UpdateTaskStatusHandler] canHandle check:', {
@@ -40,7 +43,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To update task status, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
         'Once connected, you can update your tasks.',
         'What would you like to do?'
       );
@@ -50,7 +53,8 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       const request = handlerInput.requestEnvelope.request as any;
       const intentName = request.intent?.name;
       const slots = request.intent.slots || {};
-      const taskNameSlot = slots.taskName?.value;
+      // Handle both Phrase (taskName) and Structured (taskNameValue) intents
+      const taskNameSlot = slots.taskName?.value || slots.taskNameValue?.value;
       const statusSlot = slots.status?.value;
 
       console.log('[UpdateTaskStatusHandler] Intent name:', intentName);

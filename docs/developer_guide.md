@@ -1,4 +1,4 @@
-# Notion Data Alexa Skill - Developer Guide
+# Voice Planner Alexa Skill - Developer Guide
 
 Complete setup and technical documentation for developers.
 
@@ -32,7 +32,7 @@ Complete setup and technical documentation for developers.
 
 ## Architecture Overview
 
-The Notion Data Alexa Skill consists of three main components:
+The Voice Planner Alexa Skill consists of three main components:
 
 1. **AWS Lambda Function** - Handles all Alexa requests and Notion API interactions
 2. **Next.js Web Application** - Provides OAuth/account linking interface
@@ -125,7 +125,7 @@ If you have an existing database and need to add new fields:
 2. Click "New integration"
 3. Select **"Public integration"** (not Internal integration)
 4. Fill in the integration details:
-   - **Name**: "Notion Data Alexa Skill" (or any name you prefer)
+   - **Name**: "Voice Planner Alexa Skill" (or any name you prefer)
    - **Logo**: Optional (upload an icon if you want)
    - **Associated workspace**: Select your workspace
 5. Set **Redirect URIs**:
@@ -320,7 +320,7 @@ Or connect your GitHub repo to Vercel for automatic deployments.
 1. Go to https://developer.amazon.com/alexa/console/ask
 2. Click "Create Skill"
 3. Choose:
-   - Skill name: "Notion Data"
+   - Skill name: "Voice Planner"
    - Default language: English (US)
    - Model: Custom
    - Hosting: Provision your own
@@ -368,7 +368,7 @@ Or connect your GitHub repo to Vercel for automatic deployments.
 
 1. Go to "Test" tab
 2. Enable testing for your account
-3. Try: "open Notion Data"
+3. Try: "open Voice Planner"
 
 ---
 

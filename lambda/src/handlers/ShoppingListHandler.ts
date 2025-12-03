@@ -8,6 +8,7 @@ export class ShoppingListHandler implements RequestHandler {
     return (
       handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
       (handlerInput.requestEnvelope.request.intent.name === 'AddShoppingIntent' ||
+       handlerInput.requestEnvelope.request.intent.name === 'AddShoppingPhraseIntent' ||
        handlerInput.requestEnvelope.request.intent.name === 'ReadShoppingIntent' ||
        handlerInput.requestEnvelope.request.intent.name === 'MarkShoppingCompleteIntent')
     );
@@ -38,7 +39,7 @@ export class ShoppingListHandler implements RequestHandler {
         );
       }
 
-      if (intentName === 'AddShoppingIntent') {
+      if (intentName === 'AddShoppingIntent' || intentName === 'AddShoppingPhraseIntent') {
         const itemsSlot = request.intent.slots?.items;
         
         if (!itemsSlot || !itemsSlot.value) {

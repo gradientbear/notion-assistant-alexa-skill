@@ -68,7 +68,7 @@ export default function BillingPage() {
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Buy License</h1>
             <p className="text-gray-600">
-              Purchase a lifetime license to activate your Notion Data account
+              Purchase a lifetime license to activate your Voice Planner account
             </p>
           </div>
 

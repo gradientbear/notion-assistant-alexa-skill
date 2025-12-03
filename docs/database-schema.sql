@@ -1,5 +1,5 @@
 -- ============================================================================
--- Notion Data Alexa Skill - Complete Database Schema
+-- Voice Planner Alexa Skill - Complete Database Schema
 -- ============================================================================
 -- This file contains the complete database schema including all migrations.
 -- Run this file in Supabase SQL Editor for a fresh database setup.

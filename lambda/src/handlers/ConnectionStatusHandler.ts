@@ -36,7 +36,7 @@ export class ConnectionStatusHandler implements RequestHandler {
         return buildResponse(
           handlerInput,
           'Notion is not connected. To connect, open the Alexa app, go to Skills, ' +
-          'find Notion Data, and click Link Account. Once connected, I can help you manage your tasks.',
+          'find Voice Planner, and click Link Account. Once connected, I can help you manage your tasks.',
           'What would you like to do?'
         );
       }
@@ -65,7 +65,7 @@ export class ConnectionStatusHandler implements RequestHandler {
           return buildResponse(
             handlerInput,
             'There seems to be an issue with your Notion connection. Your token may have expired. ' +
-            'Please reconnect your Notion account in the Alexa app. Go to Skills, find Notion Data, and click Link Account again.',
+            'Please reconnect your Notion account in the Alexa app. Go to Skills, find Voice Planner, and click Link Account again.',
             'What would you like to do?'
           );
         }

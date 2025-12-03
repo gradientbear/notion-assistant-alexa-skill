@@ -45,7 +45,7 @@ export class GetTasksHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To view your tasks, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
         'Once connected, I can show you your tasks from Notion.',
         'What would you like to do?'
       );

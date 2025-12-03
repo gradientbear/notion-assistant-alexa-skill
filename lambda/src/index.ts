@@ -7,7 +7,9 @@ import { CompleteTaskHandler } from './handlers/CompleteTaskHandler';
 import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
 import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
 import { AddWorkoutHandler } from './handlers/AddWorkoutHandler';
+import { GetWorkoutsHandler } from './handlers/GetWorkoutsHandler';
 import { LogMealHandler } from './handlers/LogMealHandler';
+import { GetCaloriesHandler } from './handlers/GetCaloriesHandler';
 import { AddNoteHandler } from './handlers/AddNoteHandler';
 import { ReadNotesHandler } from './handlers/ReadNotesHandler';
 import { LogEnergyHandler } from './handlers/LogEnergyHandler';
@@ -44,10 +46,12 @@ const skill = SkillBuilders.custom()
     new NextDeadlineHandler(),
     // Shopping handler
     new ShoppingListHandler(),
-    // Workout handler
+    // Workout handlers
     new AddWorkoutHandler(),
-    // Meal handler
+    new GetWorkoutsHandler(),
+    // Meal handlers
     new LogMealHandler(),
+    new GetCaloriesHandler(),
     // Note handlers
     new AddNoteHandler(),
     new ReadNotesHandler(),

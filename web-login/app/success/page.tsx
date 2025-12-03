@@ -25,13 +25,13 @@ function SuccessContent() {
             textAlign: 'left',
             display: 'inline-block'
           }}>
-            <li>A "Notion Data" page in your workspace</li>
+            <li>A "Voice Planner" page in your workspace</li>
             <li>Tasks database for task management</li>
             <li>Focus_Logs database for focus tracking</li>
             <li>Energy_Logs database for energy tracking</li>
           </ul>
           <p style={{ marginTop: '16px', fontSize: '14px', color: '#666' }}>
-            You can now use the Notion Data Alexa skill. Try: "Alexa, open Notion Data"
+            You can now use the Voice Planner Alexa skill. Try: "Alexa, open Voice Planner"
           </p>
         </div>
       </div>

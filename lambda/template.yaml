@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Notion Data Alexa Skill Lambda Function
+Description: Voice Planner Alexa Skill Lambda Function
 
 Globals:
   Function:

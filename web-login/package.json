@@ -1,7 +1,7 @@
 {
   "name": "notion-assistant-web-login",
   "version": "1.0.0",
-  "description": "Web login page for Notion Data Alexa Skill OAuth",
+  "description": "Web login page for Voice Planner Alexa Skill OAuth",
   "private": true,
   "scripts": {
     "dev": "next dev",

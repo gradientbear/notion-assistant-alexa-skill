@@ -101,7 +101,7 @@ export default function NotionConnectPage() {
               When you connect Notion, we will:
             </p>
             <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-              <li>Create a "Notion Data" page in your workspace</li>
+              <li>Create a "Voice Planner" page in your workspace</li>
               <li>Set up task management databases</li>
               <li>Enable voice commands for task management</li>
             </ul>

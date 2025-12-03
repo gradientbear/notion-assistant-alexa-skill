@@ -1042,14 +1042,14 @@ export async function getUserWorkspace(client: Client): Promise<string | null> {
 }
 
 /**
- * Create a Notion Data page in the user's workspace
+ * Create a Voice Planner page in the user's workspace
  */
 export async function createPrivacyPage(client: Client): Promise<string | null> {
   try {
-    // First, try to find if Notion Data page already exists
+    // First, try to find if Voice Planner page already exists
     const searchResponse = await withRetry(() =>
       client.search({
-        query: 'Notion Data',
+        query: 'Voice Planner',
         filter: {
           property: 'object',
           value: 'page',
@@ -1063,7 +1063,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
         // Check title in properties or in title array
         const title = item.properties?.title?.title?.[0]?.plain_text || 
                      item.title?.[0]?.plain_text;
-        return title === 'Notion Data';
+        return title === 'Voice Planner';
       }
     );
 
@@ -1101,7 +1101,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
       throw new Error('Could not find a parent page in workspace');
     }
 
-    // Create new Notion Data page as child of workspace page
+    // Create new Voice Planner page as child of workspace page
     const pageResponse = await withRetry(() =>
       client.pages.create({
         parent: {
@@ -1112,7 +1112,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
           title: [
             {
               text: {
-                content: 'Notion Data',
+                content: 'Voice Planner',
               },
             },
           ],
@@ -1122,7 +1122,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
 
     return pageResponse.id;
   } catch (error) {
-    console.error('Error creating Notion Data page:', error);
+    console.error('Error creating Voice Planner page:', error);
     return null;
   }
 }
@@ -1935,7 +1935,7 @@ export async function setupNotionWorkspace(
   try {
     const privacyPageId = await createPrivacyPage(client);
     if (!privacyPageId) {
-      throw new Error('Failed to create Notion Data page');
+      throw new Error('Failed to create Voice Planner page');
     }
 
     const tasksDbId = await createTasksDatabase(client, privacyPageId);

@@ -6,7 +6,7 @@ OAuth2 Authorization Code Grant Flow for Alexa Account Linking
 │  (Alexa)    │
 └──────┬──────┘
        │
-       │ 1. "Alexa, open Notion Data"
+       │ 1. "Alexa, open Voice Planner"
        │    (or "Link Account" in Alexa app)
        │
        ▼

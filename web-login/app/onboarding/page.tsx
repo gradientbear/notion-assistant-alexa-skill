@@ -34,7 +34,7 @@ export default function OnboardingPage() {
     // Check if coming back from Notion OAuth
     const urlParams = new URLSearchParams(window.location.search)
     if (urlParams.get('notion_connected') === 'true') {
-      setMessage('Notion connected successfully! Notion Data page and databases created.')
+      setMessage('Notion connected successfully! Voice Planner page and databases created.')
       // Remove the query parameter
       window.history.replaceState({}, '', '/onboarding')
     }
@@ -268,7 +268,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Notion Data</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Voice Planner</h1>
           <p className="text-gray-600 mb-8">Complete these steps to get started</p>
 
           {/* Success Message */}
@@ -402,7 +402,7 @@ export default function OnboardingPage() {
                   <strong>What we'll create in your Notion workspace:</strong>
                 </p>
                 <ul className="list-disc list-inside text-sm text-green-700 mt-2 space-y-1">
-                  <li>A "Notion Data" page in your Notion workspace</li>
+                  <li>A "Voice Planner" page in your Notion workspace</li>
                   <li>Tasks database for task management</li>
                   <li>Focus_Logs database for focus tracking</li>
                   <li>Energy_Logs database for energy tracking</li>

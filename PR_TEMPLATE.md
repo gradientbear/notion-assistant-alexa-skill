@@ -70,7 +70,7 @@ npm install jsonwebtoken @types/jsonwebtoken stripe
 ```bash
 JWT_SECRET=your-secure-random-secret-min-32-chars
 JWT_EXPIRES_IN=3600
-APP_ISS=https://notion-data-user.vercel.app
+APP_ISS=https://voice-planner-murex.vercel.app
 ALEXA_OAUTH_CLIENT_ID=your-client-id
 ALEXA_OAUTH_CLIENT_SECRET=your-client-secret
 ALEXA_REDIRECT_URIS=https://layla.amazon.com/api/skill/link,https://pitangui.amazon.com/api/skill/link
@@ -81,7 +81,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 **Lambda:**
 ```bash
 JWT_SECRET=your-secure-random-secret-min-32-chars
-INTROSPECT_URL=https://notion-data-user.vercel.app/api/auth/introspect
+INTROSPECT_URL=https://voice-planner-murex.vercel.app/api/auth/introspect
 LEGACY_TOKEN_SUPPORT=true
 ```
 
@@ -104,8 +104,8 @@ sam deploy
 1. Go to [Alexa Developer Console](https://developer.amazon.com/alexa/console/ask)
 2. Select your skill → Build → Account Linking
 3. Configure:
-   - **Authorization URI**: `https://notion-data-user.vercel.app/api/oauth/authorize`
-   - **Access Token URI**: `https://notion-data-user.vercel.app/api/oauth/token`
+   - **Authorization URI**: `https://voice-planner-murex.vercel.app/api/oauth/authorize`
+   - **Access Token URI**: `https://voice-planner-murex.vercel.app/api/oauth/token`
    - **Client ID**: `[Your ALEXA_OAUTH_CLIENT_ID]`
    - **Client Secret**: `[Your ALEXA_OAUTH_CLIENT_SECRET]`
    - **Authorization Grant Type**: `Auth Code Grant`

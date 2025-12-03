@@ -25,7 +25,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABAS
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = parseInt(process.env.JWT_EXPIRES_IN || '3600', 10);
-const APP_ISS = process.env.APP_ISS || 'https://notion-data-user.vercel.app';
+const APP_ISS = process.env.APP_ISS || 'https://voice-planner-murex.vercel.app';
 const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'alexa';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
@@ -243,7 +243,7 @@ Environment Variables Required:
   - SUPABASE_SERVICE_KEY
   - JWT_SECRET
   - JWT_EXPIRES_IN (optional, default: 3600)
-  - APP_ISS (optional, default: https://notion-data-user.vercel.app)
+  - APP_ISS (optional, default: https://voice-planner-murex.vercel.app)
   - ALEXA_OAUTH_CLIENT_ID (optional, default: alexa)
   `);
   process.exit(0);

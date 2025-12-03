@@ -9,7 +9,11 @@ export class AddNoteHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name
       : null;
     
-    const canHandle = isIntentRequest && intentName === 'AddNoteIntent';
+    // Handle both AddNotePhraseIntent and AddNoteStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'AddNotePhraseIntent' || 
+      intentName === 'AddNoteStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[AddNoteHandler] canHandle check:', {
@@ -32,7 +36,7 @@ export class AddNoteHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To add notes, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account.',
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account.',
         'What would you like to do?'
       );
     }
@@ -40,8 +44,9 @@ export class AddNoteHandler implements RequestHandler {
     try {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
-      const noteTitleSlot = slots.noteTitle?.value;
-      const noteBodySlot = slots.noteBody?.value;
+      // Handle both Phrase (noteTitle) and Structured (noteTitleValue) intents
+      const noteTitleSlot = slots.noteTitle?.value || slots.noteTitleValue?.value;
+      const noteBodySlot = slots.noteBody?.value || slots.noteBodyValue?.value;
       const noteDateSlot = slots.noteDate?.value;
 
       console.log('[AddNoteHandler] Slots:', {

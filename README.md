@@ -1,4 +1,4 @@
-# Notion Data Alexa Skill (MVP)
+# Voice Planner Alexa Skill (MVP)
 
 A voice-first Alexa Skill integrated with Notion API for task management. This MVP version focuses on core CRUD operations for managing tasks in your Notion workspace.
 
@@ -7,7 +7,7 @@ A voice-first Alexa Skill integrated with Notion API for task management. This M
 - **Add Tasks**: Create new tasks in your Notion Tasks database
 - **List Tasks**: View your tasks with various filters (all, pending, completed, by priority, etc.)
 - **Update Tasks**: Mark tasks as complete or update their status
-- **Delete Tasks**: Remove tasks from your Notion database
+- **Delete Tasks**: Remove tasks from your Voice Plannerbase
 - **Connection Status**: Check if your Notion connection is working
 
 > **Note**: This is an MVP version focusing on core task CRUD operations. Additional features (Brain Dump, Focus Timer, Energy Tracker, etc.) are available in the codebase but disabled for MVP.
@@ -78,7 +78,7 @@ cd ../web-login && npm install
 - **[Notion OAuth Setup](docs/NOTION_OAUTH_SETUP.md)** - Detailed OAuth integration guide
 - **[Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md)** - Architecture and implementation details
 - **[User Guide](docs/USER_GUIDE.md)** - End-user documentation
-- **[Notion Database Templates](docs/NOTION_DATABASE_TEMPLATES.md)** - Database setup guide
+- **[Voice Plannerbase Templates](docs/NOTION_DATABASE_TEMPLATES.md)** - Database setup guide
 - **[FAQ](docs/FAQ.md)** - Frequently asked questions
 
 ## 🧪 Testing

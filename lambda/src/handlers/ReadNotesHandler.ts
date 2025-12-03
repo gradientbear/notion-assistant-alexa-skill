@@ -32,7 +32,7 @@ export class ReadNotesHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To read your notes, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account.',
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account.',
         'What would you like to do?'
       );
     }

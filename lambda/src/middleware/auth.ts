@@ -5,7 +5,7 @@ import { verifyAccessToken, isLegacyToken, parseLegacyToken } from '../utils/jwt
 import { getUserByAmazonId, getUserByAuthUserId } from '../utils/database';
 import { createNotionClient } from '../utils/notion';
 
-const INTROSPECT_URL = process.env.INTROSPECT_URL || 'https://notion-data-user.vercel.app/api/auth/introspect';
+const INTROSPECT_URL = process.env.INTROSPECT_URL || 'https://voice-planner-murex.vercel.app/api/auth/introspect';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const LEGACY_TOKEN_SUPPORT_ENABLED = process.env.LEGACY_TOKEN_SUPPORT === 'true';
 

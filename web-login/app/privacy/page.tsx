@@ -20,7 +20,7 @@ export default function PrivacyPage() {
             <section>
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">1. Introduction</h2>
               <p className="text-gray-700 mb-4">
-                Notion Data ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Alexa skill and web services.
+                Voice Planner ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Alexa skill and web services.
               </p>
             </section>
 
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
                 <li>License key information</li>
               </ul>
 
-              <h3 className="text-xl font-semibold text-gray-900 mb-3">2.2 Notion Data</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-3">2.2 Voice Planner</h3>
               <ul className="list-disc list-inside text-gray-700 mb-4 space-y-2">
                 <li>Notion workspace access token (OAuth token)</li>
                 <li>Task data (task names, priorities, status, due dates, categories)</li>
@@ -189,14 +189,14 @@ export default function PrivacyPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-gray-700">
                   <strong>Email:</strong> support@notion-data.com<br />
-                  <strong>Website:</strong> https://notion-data-user.vercel.app
+                  <strong>Website:</strong> https://voice-planner-murex.vercel.app
                 </p>
               </div>
             </section>
 
             <section className="mt-8 pt-6 border-t border-gray-200">
               <p className="text-sm text-gray-600">
-                By using Notion Data, you acknowledge that you have read and understood this Privacy Policy and agree to the collection and use of your information as described herein.
+                By using Voice Planner, you acknowledge that you have read and understood this Privacy Policy and agree to the collection and use of your information as described herein.
               </p>
             </section>
           </div>

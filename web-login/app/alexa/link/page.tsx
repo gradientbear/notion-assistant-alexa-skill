@@ -193,7 +193,7 @@ function AlexaLinkContent() {
                   <strong>Go to Skills & Games</strong> (tap the menu icon, then "Skills & Games")
                 </li>
                 <li>
-                  <strong>Search for "Notion Data"</strong> skill
+                  <strong>Search for "Voice Planner"</strong> skill
                 </li>
                 <li>
                   <strong>Tap "Enable"</strong> or <strong>"Link Account"</strong>

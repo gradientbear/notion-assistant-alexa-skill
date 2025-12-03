@@ -104,8 +104,8 @@ export class LaunchRequestHandler implements RequestHandler {
         try {
           const response = buildResponse(
             handlerInput,
-            'To use Notion Data, you need to connect your Notion account. ' +
-            'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+            'To use Voice Planner, you need to connect your Notion account. ' +
+            'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
             'Once connected, I can help you manage your tasks in Notion. ' +
             'Would you like help connecting your account?',
             'Would you like help connecting your account?'
@@ -129,7 +129,7 @@ export class LaunchRequestHandler implements RequestHandler {
 
       const response = buildResponse(
         handlerInput,
-        'Welcome to Notion Data! I can help you manage your tasks. ' +
+        'Welcome to Voice Planner! I can help you manage your tasks. ' +
         'You can add tasks, list your tasks, mark them complete, update their status, or delete them. ' +
         'You can also check your connection status. What would you like to do?',
         'What would you like to do?'
@@ -148,7 +148,7 @@ export class LaunchRequestHandler implements RequestHandler {
       try {
         const errorResponse = buildResponse(
           handlerInput,
-          'Welcome to Notion Data! I encountered an issue connecting to your account. ' +
+          'Welcome to Voice Planner! I encountered an issue connecting to your account. ' +
           'Please try again in a moment, or open the Alexa app to check your account settings.',
           'What would you like to do?'
         );
@@ -158,7 +158,7 @@ export class LaunchRequestHandler implements RequestHandler {
         console.error('[LaunchRequestHandler] Failed to build error response:', responseError);
         // Last resort - return a simple response
         return handlerInput.responseBuilder
-          .speak('Welcome to Notion Data. Please try again later.')
+          .speak('Welcome to Voice Planner. Please try again later.')
           .withShouldEndSession(true)
           .getResponse();
       }

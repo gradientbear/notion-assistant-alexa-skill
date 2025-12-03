@@ -106,7 +106,7 @@ export class UnhandledIntentHandler implements RequestHandler {
               
               return buildResponse(
                 handlerInput,
-                `Got it. Added "${taskValue}" to your Notion database. What else?`,
+                `Got it. Added "${taskValue}" to your Voice Plannerbase. What else?`,
                 'Tell me another task, or say done when finished.'
               );
             }

@@ -337,8 +337,8 @@ function AuthPageContent() {
             </h1>
             <p className="text-gray-600">
               {activeTab === 'login' 
-                ? 'Sign in to your Notion Data account' 
-                : 'Get started with Notion Data'}
+                ? 'Sign in to your Voice Planner account' 
+                : 'Get started with Voice Planner'}
             </p>
           </div>
 

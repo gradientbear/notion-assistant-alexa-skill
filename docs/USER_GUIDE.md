@@ -1,8 +1,8 @@
-# Notion Data Alexa Skill - User Guide
+# Voice Planner Alexa Skill - User Guide
 
 ## Welcome!
 
-The Notion Data Alexa Skill helps you manage your tasks and track your productivity using voice commands with your Alexa device, all synced to your Notion workspace.
+The Voice Planner Alexa Skill helps you manage your tasks and track your productivity using voice commands with your Alexa device, all synced to your Notion workspace.
 
 ## Getting Started
 
@@ -11,12 +11,12 @@ The Notion Data Alexa Skill helps you manage your tasks and track your productiv
 - An Alexa-enabled device (Echo, Echo Dot, etc.)
 - A Notion account
 - A valid license key
-- Notion databases set up (automatically created during setup)
+- Voice Plannerbases set up (automatically created during setup)
 
 ### Step 1: Enable the Skill
 
 1. Open the Alexa app on your phone
-2. Search for "Notion Data"
+2. Search for "Voice Planner"
 3. Click "Enable" or "Link Account"
 4. You'll be redirected to the web login page
 
@@ -40,7 +40,7 @@ The Notion Data Alexa Skill helps you manage your tasks and track your productiv
 
 ### Step 4: Start Using the Skill
 
-Say: **"Alexa, open Notion Data"**
+Say: **"Alexa, open Voice Planner"**
 
 ## Voice Commands
 
@@ -152,7 +152,7 @@ Say: **"Alexa, open Notion Data"**
 - Contact support if you believe your key should be valid
 - Ensure you're using the email associated with your license
 
-### "Notion database not found"
+### "Voice Plannerbase not found"
 
 - Check that all databases exist in your Notion workspace
 - Verify database names match exactly: `Tasks`, `Shopping`, `Workouts`, `Meals`, `Notes`, `EnergyLogs`
@@ -162,13 +162,13 @@ Say: **"Alexa, open Notion Data"**
 ### "Please link your Notion account"
 
 - Go to the Alexa app
-- Find Notion Data in your skills
+- Find Voice Planner in your skills
 - Click "Link Account" or "Settings"
 - Complete the OAuth flow again
 
 ### Skill not responding
 
-- Try: "Alexa, open Notion Data"
+- Try: "Alexa, open Voice Planner"
 - Check your internet connection
 - Ensure the skill is enabled in your Alexa app
 - Restart your Alexa device if needed
@@ -181,7 +181,7 @@ Say: **"Alexa, open Notion Data"**
 
 ## Privacy & Security
 
-- Your Notion data remains in your workspace
+- Your Voice Planner remains in your workspace
 - The skill only has read/write access to pages and databases
 - License keys are securely stored and validated
 - OAuth tokens are encrypted in our database
@@ -223,4 +223,4 @@ A: No, a valid license key is required to use the skill. Contact support to obta
 
 ---
 
-Enjoy using Notion Data! 🎉
+Enjoy using Voice Planner! 🎉

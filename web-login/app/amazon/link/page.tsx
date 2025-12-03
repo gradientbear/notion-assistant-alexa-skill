@@ -141,7 +141,7 @@ function AmazonLinkContent() {
           <p className="text-sm text-blue-800 font-medium mb-2">How to link:</p>
           <ol className="list-decimal list-inside text-sm text-blue-700 space-y-1">
             <li>Open the Alexa app on your phone</li>
-            <li>Search for "Notion Data" skill</li>
+            <li>Search for "Voice Planner" skill</li>
             <li>Click "Enable" or "Link Account"</li>
             <li>You'll be redirected back here automatically</li>
           </ol>

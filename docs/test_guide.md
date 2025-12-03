@@ -44,7 +44,7 @@ This guide walks you through testing the entire flow from user registration to c
 ### Step 4: Configure Skill in Developer Console
 1. Go to: https://developer.amazon.com/alexa/console/ask
 2. Sign in with your Amazon Developer account
-3. Select your skill: **"Notion Data"** (or create it if needed)
+3. Select your skill: **"Voice Planner"** (or create it if needed)
 
 ### Step 5: Deploy Interaction Model
 1. Click **Build** tab (left sidebar)
@@ -88,14 +88,14 @@ This guide walks you through testing the entire flow from user registration to c
 ## Phase 3: Account Linking
 
 ### Step 9: Get Your Amazon Account ID
-1. In **Test** tab, type: `open notion data`
+1. In **Test** tab, type: `open Voice Planner`
 2. Click **JSON Input** tab
 3. Find: `context.System.user.userId`
 4. Copy the value (e.g., `amzn1.ask.account.XXXXX`)
 5. **Save this ID** - you'll need it
 
 ### Step 10: Link Account via OAuth Flow
-1. In **Test** tab, type: `link account` or `open notion data`
+1. In **Test** tab, type: `link account` or `open Voice Planner`
 2. **Expected:** You'll see a LinkAccount card response
 3. Click the **"Link Account"** button in the simulator
 4. Browser opens with authorization URL
@@ -112,7 +112,7 @@ This guide walks you through testing the entire flow from user registration to c
 1. **Check database:**
    - `users.amazon_account_id` should be set
    - `oauth_access_tokens` table should have new token
-2. In **Test** tab, type: `open notion data`
+2. In **Test** tab, type: `open Voice Planner`
 3. **Expected:** Welcome message (not LinkAccount card)
 
 ---
@@ -120,8 +120,8 @@ This guide walks you through testing the entire flow from user registration to c
 ## Phase 4: Testing Voice Commands
 
 ### Step 12: Test Launch Request
-1. In **Test** tab, type: `open notion data`
-2. **Expected:** Welcome message like "Welcome to Notion Data..."
+1. In **Test** tab, type: `open Voice Planner`
+2. **Expected:** Welcome message like "Welcome to Voice Planner..."
 
 ### Step 13: Test Adding Tasks
 1. Type: `add finish the report`
@@ -274,7 +274,7 @@ Test all status transitions:
    ```
 2. **Expected:** Active token exists
 
-### Step 24: Verify Notion Data
+### Step 24: Verify Voice Planner
 1. Check Tasks database in Notion
 2. Verify tasks created via voice commands appear
 3. Verify status updates are reflected
@@ -333,7 +333,7 @@ Test all status transitions:
 - [ ] Account linked via OAuth flow
 
 ### Basic Operations
-- [ ] Can launch skill: "open notion data"
+- [ ] Can launch skill: "open Voice Planner"
 - [ ] Can add tasks: "add [task]"
 - [ ] Can list tasks: "what are my tasks"
 - [ ] Can mark complete: "mark [task] as done"
@@ -358,7 +358,7 @@ Test all status transitions:
 - [ ] Can log energy: "log energy 7"
 
 ### Verification
-- [ ] Tasks appear in Notion database
+- [ ] Tasks appear in Voice Plannerbase
 - [ ] CloudWatch logs show successful requests
 - [ ] All databases are accessible
 - [ ] Status updates are reflected in Notion
@@ -377,7 +377,7 @@ Test all status transitions:
 ## Quick Test Commands
 
 ### Basic Operations:
-- `open notion data` - Launch skill
+- `open Voice Planner` - Launch skill
 - `add [task name]` - Add task
 - `what are my tasks` - List tasks
 - `mark [task] as done` - Complete task

@@ -9,7 +9,11 @@ export class LogMealHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name
       : null;
     
-    const canHandle = isIntentRequest && intentName === 'LogMealIntent';
+    // Handle both LogMealPhraseIntent and LogMealStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'LogMealPhraseIntent' || 
+      intentName === 'LogMealStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[LogMealHandler] canHandle check:', {
@@ -32,7 +36,7 @@ export class LogMealHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To log meals, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account.',
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account.',
         'What would you like to do?'
       );
     }
@@ -40,7 +44,8 @@ export class LogMealHandler implements RequestHandler {
     try {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
-      const mealNameSlot = slots.mealName?.value;
+      // Handle both Phrase (mealName) and Structured (mealNameValue) intents
+      const mealNameSlot = slots.mealName?.value || slots.mealNameValue?.value;
       const caloriesSlot = slots.calories?.value;
       const mealDateSlot = slots.mealDate?.value;
 

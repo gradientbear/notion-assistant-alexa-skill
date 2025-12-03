@@ -14,7 +14,11 @@ export class CompleteTaskHandler implements RequestHandler {
     const intentName = isIntentRequest 
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
-    const canHandle = isIntentRequest && intentName === 'CompleteTaskIntent';
+    // Handle both CompleteTaskPhraseIntent and CompleteTaskStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'CompleteTaskPhraseIntent' || 
+      intentName === 'CompleteTaskStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[CompleteTaskHandler] canHandle check:', {
@@ -44,7 +48,7 @@ export class CompleteTaskHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To mark tasks as complete, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
         'Once connected, you can manage your tasks.',
         'What would you like to do?'
       );
@@ -52,7 +56,8 @@ export class CompleteTaskHandler implements RequestHandler {
 
     try {
       const request = handlerInput.requestEnvelope.request as any;
-      const taskNameSlot = request.intent.slots?.taskName?.value;
+      // Handle both Phrase (taskName) and Structured (taskNameValue) intents
+      const taskNameSlot = request.intent.slots?.taskName?.value || request.intent.slots?.taskNameValue?.value;
       
       console.log('[CompleteTaskHandler] Slots:', {
         taskName: taskNameSlot
