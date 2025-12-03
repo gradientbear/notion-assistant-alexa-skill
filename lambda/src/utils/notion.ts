@@ -32,6 +32,8 @@ export async function findDatabaseByName(
   databaseName: string
 ): Promise<string | null> {
   try {
+    console.log(`[findDatabaseByName] Searching for database: "${databaseName}"`);
+    
     const response = await withRetry(() =>
       client.search({
         query: databaseName,
@@ -42,13 +44,51 @@ export async function findDatabaseByName(
       })
     );
 
-    const database = response.results.find(
+    console.log(`[findDatabaseByName] Search returned ${response.results.length} results`);
+    
+    // Try exact match first (case-sensitive)
+    let database = response.results.find(
       (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === databaseName
     );
-
-    return database ? (database as any).id : null;
-  } catch (error) {
-    console.error(`Error finding database ${databaseName}:`, error);
+    
+    // If no exact match, try case-insensitive
+    if (!database) {
+      const lowerName = databaseName.toLowerCase();
+      database = response.results.find(
+        (item: any) => {
+          const itemTitle = item.title?.[0]?.plain_text || '';
+          return item.object === 'database' && itemTitle.toLowerCase() === lowerName;
+        }
+      );
+    }
+    
+    // Log all found databases for debugging
+    if (response.results.length > 0) {
+      console.log('[findDatabaseByName] Found databases:', 
+        response.results.map((item: any) => ({
+          id: item.id,
+          title: item.title?.[0]?.plain_text || 'No title',
+          object: item.object
+        }))
+      );
+    }
+    
+    if (database) {
+      const dbId = (database as any).id;
+      const dbTitle = (database as any).title?.[0]?.plain_text || 'Unknown';
+      console.log(`[findDatabaseByName] ✓ Found database "${dbTitle}" with ID: ${dbId}`);
+      return dbId;
+    }
+    
+    console.warn(`[findDatabaseByName] ✗ Database "${databaseName}" not found`);
+    return null;
+  } catch (error: any) {
+    console.error(`[findDatabaseByName] Error finding database "${databaseName}":`, {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      body: error?.body
+    });
     return null;
   }
 }

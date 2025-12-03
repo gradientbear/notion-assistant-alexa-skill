@@ -40,9 +40,12 @@ export class AuthInterceptor implements RequestInterceptor {
       // Get access token from Alexa request
       const accessToken = (handlerInput.requestEnvelope.context?.System?.user as any)?.accessToken;
 
-      // If no token, try legacy lookup by userId
+      // If no token, require proper account linking (OAuth2)
+      // Legacy lookup is disabled by default - only enable if explicitly set
+      const allowLegacyLookup = process.env.ALLOW_LEGACY_LOOKUP === 'true';
+      
       if (!accessToken) {
-        console.log('[AuthInterceptor] No access token, falling back to legacy lookup');
+        console.log('[AuthInterceptor] No access token found');
         const userId = handlerInput.requestEnvelope.session?.user?.userId;
         
         // For LaunchRequest, skip the async lookup here - let LaunchRequestHandler do it
@@ -52,9 +55,9 @@ export class AuthInterceptor implements RequestInterceptor {
           return; // Let LaunchRequestHandler handle the lookup and LinkAccount response
         }
         
-        // For other request types, do the legacy lookup
-        if (userId) {
-          console.log('[AuthInterceptor] Attempting legacy lookup for userId:', userId);
+        // Legacy lookup only if explicitly enabled (for migration/testing)
+        if (allowLegacyLookup && userId) {
+          console.log('[AuthInterceptor] Legacy lookup enabled, attempting lookup for userId:', userId);
           try {
             const user = await getUserByAmazonId(userId);
             if (user) {
@@ -70,7 +73,7 @@ export class AuthInterceptor implements RequestInterceptor {
             }
           } catch (lookupError: any) {
             console.error('[AuthInterceptor] Legacy lookup error:', lookupError);
-            // Continue to throw error
+            // Continue to require account linking
           }
         }
 

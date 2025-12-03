@@ -80,11 +80,27 @@ export class AddTaskHandler implements RequestHandler {
         );
       }
 
-      const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
+      // Try to use stored database ID first, fallback to search
+      let tasksDbId = user.tasks_db_id || null;
+      
+      if (!tasksDbId) {
+        console.log('[AddTaskHandler] tasks_db_id not found in user record, searching by name...');
+        tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
+        
+        // If found via search, update user record for future use
+        if (tasksDbId) {
+          console.log('[AddTaskHandler] Found Tasks database via search, consider updating user record');
+        }
+      } else {
+        console.log('[AddTaskHandler] Using stored tasks_db_id:', tasksDbId);
+      }
+      
       if (!tasksDbId) {
         return buildResponse(
           handlerInput,
-          'I couldn\'t find your Tasks database in Notion. Please make sure it exists and try again.',
+          'I couldn\'t find your Tasks database in Notion. ' +
+          'Please make sure the database exists and is named exactly "Tasks". ' +
+          'You can reconnect your Notion account in the app to set it up again.',
           'What would you like to do?'
         );
       }

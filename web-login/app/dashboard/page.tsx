@@ -390,17 +390,19 @@ export default function DashboardPage() {
               {(() => {
                 const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
                                          process.env.NODE_ENV === 'development';
-                // Enable if Notion is connected AND JWT token exists (or in test mode)
+                // Enable if Notion is connected AND (license is active OR skipLicenseCheck) AND JWT token exists
                 const hasNotionConnection = !!user.notion_token;
                 const hasJwtToken = user.has_jwt_token || skipLicenseCheck;
-                const canLink = hasNotionConnection && hasJwtToken && !user.amazon_account_id;
+                const licenseOk = licenseActive || skipLicenseCheck;
+                const canLink = hasNotionConnection && hasJwtToken && licenseOk && !user.amazon_account_id;
                 
                 console.log('[Dashboard] Alexa link button check:', {
                   hasNotionConnection,
                   hasJwtToken,
-                  notionSetupComplete: user.notion_setup_complete,
                   licenseActive,
+                  licenseOk,
                   skipLicenseCheck,
+                  notionSetupComplete: user.notion_setup_complete,
                   canLink,
                   hasAmazonAccount: !!user.amazon_account_id,
                 });

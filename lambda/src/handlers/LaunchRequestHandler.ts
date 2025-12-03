@@ -84,7 +84,11 @@ export class LaunchRequestHandler implements RequestHandler {
         email: user?.email
       });
       
-      // PRIORITY 3: No user found - require account linking
+      // PRIORITY 3: No user found OR no access token - require account linking
+      // IMPORTANT: Only allow legacy lookup if explicitly enabled via environment variable
+      // Otherwise, require proper OAuth token for account linking
+      const allowLegacyLookup = process.env.ALLOW_LEGACY_LOOKUP === 'true';
+      
       if (!user) {
         console.log('[LaunchRequestHandler] User not found - requiring account linking');
         const linkResponse = buildLinkAccountResponse(handlerInput);
@@ -93,6 +97,14 @@ export class LaunchRequestHandler implements RequestHandler {
           type: typeof linkResponse
         });
         console.log('[LaunchRequestHandler] Returning LinkAccount response');
+        return linkResponse;
+      }
+      
+      // If user found via legacy lookup but no access token, still require proper linking
+      const hasAccessToken = !!(handlerInput.requestEnvelope.context?.System?.user as any)?.accessToken;
+      if (!hasAccessToken && !allowLegacyLookup) {
+        console.log('[LaunchRequestHandler] User found but no access token - requiring proper account linking');
+        const linkResponse = buildLinkAccountResponse(handlerInput);
         return linkResponse;
       }
 
