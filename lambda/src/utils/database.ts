@@ -19,41 +19,200 @@ if (!supabaseUrl || !supabaseKey) {
   throw error;
 }
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey);
+// Configure Supabase client with timeout for Lambda environment
+// Note: Supabase client uses default fetch which should work, but we handle timeouts in queries
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
+  db: {
+    schema: 'public',
+  },
+});
 console.log('[Database] Supabase client created successfully');
 
+/**
+ * Get user by Supabase Auth user ID (OAuth2 flow)
+ * This is the primary method for OAuth2 users
+ */
+export async function getUserByAuthUserId(authUserId: string): Promise<User | null> {
+  console.log('[getUserByAuthUserId] Looking up user with auth_user_id:', authUserId);
+  
+  try {
+    const queryPromise = supabase
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
+      setTimeout(() => {
+        console.warn('[getUserByAuthUserId] Query timeout after 5 seconds');
+        resolve({ data: null, error: { code: 'TIMEOUT' } });
+      }, 5000); // Increased from 1.5s to 5s for network latency
+    });
+
+    const result = await Promise.race([queryPromise, timeoutPromise]);
+    const { data, error } = result as any;
+
+    if (error) {
+      if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
+        console.error('[getUserByAuthUserId] Supabase error:', error);
+      } else if (error.code === 'PGRST116') {
+        console.log('[getUserByAuthUserId] No user found (expected for new users)');
+      }
+      return null;
+    }
+
+    if (!data) {
+      console.log('[getUserByAuthUserId] No user found with auth_user_id:', authUserId);
+      return null;
+    }
+
+    console.log('[getUserByAuthUserId] User found:', {
+      id: data.id,
+      email: data.email,
+      hasNotionToken: !!data.notion_token,
+      notionTokenLength: data.notion_token?.length || 0
+    });
+
+    return data as User;
+  } catch (err: any) {
+    console.error('[getUserByAuthUserId] Unexpected error:', {
+      message: err?.message,
+      stack: err?.stack
+    });
+    return null;
+  }
+}
+
+/**
+ * Get user by Amazon account ID (Legacy fallback)
+ * Only used for backward compatibility with old users who haven't migrated to OAuth2
+ */
 export async function getUserByAmazonId(amazonAccountId: string): Promise<User | null> {
   console.log('[getUserByAmazonId] Looking up user with amazon_account_id:', amazonAccountId);
+  console.log('[getUserByAmazonId] Supabase URL:', supabaseUrl);
+  console.log('[getUserByAmazonId] Has service key:', !!supabaseKey);
   
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('amazon_account_id', amazonAccountId)
-    .maybeSingle(); // Use maybeSingle() to handle "no rows found" gracefully
+  try {
+    const startTime = Date.now();
+    
+    // Try direct REST API call as fallback if Supabase client hangs
+    // This bypasses the Supabase JS client which might have connection issues
+    const directQuery = async () => {
+      try {
+        const queryUrl = `${supabaseUrl}/rest/v1/users?amazon_account_id=eq.${encodeURIComponent(amazonAccountId)}&select=*`;
+        console.log('[getUserByAmazonId] Trying direct REST API call...');
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5 second timeout
+        
+        const response = await fetch(queryUrl, {
+          method: 'GET',
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation',
+          },
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          if (response.status === 404 || response.status === 406) {
+            // No rows found - expected
+            return { data: null, error: { code: 'PGRST116', message: 'No rows found' } };
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return { data: Array.isArray(data) ? (data[0] || null) : data, error: null };
+      } catch (fetchError: any) {
+        if (fetchError.name === 'AbortError') {
+          throw new Error('TIMEOUT');
+        }
+        throw fetchError;
+      }
+    };
+    
+    // Use direct REST API first (more reliable in Lambda environment)
+    // Supabase JS client can hang in Lambda due to connection pooling issues
+    let result: any;
+    
+    try {
+      console.log('[getUserByAmazonId] Using direct REST API (more reliable in Lambda)...');
+      result = await directQuery();
+    } catch (directError: any) {
+      console.warn('[getUserByAmazonId] Direct REST API failed, trying Supabase client as fallback:', directError.message);
+      
+      // Fallback to Supabase client if direct API fails
+      try {
+        const queryPromise = supabase
+          .from('users')
+          .select('*')
+          .eq('amazon_account_id', amazonAccountId)
+          .maybeSingle();
 
-  if (error) {
-    // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
-    if (error.code !== 'PGRST116') {
-      console.error('[getUserByAmazonId] Supabase error:', error);
-    } else {
-      console.log('[getUserByAmazonId] No user found (expected for new users)');
+        const timeoutPromise = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) => {
+          setTimeout(() => {
+            const elapsed = Date.now() - startTime;
+            console.warn('[getUserByAmazonId] Supabase client query timeout after 2 seconds (elapsed:', elapsed, 'ms)');
+            resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timeout' } });
+          }, 2000); // 2 second timeout for fallback
+        });
+
+        result = await Promise.race([queryPromise, timeoutPromise]);
+        
+        if (result && result.error && result.error.code === 'TIMEOUT') {
+          console.error('[getUserByAmazonId] Both direct API and Supabase client failed');
+          throw new Error('All query methods timed out');
+        }
+      } catch (clientError: any) {
+        console.error('[getUserByAmazonId] Supabase client fallback also failed:', clientError.message);
+        throw clientError;
+      }
     }
+    const elapsed = Date.now() - startTime;
+    console.log('[getUserByAmazonId] Promise.race resolved in', elapsed, 'ms');
+    console.log('[getUserByAmazonId] Result type:', typeof result);
+    console.log('[getUserByAmazonId] Result keys:', result ? Object.keys(result) : 'null');
+    
+    const { data, error } = result as any;
+    console.log('[getUserByAmazonId] Extracted data:', !!data, 'error:', error ? { code: error.code, message: error.message } : 'none');
+
+    if (error) {
+      // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
+      if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
+        console.error('[getUserByAmazonId] Supabase error:', JSON.stringify(error, null, 2));
+      } else if (error.code === 'PGRST116') {
+        console.log('[getUserByAmazonId] No user found (expected for new users)');
+      } else if (error.code === 'TIMEOUT') {
+        console.warn('[getUserByAmazonId] Query timed out');
+      }
+      return null;
+    }
+
+    if (!data) {
+      console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
+      return null;
+    }
+
+    console.log('[getUserByAmazonId] User found:', {
+      id: data.id,
+      email: data.email,
+      hasNotionToken: !!data.notion_token,
+      notionTokenLength: data.notion_token?.length || 0
+    });
+
+    return data as User;
+  } catch (err: any) {
+    console.error('[getUserByAmazonId] Unexpected error:', {
+      message: err?.message,
+      stack: err?.stack
+    });
     return null;
   }
-
-  if (!data) {
-    console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
-    return null;
-  }
-
-  console.log('[getUserByAmazonId] User found:', {
-    id: data.id,
-    email: data.email,
-    hasNotionToken: !!data.notion_token,
-    notionTokenLength: data.notion_token?.length || 0
-  });
-
-  return data as User;
 }
 
 export async function createUser(
@@ -103,7 +262,10 @@ export async function updateUserNotionSetup(
   setupData: {
     privacyPageId?: string | null;
     tasksDbId?: string | null;
-    focusLogsDbId?: string | null;
+    shoppingDbId?: string | null;
+    workoutsDbId?: string | null;
+    mealsDbId?: string | null;
+    notesDbId?: string | null;
     energyLogsDbId?: string | null;
     setupComplete?: boolean;
   }
@@ -118,8 +280,17 @@ export async function updateUserNotionSetup(
   if (setupData.tasksDbId !== undefined) {
     updateData.tasks_db_id = setupData.tasksDbId;
   }
-  if (setupData.focusLogsDbId !== undefined) {
-    updateData.focus_logs_db_id = setupData.focusLogsDbId;
+  if (setupData.shoppingDbId !== undefined) {
+    updateData.shopping_db_id = setupData.shoppingDbId;
+  }
+  if (setupData.workoutsDbId !== undefined) {
+    updateData.workouts_db_id = setupData.workoutsDbId;
+  }
+  if (setupData.mealsDbId !== undefined) {
+    updateData.meals_db_id = setupData.mealsDbId;
+  }
+  if (setupData.notesDbId !== undefined) {
+    updateData.notes_db_id = setupData.notesDbId;
   }
   if (setupData.energyLogsDbId !== undefined) {
     updateData.energy_logs_db_id = setupData.energyLogsDbId;

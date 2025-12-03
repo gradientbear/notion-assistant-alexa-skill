@@ -144,7 +144,7 @@ export default function AdminPage() {
   return (
     <div className={styles.container}>
       <div className={styles.header}>
-        <h1>Notion Data - Admin Panel</h1>
+        <h1>Voice Planner - Admin Panel</h1>
         <button onClick={loadData} className={styles.refreshBtn}>
           Refresh
         </button>

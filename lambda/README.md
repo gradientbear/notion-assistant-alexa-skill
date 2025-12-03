@@ -1,6 +1,6 @@
 # Lambda Backend
 
-AWS Lambda function for the Notion Data Alexa Skill.
+AWS Lambda function for the Voice Planner Alexa Skill.
 
 ## Setup
 

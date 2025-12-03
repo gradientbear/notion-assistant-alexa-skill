@@ -122,7 +122,7 @@ export default function LicensePage() {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-4">Enter License Key</h1>
         <p className="text-gray-600 mb-6">
-          Enter your license key to activate the Notion Data Alexa skill.
+          Enter your license key to activate the Voice Planner Alexa skill.
         </p>
 
         {error && (

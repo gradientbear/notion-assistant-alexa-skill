@@ -1,5 +1,5 @@
 import { Client } from '@notionhq/client';
-import { NotionTask, NotionFocusLog, NotionEnergyLog } from '../types';
+import { NotionTask, NotionFocusLog, NotionEnergyLog, NotionShoppingItem, NotionWorkout, NotionMeal, NotionNote } from '../types';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
@@ -57,25 +57,30 @@ export async function addTask(
   client: Client,
   databaseId: string,
   taskName: string,
-  priority: 'High' | 'Medium' | 'Low' = 'Medium',
-  category: 'Work' | 'Personal' | 'Fitness' | 'Shopping' = 'Personal',
-  dueDate?: string
+  priority: 'low' | 'normal' | 'high' | 'urgent' = 'normal',
+  category: 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general' = 'personal',
+  dueDate?: string,
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly',
+  tags?: string[]
 ): Promise<string> {
+  // Ensure recurrence defaults to 'none' if not provided
+  const recurrenceValue: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' = recurrence || 'none';
+  
   const properties: any = {
-    'Task Name': {
+    Name: {
       title: [{ text: { content: taskName } }],
     },
     Priority: {
       select: { name: priority },
     },
     Status: {
-      select: { name: 'To Do' },
+      select: { name: 'to do' },
     },
     Category: {
       select: { name: category },
     },
-    Deleted: {
-      checkbox: false,
+    Recurring: {
+      select: { name: recurrenceValue },
     },
   };
 
@@ -84,6 +89,17 @@ export async function addTask(
       date: { start: dueDate },
     };
   }
+
+  if (tags && tags.length > 0) {
+    properties.Tags = {
+      multi_select: tags.map(tag => ({ name: tag })),
+    };
+  }
+
+  // Store NotionID (will be set after creation)
+  properties.NotionID = {
+    rich_text: [{ text: { content: '' } }], // Will be updated after creation
+  };
 
   try {
     const response = await withRetry(() =>
@@ -105,29 +121,21 @@ export async function addTask(
       databaseId
     });
     
-    // Small delay to ensure Notion has processed the creation
-    await sleep(200);
-    
-    // Verify the page was actually created by trying to retrieve it
+    // Update NotionID property with the page ID
     try {
-      const verifyResponse = await withRetry(() =>
-        client.pages.retrieve({ page_id: response.id })
+      await withRetry(() =>
+        client.pages.update({
+          page_id: response.id,
+          properties: {
+            NotionID: {
+              rich_text: [{ text: { content: response.id } }],
+            },
+          },
+        })
       );
-      if (verifyResponse && verifyResponse.id === response.id) {
-        console.log('[addTask] Task verified - page exists:', response.id);
-      } else {
-        console.warn('[addTask] Task verification failed - page may not exist:', {
-          expectedId: response.id,
-          retrievedId: verifyResponse?.id
-        });
-      }
-    } catch (verifyError: any) {
-      console.error('[addTask] Failed to verify task creation:', {
-        pageId: response.id,
-        error: verifyError?.message,
-        status: verifyError?.status
-      });
-      // Don't throw - the page was created, verification is just a check
+    } catch (updateError: any) {
+      console.warn('[addTask] Failed to update NotionID property:', updateError?.message);
+      // Don't throw - task was created successfully
     }
     
     return response.id;
@@ -154,17 +162,9 @@ export async function getTopPriorityTasks(
       client.databases.query({
         database_id: databaseId,
         filter: {
-          and: [
-            {
-              property: 'Deleted',
-              checkbox: { equals: false },
-            },
-            {
-              or: [
-                { property: 'Status', select: { equals: 'To Do' } },
-                { property: 'Status', select: { equals: 'In Progress' } },
-              ],
-            },
+          or: [
+            { property: 'Status', select: { equals: 'to do' } },
+            { property: 'Status', select: { equals: 'in progress' } },
           ],
         },
         sorts: [
@@ -175,19 +175,7 @@ export async function getTopPriorityTasks(
       })
     );
 
-    return response.results.map((page: any) => {
-      const props = page.properties;
-      return {
-        id: page.id,
-        name: props['Task Name']?.title?.[0]?.plain_text || 'Untitled',
-        priority: props.Priority?.select?.name || 'Medium',
-        dueDate: props['Due Date']?.date?.start || null,
-        status: props.Status?.select?.name || 'To Do',
-        category: props.Category?.select?.name || 'Personal',
-        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
-        deleted: props.Deleted?.checkbox || false,
-      };
-    });
+    return response.results.map(mapPageToTask);
   } catch (error) {
     console.error('Error getting priority tasks:', error);
     return [];
@@ -208,10 +196,6 @@ export async function getTodayTasks(
         filter: {
           and: [
             {
-              property: 'Deleted',
-              checkbox: { equals: false },
-            },
-            {
               property: 'Due Date',
               date: {
                 on_or_before: tomorrow,
@@ -219,8 +203,8 @@ export async function getTodayTasks(
             },
             {
               or: [
-                { property: 'Status', select: { equals: 'To Do' } },
-                { property: 'Status', select: { equals: 'In Progress' } },
+                { property: 'Status', select: { equals: 'to do' } },
+                { property: 'Status', select: { equals: 'in progress' } },
               ],
             },
           ],
@@ -232,25 +216,15 @@ export async function getTodayTasks(
       })
     );
 
-    return response.results.map((page: any) => {
-      const props = page.properties;
-      return {
-        id: page.id,
-        name: props['Task Name']?.title?.[0]?.plain_text || 'Untitled',
-        priority: props.Priority?.select?.name || 'Medium',
-        dueDate: props['Due Date']?.date?.start || null,
-        status: props.Status?.select?.name || 'To Do',
-        category: props.Category?.select?.name || 'Personal',
-        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
-        deleted: props.Deleted?.checkbox || false,
-      };
-    });
+    return response.results.map(mapPageToTask);
   } catch (error) {
     console.error('Error getting today tasks:', error);
     return [];
   }
 }
 
+// Note: Shopping is now a separate database, not a category in Tasks
+// This function is kept for backward compatibility but should use Shopping database
 export async function getShoppingListTasks(
   client: Client,
   databaseId: string
@@ -261,85 +235,88 @@ export async function getShoppingListTasks(
         database_id: databaseId,
         filter: {
           and: [
-            {
-              property: 'Deleted',
-              checkbox: { equals: false },
-            },
-            { property: 'Category', select: { equals: 'Shopping' } },
+            { property: 'Category', select: { equals: 'shopping' } },
             {
               or: [
-                { property: 'Status', select: { equals: 'To Do' } },
-                { property: 'Status', select: { equals: 'In Progress' } },
+                { property: 'Status', select: { equals: 'to do' } },
+                { property: 'Status', select: { equals: 'in progress' } },
               ],
             },
           ],
         },
-        sorts: [{ property: 'Task Name', direction: 'ascending' }],
+        sorts: [{ property: 'Name', direction: 'ascending' }],
       })
     );
 
-    return response.results.map((page: any) => {
-      const props = page.properties;
-      return {
-        id: page.id,
-        name: props['Task Name']?.title?.[0]?.plain_text || 'Untitled',
-        priority: props.Priority?.select?.name || 'Medium',
-        dueDate: props['Due Date']?.date?.start || null,
-        status: props.Status?.select?.name || 'To Do',
-        category: props.Category?.select?.name || 'Shopping',
-        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
-        deleted: props.Deleted?.checkbox || false,
-      };
-    });
+    return response.results.map(mapPageToTask);
   } catch (error) {
     console.error('Error getting shopping list:', error);
     return [];
   }
 }
 
+// Helper function to normalize priority value (convert old to new format)
+function normalizePriority(priority: string): 'low' | 'normal' | 'high' | 'urgent' {
+  const normalized = priority.toLowerCase();
+  if (normalized === 'medium') return 'normal';
+  if (['low', 'normal', 'high', 'urgent'].includes(normalized)) {
+    return normalized as 'low' | 'normal' | 'high' | 'urgent';
+  }
+  return 'normal';
+}
+
+// Helper function to normalize status value
+function normalizeStatus(status: string): 'to do' | 'in progress' | 'done' {
+  const normalized = status.toLowerCase();
+  if (normalized === 'to do' || normalized === 'todo' || normalized === 'to-do') return 'to do';
+  if (normalized === 'in progress' || normalized === 'in-progress' || normalized === 'doing') return 'in progress';
+  if (normalized === 'done' || normalized === 'complete' || normalized === 'completed' || normalized === 'finished') return 'done';
+  return 'to do';
+}
+
+// Helper function to normalize category value
+function normalizeCategory(category: string): 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general' {
+  const normalized = category.toLowerCase();
+  const validCategories: Array<'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general'> = 
+    ['work', 'personal', 'shopping', 'fitness', 'health', 'notes', 'general'];
+  if (validCategories.includes(normalized as any)) {
+    return normalized as any;
+  }
+  return 'personal';
+}
+
 // Helper function to map page to NotionTask
 function mapPageToTask(page: any): NotionTask {
   const props = page.properties;
+  const priorityRaw = props.Priority?.select?.name || 'normal';
+  const statusRaw = props.Status?.select?.name || 'to do';
+  const categoryRaw = props.Category?.select?.name || 'personal';
+  
   return {
     id: page.id,
-    name: props['Task Name']?.title?.[0]?.plain_text || 'Untitled',
-    priority: props.Priority?.select?.name || 'Medium',
+    name: props.Name?.title?.[0]?.plain_text || 'Untitled',
+    priority: normalizePriority(priorityRaw),
     dueDate: props['Due Date']?.date?.start || null,
-    status: props.Status?.select?.name || 'To Do',
-    category: props.Category?.select?.name || 'Personal',
+    status: normalizeStatus(statusRaw),
+    category: normalizeCategory(categoryRaw),
     notes: props.Notes?.rich_text?.[0]?.plain_text || null,
-    deleted: props.Deleted?.checkbox || false,
+    tags: props.Tags?.multi_select?.map((tag: any) => tag.name) || [],
+    recurring: normalizeRecurring(props.Recurring?.select?.name || 'none'),
+    completedAt: props['Completed At']?.date?.start || null,
+    createdAt: props['Created At']?.created_time || null,
+    notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
   };
 }
 
-// Helper function to add deleted filter to existing filter
-function addDeletedFilter(existingFilter: any): any {
-  if (existingFilter.and) {
-    return {
-      and: [
-        { property: 'Deleted', checkbox: { equals: false } },
-        ...existingFilter.and,
-      ],
-    };
-  } else if (existingFilter.or) {
-    return {
-      and: [
-        { property: 'Deleted', checkbox: { equals: false } },
-        existingFilter,
-      ],
-    };
-  } else {
-    return {
-      and: [
-        { property: 'Deleted', checkbox: { equals: false } },
-        existingFilter,
-      ],
-    };
-  }
+function normalizeRecurring(recurring: string): 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' {
+  const normalized = recurring.toLowerCase();
+  const valid: Array<'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'> = ['none', 'daily', 'weekly', 'monthly', 'yearly'];
+  if (valid.includes(normalized as any)) return normalized as any;
+  return 'none';
 }
 
 /**
- * Get all tasks (excluding deleted)
+ * Get all tasks (excluding done/completed)
  */
 export async function getAllTasks(
   client: Client,
@@ -350,8 +327,10 @@ export async function getAllTasks(
       client.databases.query({
         database_id: databaseId,
         filter: {
-          property: 'Deleted',
-          checkbox: { equals: false },
+          or: [
+            { property: 'Status', select: { equals: 'to do' } },
+            { property: 'Status', select: { equals: 'in progress' } },
+          ],
         },
         sorts: [
           { property: 'Priority', direction: 'descending' },
@@ -372,16 +351,17 @@ export async function getAllTasks(
 export async function getTasksByPriority(
   client: Client,
   databaseId: string,
-  priority: 'High' | 'Medium' | 'Low'
+  priority: 'low' | 'normal' | 'high' | 'urgent'
 ): Promise<NotionTask[]> {
   try {
+    const normalizedPriority = normalizePriority(priority);
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           property: 'Priority',
-          select: { equals: priority },
-        }),
+          select: { equals: normalizedPriority },
+        },
         sorts: [
           { property: 'Due Date', direction: 'ascending' },
         ],
@@ -400,16 +380,17 @@ export async function getTasksByPriority(
 export async function getTasksByStatus(
   client: Client,
   databaseId: string,
-  status: 'To Do' | 'In Progress' | 'Done'
+  status: 'to do' | 'in progress' | 'done'
 ): Promise<NotionTask[]> {
   try {
+    const normalizedStatus = normalizeStatus(status);
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           property: 'Status',
-          select: { equals: status },
-        }),
+          select: { equals: normalizedStatus },
+        },
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date', direction: 'ascending' },
@@ -429,16 +410,17 @@ export async function getTasksByStatus(
 export async function getTasksByCategory(
   client: Client,
   databaseId: string,
-  category: 'Work' | 'Personal' | 'Fitness' | 'Shopping'
+  category: 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general'
 ): Promise<NotionTask[]> {
   try {
+    const normalizedCategory = normalizeCategory(category);
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           property: 'Category',
-          select: { equals: category },
-        }),
+          select: { equals: normalizedCategory },
+        },
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date', direction: 'ascending' },
@@ -453,7 +435,7 @@ export async function getTasksByCategory(
 }
 
 /**
- * Get pending tasks (To Do or In Progress)
+ * Get pending tasks (to do or in progress)
  */
 export async function getPendingTasks(
   client: Client,
@@ -463,12 +445,12 @@ export async function getPendingTasks(
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           or: [
-            { property: 'Status', select: { equals: 'To Do' } },
-            { property: 'Status', select: { equals: 'In Progress' } },
+            { property: 'Status', select: { equals: 'to do' } },
+            { property: 'Status', select: { equals: 'in progress' } },
           ],
-        }),
+        },
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date', direction: 'ascending' },
@@ -494,7 +476,7 @@ export async function getOverdueTasks(
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           and: [
             {
               property: 'Due Date',
@@ -502,12 +484,12 @@ export async function getOverdueTasks(
             },
             {
               or: [
-                { property: 'Status', select: { equals: 'To Do' } },
-                { property: 'Status', select: { equals: 'In Progress' } },
+                { property: 'Status', select: { equals: 'to do' } },
+                { property: 'Status', select: { equals: 'in progress' } },
               ],
             },
           ],
-        }),
+        },
         sorts: [
           { property: 'Due Date', direction: 'ascending' },
         ],
@@ -532,10 +514,10 @@ export async function getTasksDueTomorrow(
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           property: 'Due Date',
           date: { equals: tomorrow },
-        }),
+        },
         sorts: [
           { property: 'Priority', direction: 'descending' },
         ],
@@ -551,6 +533,37 @@ export async function getTasksDueTomorrow(
 /**
  * Get tasks due this week (next 7 days)
  */
+/**
+ * Get tasks by date range
+ */
+export async function getTasksByDate(
+  client: Client,
+  databaseId: string,
+  date: string
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: {
+          property: 'Due Date',
+          date: { equals: date },
+        },
+        sorts: [
+          { property: 'Priority', direction: 'descending' },
+        ],
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('Error getting tasks by date:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tasks due this week
+ */
 export async function getTasksDueThisWeek(
   client: Client,
   databaseId: string
@@ -561,7 +574,7 @@ export async function getTasksDueThisWeek(
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: addDeletedFilter({
+        filter: {
           and: [
             {
               property: 'Due Date',
@@ -572,7 +585,7 @@ export async function getTasksDueThisWeek(
               date: { on_or_before: nextWeek },
             },
           ],
-        }),
+        },
         sorts: [
           { property: 'Due Date', direction: 'ascending' },
           { property: 'Priority', direction: 'descending' },
@@ -597,14 +610,13 @@ export async function getCompletedTasks(
   try {
     let filter: any = {
       property: 'Status',
-      select: { equals: 'Done' },
+      select: { equals: 'done' },
     };
 
     if (timeRange) {
       filter = {
         and: [
-          { property: 'Deleted', checkbox: { equals: false } },
-          { property: 'Status', select: { equals: 'Done' } },
+          { property: 'Status', select: { equals: 'done' } },
           {
             property: 'Due Date',
             date: {
@@ -614,8 +626,6 @@ export async function getCompletedTasks(
           },
         ],
       };
-    } else {
-      filter = addDeletedFilter(filter);
     }
 
     const response = await withRetry(() =>
@@ -635,31 +645,14 @@ export async function getCompletedTasks(
 }
 
 /**
- * Get tasks by date range
+ * Get tasks by date range (alias for getTasksByDate)
  */
 export async function getTasksByDateRange(
   client: Client,
   databaseId: string,
   date: string
 ): Promise<NotionTask[]> {
-  try {
-    const response = await withRetry(() =>
-      client.databases.query({
-        database_id: databaseId,
-        filter: addDeletedFilter({
-          property: 'Due Date',
-          date: { equals: date },
-        }),
-        sorts: [
-          { property: 'Priority', direction: 'descending' },
-        ],
-      })
-    );
-    return response.results.map(mapPageToTask);
-  } catch (error) {
-    console.error('Error getting tasks by date range:', error);
-    return [];
-  }
+  return getTasksByDate(client, databaseId, date);
 }
 
 /**
@@ -677,41 +670,66 @@ export async function getCompletedTasksForDeletion(
  */
 export function parseTaskFromUtterance(utterance: string): {
   taskName: string;
-  priority?: 'High' | 'Medium' | 'Low';
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
   dueDate?: string;
-  category?: 'Work' | 'Personal' | 'Fitness' | 'Shopping';
+  category?: 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general';
+  recurrence?: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
 } {
   const lowerUtterance = utterance.toLowerCase().trim();
   let taskName = utterance.trim();
-  let priority: 'High' | 'Medium' | 'Low' | undefined;
+  let priority: 'low' | 'normal' | 'high' | 'urgent' | undefined;
   let dueDate: string | undefined;
-  let category: 'Work' | 'Personal' | 'Fitness' | 'Shopping' | undefined;
+  let category: 'work' | 'personal' | 'shopping' | 'fitness' | 'health' | 'notes' | 'general' | undefined;
+  let recurrence: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly' | undefined;
 
   // First, remove common prefixes
   taskName = taskName.replace(/^(add|remind me to|remind me)\s+/i, '').trim();
 
   // Parse priority (must check before removing other parts)
-  if (lowerUtterance.includes('high priority') || lowerUtterance.includes('urgent')) {
-    priority = 'High';
-    taskName = taskName.replace(/\b(high\s+priority|urgent)\b/gi, '').trim();
-  } else if (lowerUtterance.includes('low priority')) {
-    priority = 'Low';
-    taskName = taskName.replace(/\blow\s+priority\b/gi, '').trim();
+  if (lowerUtterance.includes('urgent') || lowerUtterance.includes('asap')) {
+    priority = 'urgent';
+    taskName = taskName.replace(/\b(urgent|asap)\b/gi, '').trim();
+  } else if (lowerUtterance.includes('high priority') || lowerUtterance.includes('high')) {
+    priority = 'high';
+    taskName = taskName.replace(/\b(high\s+priority|high)\b/gi, '').trim();
+  } else if (lowerUtterance.includes('low priority') || lowerUtterance.includes('low')) {
+    priority = 'low';
+    taskName = taskName.replace(/\b(low\s+priority|low)\b/gi, '').trim();
+  }
+
+  // Parse recurrence
+  if (lowerUtterance.includes('daily') || lowerUtterance.includes('every day')) {
+    recurrence = 'daily';
+    taskName = taskName.replace(/\b(daily|every\s+day)\b/gi, '').trim();
+  } else if (lowerUtterance.includes('weekly') || lowerUtterance.includes('every week')) {
+    recurrence = 'weekly';
+    taskName = taskName.replace(/\b(weekly|every\s+week)\b/gi, '').trim();
+  } else if (lowerUtterance.includes('monthly') || lowerUtterance.includes('every month')) {
+    recurrence = 'monthly';
+    taskName = taskName.replace(/\b(monthly|every\s+month)\b/gi, '').trim();
+  } else if (lowerUtterance.includes('yearly') || lowerUtterance.includes('every year')) {
+    recurrence = 'yearly';
+    taskName = taskName.replace(/\b(yearly|every\s+year)\b/gi, '').trim();
   }
 
   // Parse category (be more specific to avoid false matches)
-  // Check for "work task" or "to work" patterns
   if (lowerUtterance.match(/\b(work\s+task|to\s+work|work:)\b/)) {
-    category = 'Work';
+    category = 'work';
     taskName = taskName.replace(/\b(work\s+task|to\s+work|work:)\b/gi, '').trim();
   } else if (lowerUtterance.match(/\b(fitness|workout|to\s+fitness|fitness:)\b/)) {
-    category = 'Fitness';
+    category = 'fitness';
     taskName = taskName.replace(/\b(fitness|workout|to\s+fitness|fitness:)\b/gi, '').trim();
   } else if (lowerUtterance.match(/\b(to\s+shopping|shopping|shopping\s+list)\b/)) {
-    category = 'Shopping';
+    category = 'shopping';
     taskName = taskName.replace(/\b(to\s+shopping|shopping|shopping\s+list)\b/gi, '').trim();
+  } else if (lowerUtterance.match(/\b(health|medical|doctor)\b/)) {
+    category = 'health';
+    taskName = taskName.replace(/\b(health|medical|doctor)\b/gi, '').trim();
+  } else if (lowerUtterance.match(/\b(notes|journal)\b/)) {
+    category = 'notes';
+    taskName = taskName.replace(/\b(notes|journal)\b/gi, '').trim();
   } else if (lowerUtterance.match(/\b(personal|to\s+personal|personal:)\b/)) {
-    category = 'Personal';
+    category = 'personal';
     taskName = taskName.replace(/\b(personal|to\s+personal|personal:)\b/gi, '').trim();
   }
 
@@ -802,92 +820,46 @@ export function parseTaskFromUtterance(utterance: string): {
       .trim();
   }
 
-  return { taskName, priority, dueDate, category };
+  return { taskName, priority, dueDate, category, recurrence };
+}
+
+/**
+ * Update task status
+ */
+export async function updateTaskStatus(
+  client: Client,
+  pageId: string,
+  status: 'to do' | 'in progress' | 'done'
+): Promise<void> {
+  const normalizedStatus = normalizeStatus(status);
+  const now = new Date().toISOString();
+  
+  const properties: any = {
+    Status: {
+      select: { name: normalizedStatus },
+    },
+  };
+
+  // Set Completed At when marking as done
+  if (normalizedStatus === 'done') {
+    properties['Completed At'] = {
+      date: { start: now.split('T')[0] },
+    };
+  }
+
+  await withRetry(() =>
+    client.pages.update({
+      page_id: pageId,
+      properties,
+    })
+  );
 }
 
 export async function markTaskComplete(
   client: Client,
   pageId: string
 ): Promise<void> {
-  console.log('[markTaskComplete] Starting markTaskComplete for pageId:', pageId);
-  
-  // First, check if the task is deleted and restore it if needed
-  try {
-    console.log('[markTaskComplete] Retrieving page to check status...');
-    const page = await client.pages.retrieve({ page_id: pageId });
-    const props = (page as any).properties;
-    const isDeleted = props.Deleted?.checkbox || false;
-    const currentStatus = props.Status?.select?.name || 'Unknown';
-    
-    console.log('[markTaskComplete] Current task state:', {
-      isDeleted,
-      currentStatus,
-      pageId
-    });
-    
-    if (isDeleted) {
-      // Restore the task (set Deleted to false) and mark as complete
-      console.log('[markTaskComplete] Task is deleted, restoring and marking as complete');
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Deleted: {
-              checkbox: false,
-            },
-            Status: {
-              select: { name: 'Done' },
-            },
-          },
-        })
-      );
-      console.log('[markTaskComplete] Task restored and marked as complete');
-    } else {
-      // Just update the status
-      console.log('[markTaskComplete] Updating status to Done');
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Status: {
-              select: { name: 'Done' },
-            },
-          },
-        })
-      );
-      console.log('[markTaskComplete] Status update call completed');
-    }
-  } catch (error: any) {
-    // If we can't retrieve the page, try to update anyway (fallback)
-    console.warn('[markTaskComplete] Could not check deleted status, updating anyway:', {
-      message: error.message,
-      status: error.status,
-      code: error.code
-    });
-    
-    try {
-      const result = await withRetry(() =>
-        client.pages.update({
-          page_id: pageId,
-          properties: {
-            Status: {
-              select: { name: 'Done' },
-            },
-          },
-        })
-      );
-      console.log('[markTaskComplete] Fallback status update completed');
-    } catch (fallbackError: any) {
-      console.error('[markTaskComplete] Fallback update also failed:', {
-        message: fallbackError.message,
-        status: fallbackError.status,
-        code: fallbackError.code
-      });
-      throw fallbackError; // Re-throw so the caller knows it failed
-    }
-  }
-  
-  console.log('[markTaskComplete] markTaskComplete completed successfully');
+  await updateTaskStatus(client, pageId, 'done');
 }
 
 /**
@@ -904,22 +876,25 @@ export async function markTasksCompleteBatch(
 }
 
 /**
- * Delete task (soft delete - set Deleted field to true)
+ * Delete task (soft delete - mark as done, or hard delete the page)
  */
 export async function deleteTask(
   client: Client,
-  pageId: string
+  pageId: string,
+  hardDelete: boolean = false
 ): Promise<void> {
-  await withRetry(() =>
-    client.pages.update({
-      page_id: pageId,
-      properties: {
-        Deleted: {
-          checkbox: true,
-        },
-      },
-    })
-  );
+  if (hardDelete) {
+    // Actually delete the page from Notion
+    await withRetry(() =>
+      client.pages.update({
+        page_id: pageId,
+        archived: true,
+      })
+    );
+  } else {
+    // Soft delete - mark as done
+    await updateTaskStatus(client, pageId, 'done');
+  }
 }
 
 /**
@@ -980,33 +955,49 @@ export async function logFocusSession(
 export async function logEnergy(
   client: Client,
   databaseId: string,
-  energyLevel: 'Low' | 'Medium' | 'High',
-  timeOfDay: 'Morning' | 'Afternoon' | 'Evening'
-): Promise<void> {
-  const today = new Date().toISOString().split('T')[0];
+  energyLevel: number, // 1-10
+  date?: string,
+  entry?: string
+): Promise<string> {
+  const logDate = date || new Date().toISOString().split('T')[0];
 
-  await withRetry(() =>
+  const response = await withRetry(() =>
     client.pages.create({
       parent: { database_id: databaseId },
       properties: {
+        Entry: {
+          title: [{ text: { content: entry || `Energy ${energyLevel}` } }],
+        },
+        EnergyLevel: {
+          number: energyLevel,
+        },
         Date: {
-          date: { start: today },
+          date: { start: logDate },
         },
-        'Energy Level': {
-          select: { name: energyLevel },
-        },
-        'Time of Day': {
-          select: { name: timeOfDay },
+        NotionID: {
+          rich_text: [{ text: { content: '' } }], // Will be updated after creation
         },
       },
     })
   );
-}
 
-export function mapEnergyLevel(level: number): 'Low' | 'Medium' | 'High' {
-  if (level >= 1 && level <= 3) return 'Low';
-  if (level >= 4 && level <= 7) return 'Medium';
-  return 'High';
+  // Update NotionID
+  try {
+    await withRetry(() =>
+      client.pages.update({
+        page_id: response.id,
+        properties: {
+          NotionID: {
+            rich_text: [{ text: { content: response.id } }],
+          },
+        },
+      })
+    );
+  } catch (updateError: any) {
+    console.warn('[logEnergy] Failed to update NotionID:', updateError?.message);
+  }
+
+  return response.id;
 }
 
 export function getTimeOfDay(): 'Morning' | 'Afternoon' | 'Evening' {
@@ -1051,14 +1042,14 @@ export async function getUserWorkspace(client: Client): Promise<string | null> {
 }
 
 /**
- * Create a Notion Data page in the user's workspace
+ * Create a Voice Planner page in the user's workspace
  */
 export async function createPrivacyPage(client: Client): Promise<string | null> {
   try {
-    // First, try to find if Notion Data page already exists
+    // First, try to find if Voice Planner page already exists
     const searchResponse = await withRetry(() =>
       client.search({
-        query: 'Notion Data',
+        query: 'Voice Planner',
         filter: {
           property: 'object',
           value: 'page',
@@ -1072,7 +1063,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
         // Check title in properties or in title array
         const title = item.properties?.title?.title?.[0]?.plain_text || 
                      item.title?.[0]?.plain_text;
-        return title === 'Notion Data';
+        return title === 'Voice Planner';
       }
     );
 
@@ -1110,7 +1101,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
       throw new Error('Could not find a parent page in workspace');
     }
 
-    // Create new Notion Data page as child of workspace page
+    // Create new Voice Planner page as child of workspace page
     const pageResponse = await withRetry(() =>
       client.pages.create({
         parent: {
@@ -1121,7 +1112,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
           title: [
             {
               text: {
-                content: 'Notion Data',
+                content: 'Voice Planner',
               },
             },
           ],
@@ -1131,7 +1122,7 @@ export async function createPrivacyPage(client: Client): Promise<string | null> 
 
     return pageResponse.id;
   } catch (error) {
-    console.error('Error creating Notion Data page:', error);
+    console.error('Error creating Voice Planner page:', error);
     return null;
   }
 }
@@ -1378,35 +1369,586 @@ export async function createEnergyLogsDatabase(
 }
 
 /**
- * Complete Notion setup for a user:
- * 1. Create Notion Data page
- * 2. Create three databases (Tasks, Focus_Logs, Energy_Logs)
- * Returns an object with all created IDs
+ * Complete Notion setup for a user (DEPRECATED - use web-login/app/api/oauth/notion-setup.ts instead)
+ * This function is kept for backward compatibility but should not be used in new code.
+ * The main setup happens in web-login/app/api/oauth/notion-setup.ts
+ */
+// ============================================================================
+// SHOPPING DATABASE FUNCTIONS
+// ============================================================================
+
+export async function addShoppingItem(
+  client: Client,
+  databaseId: string,
+  name: string,
+  quantity?: number
+): Promise<string> {
+  const properties: any = {
+    Name: {
+      title: [{ text: { content: name } }],
+    },
+    Status: {
+      select: { name: 'needed' },
+    },
+    'Added At': {
+      created_time: new Date().toISOString(),
+    },
+    NotionID: {
+      rich_text: [{ text: { content: '' } }],
+    },
+  };
+
+  if (quantity !== undefined) {
+    properties.Quantity = {
+      number: quantity,
+    };
+  }
+
+  const response = await withRetry(() =>
+    client.pages.create({
+      parent: { database_id: databaseId },
+      properties,
+    })
+  );
+
+  // Update NotionID
+  try {
+    await withRetry(() =>
+      client.pages.update({
+        page_id: response.id,
+        properties: {
+          NotionID: {
+            rich_text: [{ text: { content: response.id } }],
+          },
+        },
+      })
+    );
+  } catch (updateError: any) {
+    console.warn('[addShoppingItem] Failed to update NotionID:', updateError?.message);
+  }
+
+  return response.id;
+}
+
+export async function getShoppingItems(
+  client: Client,
+  databaseId: string,
+  status?: 'needed' | 'bought'
+): Promise<NotionShoppingItem[]> {
+  try {
+    let filter: any = {};
+    if (status) {
+      filter = {
+        property: 'Status',
+        select: { equals: status },
+      };
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+        sorts: [{ property: 'Added At', direction: 'descending' }],
+      })
+    );
+
+    return response.results.map((page: any) => {
+      const props = page.properties;
+      return {
+        id: page.id,
+        name: props.Name?.title?.[0]?.plain_text || 'Untitled',
+        quantity: props.Quantity?.number || undefined,
+        status: (props.Status?.select?.name || 'needed') as 'needed' | 'bought',
+        addedAt: props['Added At']?.created_time || undefined,
+        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting shopping items:', error);
+    return [];
+  }
+}
+
+export async function markShoppingItemBought(
+  client: Client,
+  pageId: string
+): Promise<void> {
+  await withRetry(() =>
+    client.pages.update({
+      page_id: pageId,
+      properties: {
+        Status: {
+          select: { name: 'bought' },
+        },
+      },
+    })
+  );
+}
+
+// ============================================================================
+// WORKOUTS DATABASE FUNCTIONS
+// ============================================================================
+
+export async function addWorkout(
+  client: Client,
+  databaseId: string,
+  workoutType: string,
+  duration?: number,
+  caloriesBurned?: number,
+  date?: string
+): Promise<string> {
+  const workoutDate = date || new Date().toISOString().split('T')[0];
+
+  const properties: any = {
+    Workout: {
+      title: [{ text: { content: workoutType } }],
+    },
+    Date: {
+      date: { start: workoutDate },
+    },
+    NotionID: {
+      rich_text: [{ text: { content: '' } }],
+    },
+  };
+
+  if (duration !== undefined) {
+    properties['Duration (min)'] = {
+      number: duration,
+    };
+  }
+
+  if (caloriesBurned !== undefined) {
+    properties['Calories Burned'] = {
+      number: caloriesBurned,
+    };
+  }
+
+  const response = await withRetry(() =>
+    client.pages.create({
+      parent: { database_id: databaseId },
+      properties,
+    })
+  );
+
+  // Update NotionID
+  try {
+    await withRetry(() =>
+      client.pages.update({
+        page_id: response.id,
+        properties: {
+          NotionID: {
+            rich_text: [{ text: { content: response.id } }],
+          },
+        },
+      })
+    );
+  } catch (updateError: any) {
+    console.warn('[addWorkout] Failed to update NotionID:', updateError?.message);
+  }
+
+  return response.id;
+}
+
+export async function getWorkouts(
+  client: Client,
+  databaseId: string,
+  date?: string
+): Promise<NotionWorkout[]> {
+  try {
+    let filter: any = {};
+    if (date) {
+      filter = {
+        property: 'Date',
+        date: { equals: date },
+      };
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+        sorts: [{ property: 'Date', direction: 'descending' }],
+      })
+    );
+
+    return response.results.map((page: any) => {
+      const props = page.properties;
+      return {
+        id: page.id,
+        workout: props.Workout?.title?.[0]?.plain_text || 'Untitled',
+        date: props.Date?.date?.start || '',
+        duration: props['Duration (min)']?.number || undefined,
+        caloriesBurned: props['Calories Burned']?.number || undefined,
+        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting workouts:', error);
+    return [];
+  }
+}
+
+// ============================================================================
+// MEALS DATABASE FUNCTIONS
+// ============================================================================
+
+export async function addMeal(
+  client: Client,
+  databaseId: string,
+  mealName: string,
+  calories: number,
+  date?: string
+): Promise<string> {
+  const mealDate = date || new Date().toISOString().split('T')[0];
+
+  const properties: any = {
+    Meal: {
+      title: [{ text: { content: mealName } }],
+    },
+    Calories: {
+      number: calories,
+    },
+    Date: {
+      date: { start: mealDate },
+    },
+    NotionID: {
+      rich_text: [{ text: { content: '' } }],
+    },
+  };
+
+  const response = await withRetry(() =>
+    client.pages.create({
+      parent: { database_id: databaseId },
+      properties,
+    })
+  );
+
+  // Update NotionID
+  try {
+    await withRetry(() =>
+      client.pages.update({
+        page_id: response.id,
+        properties: {
+          NotionID: {
+            rich_text: [{ text: { content: response.id } }],
+          },
+        },
+      })
+    );
+  } catch (updateError: any) {
+    console.warn('[addMeal] Failed to update NotionID:', updateError?.message);
+  }
+
+  return response.id;
+}
+
+export async function getMeals(
+  client: Client,
+  databaseId: string,
+  date?: string
+): Promise<NotionMeal[]> {
+  try {
+    let filter: any = {};
+    if (date) {
+      filter = {
+        property: 'Date',
+        date: { equals: date },
+      };
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+        sorts: [{ property: 'Date', direction: 'descending' }],
+      })
+    );
+
+    return response.results.map((page: any) => {
+      const props = page.properties;
+      return {
+        id: page.id,
+        meal: props.Meal?.title?.[0]?.plain_text || 'Untitled',
+        calories: props.Calories?.number || 0,
+        date: props.Date?.date?.start || '',
+        notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+        notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting meals:', error);
+    return [];
+  }
+}
+
+// ============================================================================
+// NOTES DATABASE FUNCTIONS
+// ============================================================================
+
+export async function addNote(
+  client: Client,
+  databaseId: string,
+  title: string,
+  content: string,
+  date?: string,
+  tags?: string[]
+): Promise<string> {
+  const noteDate = date || new Date().toISOString().split('T')[0];
+
+  const properties: any = {
+    Title: {
+      title: [{ text: { content: title } }],
+    },
+    Content: {
+      rich_text: [{ text: { content: content } }],
+    },
+    Date: {
+      date: { start: noteDate },
+    },
+    NotionID: {
+      rich_text: [{ text: { content: '' } }],
+    },
+  };
+
+  if (tags && tags.length > 0) {
+    properties.Tags = {
+      multi_select: tags.map(tag => ({ name: tag })),
+    };
+  }
+
+  const response = await withRetry(() =>
+    client.pages.create({
+      parent: { database_id: databaseId },
+      properties,
+    })
+  );
+
+  // Update NotionID
+  try {
+    await withRetry(() =>
+      client.pages.update({
+        page_id: response.id,
+        properties: {
+          NotionID: {
+            rich_text: [{ text: { content: response.id } }],
+          },
+        },
+      })
+    );
+  } catch (updateError: any) {
+    console.warn('[addNote] Failed to update NotionID:', updateError?.message);
+  }
+
+  return response.id;
+}
+
+export async function getNotes(
+  client: Client,
+  databaseId: string,
+  date?: string
+): Promise<NotionNote[]> {
+  try {
+    let filter: any = {};
+    if (date) {
+      filter = {
+        property: 'Date',
+        date: { equals: date },
+      };
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+        sorts: [{ property: 'Date', direction: 'descending' }],
+      })
+    );
+
+    return response.results.map((page: any) => {
+      const props = page.properties;
+      return {
+        id: page.id,
+        title: props.Title?.title?.[0]?.plain_text || 'Untitled',
+        content: props.Content?.rich_text?.map((r: any) => r.plain_text).join('') || '',
+        date: props.Date?.date?.start || '',
+        tags: props.Tags?.multi_select?.map((tag: any) => tag.name) || [],
+        notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
+      };
+    });
+  } catch (error) {
+    console.error('Error getting notes:', error);
+    return [];
+  }
+}
+
+// ============================================================================
+// TASK STATISTICS FUNCTIONS
+// ============================================================================
+
+export async function getTaskCount(
+  client: Client,
+  databaseId: string,
+  status?: 'to do' | 'in progress' | 'done'
+): Promise<number> {
+  try {
+    let filter: any = {};
+    if (status) {
+      filter = {
+        property: 'Status',
+        select: { equals: normalizeStatus(status) },
+      };
+    } else {
+      // Count all non-done tasks
+      filter = {
+        or: [
+          { property: 'Status', select: { equals: 'to do' } },
+          { property: 'Status', select: { equals: 'in progress' } },
+        ],
+      };
+    }
+
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter,
+        page_size: 1, // We only need the count
+      })
+    );
+
+    // Get total count by paginating through all results
+    let total = response.results.length;
+    let nextCursor: string | null = response.next_cursor;
+
+    while (nextCursor) {
+      const nextResponse = await withRetry(() =>
+        client.databases.query({
+          database_id: databaseId,
+          filter,
+          start_cursor: nextCursor!,
+        })
+      );
+      total += nextResponse.results.length;
+      nextCursor = nextResponse.next_cursor;
+    }
+
+    return total;
+  } catch (error) {
+    console.error('Error getting task count:', error);
+    return 0;
+  }
+}
+
+export async function getCompletedCount(
+  client: Client,
+  databaseId: string
+): Promise<number> {
+  return getTaskCount(client, databaseId, 'done');
+}
+
+export async function getNextDeadline(
+  client: Client,
+  databaseId: string
+): Promise<NotionTask | null> {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: {
+          and: [
+            {
+              property: 'Due Date',
+              date: { on_or_after: today },
+            },
+            {
+              or: [
+                { property: 'Status', select: { equals: 'to do' } },
+                { property: 'Status', select: { equals: 'in progress' } },
+              ],
+            },
+          ],
+        },
+        sorts: [
+          { property: 'Due Date', direction: 'ascending' },
+        ],
+        page_size: 1,
+      })
+    );
+
+    if (response.results.length === 0) {
+      return null;
+    }
+
+    return mapPageToTask(response.results[0]);
+  } catch (error) {
+    console.error('Error getting next deadline:', error);
+    return null;
+  }
+}
+
+export async function getSummary(
+  client: Client,
+  databaseId: string
+): Promise<{
+  totalTasks: number;
+  completedTasks: number;
+  pendingTasks: number;
+  overdueTasks: number;
+  nextDeadline: NotionTask | null;
+}> {
+  const [totalTasks, completedTasks, pendingTasks, overdueTasks, nextDeadline] = await Promise.all([
+    getTaskCount(client, databaseId),
+    getCompletedCount(client, databaseId),
+    getTaskCount(client, databaseId), // Pending = total - completed
+    getOverdueTasks(client, databaseId).then(tasks => tasks.length),
+    getNextDeadline(client, databaseId),
+  ]);
+
+  return {
+    totalTasks,
+    completedTasks,
+    pendingTasks: totalTasks - completedTasks,
+    overdueTasks,
+    nextDeadline,
+  };
+}
+
+/**
+ * DEPRECATED: This function is kept for backward compatibility only.
+ * The main Notion setup happens in web-login/app/api/oauth/notion-setup.ts
+ * which creates all 6 databases (Tasks, Shopping, Workouts, Meals, Notes, EnergyLogs).
  */
 export async function setupNotionWorkspace(
   client: Client
 ): Promise<{
   privacyPageId: string | null;
   tasksDbId: string | null;
-  focusLogsDbId: string | null;
+  shoppingDbId: string | null;
+  workoutsDbId: string | null;
+  mealsDbId: string | null;
+  notesDbId: string | null;
   energyLogsDbId: string | null;
 }> {
+  console.warn('[setupNotionWorkspace] This function is deprecated. Use web-login/app/api/oauth/notion-setup.ts instead.');
   try {
-    // Step 1: Create Notion Data page
     const privacyPageId = await createPrivacyPage(client);
     if (!privacyPageId) {
-      throw new Error('Failed to create Notion Data page');
+      throw new Error('Failed to create Voice Planner page');
     }
 
-    // Step 2: Create databases on the Notion Data page
     const tasksDbId = await createTasksDatabase(client, privacyPageId);
-    const focusLogsDbId = await createFocusLogsDatabase(client, privacyPageId);
+    // Note: Focus_Logs database is deprecated and no longer created
     const energyLogsDbId = await createEnergyLogsDatabase(client, privacyPageId);
 
     return {
       privacyPageId,
       tasksDbId: tasksDbId || null,
-      focusLogsDbId: focusLogsDbId || null,
+      shoppingDbId: null, // Not created in this deprecated function - use notion-setup.ts
+      workoutsDbId: null,
+      mealsDbId: null,
+      notesDbId: null,
       energyLogsDbId: energyLogsDbId || null,
     };
   } catch (error) {
@@ -1414,7 +1956,10 @@ export async function setupNotionWorkspace(
     return {
       privacyPageId: null,
       tasksDbId: null,
-      focusLogsDbId: null,
+      shoppingDbId: null,
+      workoutsDbId: null,
+      mealsDbId: null,
+      notesDbId: null,
       energyLogsDbId: null,
     };
   }

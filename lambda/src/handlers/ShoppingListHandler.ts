@@ -1,13 +1,14 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { IntentRequest } from 'ask-sdk-model';
 import { buildResponse, buildSimpleResponse } from '../utils/alexa';
-import { findDatabaseByName, getShoppingListTasks, addTask, markTaskComplete } from '../utils/notion';
+import { findDatabaseByName, getShoppingItems, addShoppingItem, markShoppingItemBought } from '../utils/notion';
 
 export class ShoppingListHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
     return (
       handlerInput.requestEnvelope.request.type === 'IntentRequest' &&
       (handlerInput.requestEnvelope.request.intent.name === 'AddShoppingIntent' ||
+       handlerInput.requestEnvelope.request.intent.name === 'AddShoppingPhraseIntent' ||
        handlerInput.requestEnvelope.request.intent.name === 'ReadShoppingIntent' ||
        handlerInput.requestEnvelope.request.intent.name === 'MarkShoppingCompleteIntent')
     );
@@ -29,16 +30,16 @@ export class ShoppingListHandler implements RequestHandler {
     const intentName = request.intent.name;
 
     try {
-      const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
-      if (!tasksDbId) {
+      const shoppingDbId = await findDatabaseByName(notionClient, 'Shopping');
+      if (!shoppingDbId) {
         return buildSimpleResponse(
           handlerInput,
-          'I couldn\'t find your Tasks database in Notion. ' +
+          'I couldn\'t find your Shopping database in Notion. ' +
           'Please make sure it exists and try again.'
         );
       }
 
-      if (intentName === 'AddShoppingIntent') {
+      if (intentName === 'AddShoppingIntent' || intentName === 'AddShoppingPhraseIntent') {
         const itemsSlot = request.intent.slots?.items;
         
         if (!itemsSlot || !itemsSlot.value) {
@@ -64,9 +65,9 @@ export class ShoppingListHandler implements RequestHandler {
           );
         }
 
-        // Add each item as a task with Shopping category
+        // Add each item to Shopping database
         for (const item of items) {
-          await addTask(notionClient, tasksDbId, item, 'Medium', 'Shopping');
+          await addShoppingItem(notionClient, shoppingDbId, item);
         }
 
         const itemsList = items.length === 1 
@@ -80,16 +81,16 @@ export class ShoppingListHandler implements RequestHandler {
       }
 
       if (intentName === 'ReadShoppingIntent') {
-        const tasks = await getShoppingListTasks(notionClient, tasksDbId);
+        const items = await getShoppingItems(notionClient, shoppingDbId, 'needed');
 
-        if (tasks.length === 0) {
+        if (items.length === 0) {
           return buildSimpleResponse(handlerInput, 'Your shopping list is empty.');
         }
 
-        let speechText = `Your shopping list has ${tasks.length} item${tasks.length > 1 ? 's' : ''}: `;
-        tasks.forEach((task, index) => {
-          speechText += task.name;
-          if (index < tasks.length - 1) {
+        let speechText = `Your shopping list has ${items.length} item${items.length > 1 ? 's' : ''}: `;
+        items.forEach((item, index) => {
+          speechText += item.name;
+          if (index < items.length - 1) {
             speechText += ', ';
           }
         });
@@ -104,31 +105,31 @@ export class ShoppingListHandler implements RequestHandler {
         if (!itemSlot || !itemSlot.value) {
           return buildResponse(
             handlerInput,
-            'Which item would you like to mark as complete?',
+            'Which item would you like to mark as bought?',
             'Tell me the item name.'
           );
         }
 
         const itemName = itemSlot.value.toLowerCase();
-        const tasks = await getShoppingListTasks(notionClient, tasksDbId);
+        const items = await getShoppingItems(notionClient, shoppingDbId, 'needed');
         
-        const matchingTask = tasks.find(
-          task => task.name.toLowerCase().includes(itemName) || 
-                  itemName.includes(task.name.toLowerCase())
+        const matchingItem = items.find(
+          item => item.name.toLowerCase().includes(itemName) || 
+                  itemName.includes(item.name.toLowerCase())
         );
 
-        if (!matchingTask) {
+        if (!matchingItem) {
           return buildSimpleResponse(
             handlerInput,
             `I couldn't find "${itemSlot.value}" on your shopping list.`
           );
         }
 
-        await markTaskComplete(notionClient, matchingTask.id);
+        await markShoppingItemBought(notionClient, matchingItem.id);
 
         return buildSimpleResponse(
           handlerInput,
-          `Marked ${matchingTask.name} as complete.`
+          `Marked ${matchingItem.name} as bought.`
         );
       }
 

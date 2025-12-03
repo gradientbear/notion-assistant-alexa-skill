@@ -1,12 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Notion Data Alexa Skill Lambda Function
+Description: Voice Planner Alexa Skill Lambda Function
 
 Globals:
   Function:
     Timeout: 30
     MemorySize: 512
-    Runtime: nodejs20.x
+    Runtime: nodejs22.x
     Environment:
       Variables:
         SUPABASE_URL: !Ref SupabaseUrl

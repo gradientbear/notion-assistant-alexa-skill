@@ -1,7 +1,7 @@
 {
   "name": "notion-assistant-lambda",
   "version": "1.0.0",
-  "description": "AWS Lambda backend for Notion Data Alexa Skill",
+  "description": "AWS Lambda backend for Voice Planner Alexa Skill",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",

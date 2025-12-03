@@ -1,0 +1,191 @@
+OAuth2 Authorization Code Grant Flow for Alexa Account Linking
+================================================================
+
+┌─────────────┐
+│   User      │
+│  (Alexa)    │
+└──────┬──────┘
+       │
+       │ 1. "Alexa, open Voice Planner"
+       │    (or "Link Account" in Alexa app)
+       │
+       ▼
+┌─────────────────────────────────────┐
+│      Alexa Service                  │
+│  (Amazon's OAuth Client)            │
+└──────┬──────────────────────────────┘
+       │
+       │ 2. Redirect to Authorization Endpoint
+       │    GET /api/oauth/authorize?
+       │      response_type=code&
+       │      client_id=ALEXA_CLIENT_ID&
+       │      redirect_uri=https://layla.amazon.com/...&
+       │      scope=alexa&state=xyz
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Next.js API                       │
+│   /api/oauth/authorize              │
+│                                     │
+│   - Check Supabase session          │
+│   - Validate license is active      │
+│   - Validate Notion is connected     │
+│   - Generate authorization code     │
+│   - Store code in DB                │
+└──────┬──────────────────────────────┘
+       │
+       │ 3. Redirect with code
+       │    https://layla.amazon.com/...?code=AUTH_CODE&state=xyz
+       │
+       ▼
+┌─────────────────────────────────────┐
+│      Alexa Service                  │
+│  (Receives authorization code)     │
+└──────┬──────────────────────────────┘
+       │
+       │ 4. Exchange code for token
+       │    POST /api/oauth/token
+       │    grant_type=authorization_code&
+       │    code=AUTH_CODE&
+       │    redirect_uri=...&
+       │    client_id=...&
+       │    client_secret=...
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Next.js API                       │
+│   /api/oauth/token                  │
+│                                     │
+│   - Validate authorization code     │
+│   - Check code not expired/used     │
+│   - Mark code as used               │
+│   - Generate JWT access token       │
+│   - Store token in DB               │
+│   - Return token to Alexa            │
+└──────┬──────────────────────────────┘
+       │
+       │ 5. Response
+       │    {
+       │      "access_token": "JWT_TOKEN",
+       │      "token_type": "Bearer",
+       │      "expires_in": 3600
+       │    }
+       │
+       ▼
+┌─────────────────────────────────────┐
+│      Alexa Service                  │
+│  (Stores token, links account)       │
+└──────┬──────────────────────────────┘
+       │
+       │ 6. User invokes skill
+       │    "Alexa, what are my tasks?"
+       │
+       │    Request includes:
+       │    context.System.user.accessToken = JWT_TOKEN
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   AWS Lambda                        │
+│   AuthInterceptor                   │
+│                                     │
+│   - Extract accessToken from request│
+│   - Call /api/auth/introspect       │
+│   - Verify token signature          │
+│   - Check token not revoked         │
+│   - Check license is active         │
+│   - Attach user info to session     │
+└──────┬──────────────────────────────┘
+       │
+       │ 7. Introspect token
+       │    POST /api/auth/introspect
+       │    Authorization: Bearer JWT_TOKEN
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Next.js API                       │
+│   /api/auth/introspect              │
+│                                     │
+│   - Verify JWT signature            │
+│   - Check token in DB (not revoked) │
+│   - Get user from database          │
+│   - Check license status            │
+│   - Return user info                │
+└──────┬──────────────────────────────┘
+       │
+       │ 8. Response
+       │    {
+       │      "active": true,
+       │      "user_id": "uuid",
+       │      "email": "user@example.com",
+       │      "license_active": true,
+       │      "notion_db_id": "..."
+       │    }
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   AWS Lambda                        │
+│   (Handler processes request)       │
+│                                     │
+│   - User info in session attributes │
+│   - Notion client available         │
+│   - Process intent                  │
+│   - Return response                 │
+└─────────────────────────────────────┘
+
+
+Legacy Token Support (30-day transition)
+=========================================
+
+┌─────────────┐
+│   User      │
+│  (Alexa)    │
+└──────┬──────┘
+       │
+       │ Request with legacy base64 token
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   AWS Lambda                        │
+│   AuthInterceptor                   │
+│                                     │
+│   - Detect legacy token format       │
+│   - Parse base64 JSON                │
+│   - Extract amazon_account_id        │
+│   - Lookup user by amazon_account_id │
+│   - Attach user info to session      │
+└─────────────────────────────────────┘
+
+
+Token Revocation Flow
+=====================
+
+┌─────────────┐
+│   Stripe    │
+│  (Webhook)  │
+└──────┬──────┘
+       │
+       │ charge.refunded event
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Next.js API                       │
+│   /api/webhooks/stripe              │
+│                                     │
+│   - Verify webhook signature        │
+│   - Extract license_key from metadata│
+│   - Set license status = 'inactive' │
+│   - Find users with this license    │
+│   - Revoke all tokens for users     │
+└─────────────────────────────────────┘
+       │
+       │
+       ▼
+┌─────────────────────────────────────┐
+│   Next Request                     │
+│   (User invokes skill)              │
+│                                     │
+│   - Token introspection fails       │
+│   - (token revoked)                 │
+│   - Return LinkAccount card         │
+└─────────────────────────────────────┘
+

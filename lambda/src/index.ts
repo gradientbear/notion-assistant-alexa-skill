@@ -1,79 +1,115 @@
 import { SkillBuilders } from 'ask-sdk-core';
-import { RequestEnvelope } from 'ask-sdk-model';
 import { LaunchRequestHandler } from './handlers/LaunchRequestHandler';
-import { TaskListHandler } from './handlers/TaskListHandler';
+import { GetTasksHandler } from './handlers/GetTasksHandler';
+import { GetTasksByDateHandler } from './handlers/GetTasksByDateHandler';
 import { AddTaskHandler } from './handlers/AddTaskHandler';
-import { MarkTaskCompleteHandler } from './handlers/MarkTaskCompleteHandler';
+import { CompleteTaskHandler } from './handlers/CompleteTaskHandler';
 import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
 import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
+import { AddWorkoutHandler } from './handlers/AddWorkoutHandler';
+import { GetWorkoutsHandler } from './handlers/GetWorkoutsHandler';
+import { LogMealHandler } from './handlers/LogMealHandler';
+import { GetCaloriesHandler } from './handlers/GetCaloriesHandler';
+import { AddNoteHandler } from './handlers/AddNoteHandler';
+import { ReadNotesHandler } from './handlers/ReadNotesHandler';
+import { LogEnergyHandler } from './handlers/LogEnergyHandler';
+import { TaskCountHandler } from './handlers/TaskCountHandler';
+import { CompletedCountHandler } from './handlers/CompletedCountHandler';
+import { SummaryHandler } from './handlers/SummaryHandler';
+import { NextDeadlineHandler } from './handlers/NextDeadlineHandler';
+import { ShoppingListHandler } from './handlers/ShoppingListHandler';
 import { ConnectionStatusHandler } from './handlers/ConnectionStatusHandler';
-import { BrainDumpHandler } from './handlers/BrainDumpHandler';
 import { UnhandledIntentHandler } from './handlers/UnhandledIntentHandler';
 import { SessionEndedHandler } from './handlers/SessionEndedHandler';
 import { ErrorHandler } from './handlers/ErrorHandler';
-// import { PriorityListHandler } from './handlers/PriorityListHandler';
-// import { FocusTimerHandler } from './handlers/FocusTimerHandler';
-// import { EnergyTrackerHandler } from './handlers/EnergyTrackerHandler';
-// import { ScheduleHandler } from './handlers/ScheduleHandler';
-// import { ShoppingListHandler } from './handlers/ShoppingListHandler';
+
+import { AuthInterceptor, handleAuthError } from './middleware/auth';
 import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInterceptor';
 
-export const handler = SkillBuilders.custom()
+// ======================================================================
+// BUILD SKILL
+// ======================================================================
+
+const skill = SkillBuilders.custom()
   .addRequestHandlers(
     new LaunchRequestHandler(),
-    // MVP: Core Task CRUD operations only
-    new TaskListHandler(),
-    new BrainDumpHandler(), // Must be before AddTaskHandler to handle BrainDumpIntent
+    // Task handlers
+    new GetTasksHandler(),
+    new GetTasksByDateHandler(),
     new AddTaskHandler(),
-    new MarkTaskCompleteHandler(),
+    new CompleteTaskHandler(),
     new UpdateTaskStatusHandler(),
     new DeleteTaskHandler(),
+    new TaskCountHandler(),
+    new CompletedCountHandler(),
+    new SummaryHandler(),
+    new NextDeadlineHandler(),
+    // Shopping handler
+    new ShoppingListHandler(),
+    // Workout handlers
+    new AddWorkoutHandler(),
+    new GetWorkoutsHandler(),
+    // Meal handlers
+    new LogMealHandler(),
+    new GetCaloriesHandler(),
+    // Note handlers
+    new AddNoteHandler(),
+    new ReadNotesHandler(),
+    // Energy handler
+    new LogEnergyHandler(),
+    // Utility handlers
     new ConnectionStatusHandler(),
-    // MVP: Non-essential handlers disabled
-    // new PriorityListHandler(),
-    // new FocusTimerHandler(),
-    // new EnergyTrackerHandler(),
-    // new ScheduleHandler(),
-    // new ShoppingListHandler(),
-    new UnhandledIntentHandler(), // Must be before SessionEndedHandler
+    new UnhandledIntentHandler(),
     new SessionEndedHandler()
   )
   .addRequestInterceptors(
-    // Logging interceptor - runs first
     {
-      async process(handlerInput: any) {
-        try {
-          const request = handlerInput.requestEnvelope.request;
-          const userId = handlerInput.requestEnvelope.session?.user?.userId;
-          console.log('[Request Interceptor] Request type:', request.type);
-          console.log('[Request Interceptor] User ID:', userId);
-          console.log('[Request Interceptor] Request ID:', handlerInput.requestEnvelope.request.requestId);
-          console.log('[Request Interceptor] Session ID:', handlerInput.requestEnvelope.session?.sessionId);
-          
-          // Log intent details if it's an IntentRequest
-          if (request.type === 'IntentRequest') {
-            const intent = (request as any).intent;
-            console.log('[Request Interceptor] Intent name:', intent?.name);
-            console.log('[Request Interceptor] Intent slots:', JSON.stringify(intent?.slots || {}));
-            console.log('[Request Interceptor] Intent confirmation status:', intent?.confirmationStatus);
-            
-            // Also log raw input if available to help debug routing issues
-            const rawInput = (request as any).input?.text || (request as any).rawInput || '';
-            if (rawInput) {
-              console.log('[Request Interceptor] Raw input:', rawInput);
-            }
-          }
-        } catch (error: any) {
-          console.error('[Request Interceptor] Error in logging:', error?.message);
-          // Don't throw - just log and continue
-        }
+      async process(handlerInput) {
+        const req = handlerInput.requestEnvelope.request;
+        const intentName = (req as any)?.intent?.name ?? '';
+        console.log('[Request]', req.type, intentName);
       }
     },
-    // License validation disabled for MVP - focus on CRUD operations only
-    // new LicenseValidationInterceptor(), // Disabled for MVP
+    new AuthInterceptor(),
     new NotionConnectionInterceptor()
   )
-  .addErrorHandlers(new ErrorHandler())
+  .addErrorHandlers({
+    canHandle() {
+      return true;
+    },
+    async handle(handlerInput, error) {
+      const authResponse = handleAuthError(error, handlerInput);
+      if (authResponse) return authResponse;
+      return new ErrorHandler().handle(handlerInput);
+    }
+  })
   .withCustomUserAgent('notion-assistant-skill/v1.0')
   .lambda();
 
+// ======================================================================
+// LAMBDA ENTRY (TS-safe, callback-compatible)
+// ======================================================================
+
+export const handler = async (event: any, context: any) => {
+  context.callbackWaitsForEmptyEventLoop = true;
+
+  return new Promise((resolve) => {
+    skill(event, context, (err: any, result: any) => {
+      if (err) {
+        console.error('[Lambda] Fatal error:', err);
+        resolve({
+          version: '1.0',
+          response: {
+            outputSpeech: {
+              type: 'PlainText',
+              text: 'Sorry, something went wrong. Please try again.'
+            },
+            shouldEndSession: true
+          }
+        });
+      } else {
+        resolve(result);
+      }
+    });
+  });
+};

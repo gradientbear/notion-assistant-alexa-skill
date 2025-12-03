@@ -15,7 +15,11 @@ export class DeleteTaskHandler implements RequestHandler {
     const intentName = isIntentRequest 
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
-    const canHandle = isIntentRequest && intentName === 'DeleteTaskIntent';
+    // Handle both DeleteTaskPhraseIntent and DeleteTaskStructuredIntent
+    const canHandle = isIntentRequest && (
+      intentName === 'DeleteTaskPhraseIntent' || 
+      intentName === 'DeleteTaskStructuredIntent'
+    );
     
     if (isIntentRequest) {
       console.log('[DeleteTaskHandler] canHandle check:', {
@@ -44,7 +48,7 @@ export class DeleteTaskHandler implements RequestHandler {
       return buildResponse(
         handlerInput,
         'To delete tasks, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Notion Data, and click Link Account. ' +
+        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
         'Once connected, you can delete tasks from your Notion workspace.',
         'What would you like to do?'
       );
@@ -52,7 +56,10 @@ export class DeleteTaskHandler implements RequestHandler {
 
     try {
       const request = handlerInput.requestEnvelope.request as any;
-      const taskSlot = request.intent.slots?.task?.value;
+      // Handle both Phrase (taskName) and Structured (taskNameValue) intents, also check for 'task' slot
+      const taskSlot = request.intent.slots?.task?.value || 
+                       request.intent.slots?.taskName?.value || 
+                       request.intent.slots?.taskNameValue?.value;
 
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {

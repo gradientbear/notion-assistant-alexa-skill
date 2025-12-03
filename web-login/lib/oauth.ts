@@ -1,0 +1,302 @@
+import crypto from 'crypto';
+import { createServerClient } from './supabase';
+import { signAccessToken } from './jwt';
+
+const AUTH_CODE_EXPIRES_IN = 600; // 10 minutes
+const REFRESH_TOKEN_ENABLED = process.env.REFRESH_TOKEN_ENABLED === 'true';
+
+export interface AuthorizationCode {
+  code: string;
+  user_id: string;
+  client_id: string;
+  redirect_uri: string;
+  scope: string;
+  code_challenge?: string;
+  code_challenge_method?: string;
+  expires_at: Date;
+}
+
+/**
+ * Generate a secure random authorization code
+ */
+export function generateAuthorizationCode(): string {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+/**
+ * Store authorization code in database
+ */
+export async function storeAuthCode(
+  code: string,
+  userId: string,
+  clientId: string,
+  redirectUri: string,
+  scope: string = 'alexa',
+  codeChallenge?: string,
+  codeChallengeMethod?: string
+): Promise<void> {
+  const supabase = createServerClient();
+  const expiresAt = new Date(Date.now() + AUTH_CODE_EXPIRES_IN * 1000);
+
+  const { error } = await supabase.from('oauth_authorization_codes').insert({
+    code,
+    user_id: userId,
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope,
+    code_challenge: codeChallenge,
+    code_challenge_method: codeChallengeMethod,
+    expires_at: expiresAt.toISOString(),
+  });
+
+  if (error) {
+    console.error('[OAuth] Error storing auth code:', error);
+    throw new Error('Failed to store authorization code');
+  }
+}
+
+/**
+ * Validate and consume authorization code
+ */
+export async function validateAuthCode(
+  code: string,
+  clientId: string,
+  redirectUri: string,
+  codeVerifier?: string
+): Promise<{
+  userId: string;
+  scope: string;
+} | null> {
+  const supabase = createServerClient();
+
+  // Fetch the code
+  const { data: authCode, error: fetchError } = await supabase
+    .from('oauth_authorization_codes')
+    .select('*')
+    .eq('code', code)
+    .eq('client_id', clientId)
+    .eq('redirect_uri', redirectUri)
+    .single();
+
+  if (fetchError || !authCode) {
+    console.warn('[OAuth] Invalid authorization code:', code);
+    return null;
+  }
+
+  // Check expiration
+  const expiresAt = new Date(authCode.expires_at);
+  if (expiresAt < new Date()) {
+    console.warn('[OAuth] Authorization code expired');
+    return null;
+  }
+
+  // Check if already used
+  if (authCode.used) {
+    console.warn('[OAuth] Authorization code already used');
+    return null;
+  }
+
+  // Validate PKCE if present
+  if (authCode.code_challenge && codeVerifier) {
+    const hash = crypto
+      .createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+    if (hash !== authCode.code_challenge) {
+      console.warn('[OAuth] PKCE code verifier mismatch');
+      return null;
+    }
+  }
+
+  // Mark as used
+  await supabase
+    .from('oauth_authorization_codes')
+    .update({ used: true, used_at: new Date().toISOString() })
+    .eq('code', code);
+
+  return {
+    userId: authCode.user_id,
+    scope: authCode.scope,
+  };
+}
+
+/**
+ * Issue access token and store it
+ */
+export async function issueAccessToken(
+  userId: string,
+  clientId: string,
+  scope: string,
+  notionDbId?: string,
+  amazonAccountId?: string
+): Promise<{
+  access_token: string;
+  expires_in: number;
+  refresh_token?: string;
+}> {
+  const supabase = createServerClient();
+
+  // Get user info
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('email, auth_user_id')
+    .eq('id', userId)
+    .single();
+
+  if (userError || !user) {
+    throw new Error('User not found');
+  }
+
+  // Sign JWT
+  const accessToken = signAccessToken({
+    userId: user.auth_user_id || userId,
+    email: user.email,
+    scope,
+    notionDbId,
+    amazonAccountId,
+  });
+
+  const expiresIn = parseInt(process.env.JWT_EXPIRES_IN || '3600', 10);
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+
+  // Store access token
+  const { error: tokenError } = await supabase
+    .from('oauth_access_tokens')
+    .insert({
+      token: accessToken,
+      user_id: userId,
+      client_id: clientId,
+      scope,
+      expires_at: expiresAt.toISOString(),
+      revoked: false,
+    });
+
+  if (tokenError) {
+    console.error('[OAuth] Error storing access token:', tokenError);
+    throw new Error('Failed to store access token');
+  }
+
+  // Generate refresh token if enabled
+  let refreshToken: string | undefined;
+  if (REFRESH_TOKEN_ENABLED) {
+    refreshToken = crypto.randomBytes(32).toString('base64url');
+    const { error: refreshError } = await supabase
+      .from('oauth_refresh_tokens')
+      .insert({
+        token: refreshToken,
+        user_id: userId,
+        client_id: clientId,
+        revoked: false,
+      });
+
+    if (refreshError) {
+      console.warn('[OAuth] Failed to store refresh token, continuing without it');
+      refreshToken = undefined;
+    }
+  }
+
+  return {
+    access_token: accessToken,
+    expires_in: expiresIn,
+    refresh_token: refreshToken,
+  };
+}
+
+/**
+ * Store access token (for migration purposes)
+ */
+export async function storeAccessToken(
+  token: string,
+  userId: string,
+  clientId: string,
+  scope: string,
+  expiresAt: Date
+): Promise<void> {
+  const supabase = createServerClient();
+
+  const { error } = await supabase.from('oauth_access_tokens').insert({
+    token,
+    user_id: userId,
+    client_id: clientId,
+    scope,
+    expires_at: expiresAt.toISOString(),
+    revoked: false,
+  });
+
+  if (error) {
+    console.error('[OAuth] Error storing access token:', error);
+    throw new Error('Failed to store access token');
+  }
+}
+
+/**
+ * Revoke access token
+ */
+export async function revokeToken(token: string): Promise<void> {
+  const supabase = createServerClient();
+
+  const { error } = await supabase
+    .from('oauth_access_tokens')
+    .update({ revoked: true, revoked_at: new Date().toISOString() })
+    .eq('token', token);
+
+  if (error) {
+    console.error('[OAuth] Error revoking token:', error);
+    throw new Error('Failed to revoke token');
+  }
+}
+
+/**
+ * Revoke all tokens for a user
+ */
+export async function revokeUserTokens(userId: string): Promise<void> {
+  const supabase = createServerClient();
+
+  const { error } = await supabase
+    .from('oauth_access_tokens')
+    .update({ revoked: true, revoked_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .eq('revoked', false);
+
+  if (error) {
+    console.error('[OAuth] Error revoking user tokens:', error);
+    throw new Error('Failed to revoke user tokens');
+  }
+
+  // Also revoke refresh tokens if enabled
+  if (REFRESH_TOKEN_ENABLED) {
+    await supabase
+      .from('oauth_refresh_tokens')
+      .update({ revoked: true, revoked_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .eq('revoked', false);
+  }
+}
+
+/**
+ * Check if token is revoked
+ */
+export async function isTokenRevoked(token: string): Promise<boolean> {
+  const supabase = createServerClient();
+
+  const { data, error } = await supabase
+    .from('oauth_access_tokens')
+    .select('revoked')
+    .eq('token', token)
+    .single();
+
+  if (error || !data) {
+    return true; // If not found, consider it revoked
+  }
+
+  return data.revoked === true;
+}
+
+/**
+ * Validate redirect URI against whitelist
+ */
+export function validateRedirectUri(redirectUri: string): boolean {
+  const allowedUris = (process.env.ALEXA_REDIRECT_URIS || '').split(',').map((uri) => uri.trim());
+  return allowedUris.some((uri) => redirectUri.startsWith(uri));
+}
+

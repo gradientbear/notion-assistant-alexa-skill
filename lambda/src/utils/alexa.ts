@@ -114,17 +114,17 @@ function levenshtein(a: string, b: string): number {
  * - "finish report" matching "finish quarterly report"
  * - "report quarterly" matching "finish quarterly report" (word order)
  */
-export function findMatchingTask(
+export function findMatchingTask<T extends { name: string; [key: string]: any }>(
   rawSearch: string,
-  tasks: Array<{ name: string }>
-) {
+  tasks: T[]
+): T | null {
   if (!rawSearch || tasks.length === 0) return null;
 
   const cleaned = cleanTaskName(rawSearch);
   const search = cleaned.toLowerCase();
   const searchWords = search.split(/\s+/).map(stem);
 
-  // Normalize task names
+  // Normalize task names (preserve all original properties)
   const normalizedTasks = tasks.map((t) => ({
     ...t,
     raw: t.name,
@@ -137,17 +137,27 @@ export function findMatchingTask(
 
   // 1. Exact match
   let match = normalizedTasks.find((t) => t.lower === search);
-  if (match) return match;
+  if (match) {
+    // Return original task object (remove normalization properties)
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   // 2. Exact stemmed match
   match = normalizedTasks.find((t) => t.words.join(" ") === searchWords.join(" "));
-  if (match) return match;
+  if (match) {
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   // 3. All search words exist inside task words (bag-of-words)
   match = normalizedTasks.find((t) =>
     searchWords.every((w) => t.words.some((tw) => tw === w))
   );
-  if (match) return match;
+  if (match) {
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   // 4. Contains partial word (singular/plural, tense)
   match = normalizedTasks.find((t) =>
@@ -155,7 +165,10 @@ export function findMatchingTask(
       t.words.some((tw) => tw.includes(w) || w.includes(tw))
     )
   );
-  if (match) return match;
+  if (match) {
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   // 5. Fuzzy word match (Levenshtein ≤ 2)
   match = normalizedTasks.find((t) =>
@@ -163,13 +176,19 @@ export function findMatchingTask(
       t.words.some((tw) => levenshtein(w, tw) <= 2)
     )
   );
-  if (match) return match;
+  if (match) {
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   // 6. Substring match (final fallback)
   match = normalizedTasks.find(
     (t) => t.lower.includes(search) || search.includes(t.lower)
   );
-  if (match) return match;
+  if (match) {
+    const { raw, lower, words, ...originalTask } = match;
+    return originalTask as unknown as T;
+  }
 
   return null;
 }

@@ -1,14 +1,10 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "notion data",
+      "invocationName": "voice planner",
       "intents": [
         {
           "name": "AMAZON.CancelIntent",
-          "samples": []
-        },
-        {
-          "name": "AMAZON.HelpIntent",
           "samples": []
         },
         {
@@ -16,570 +12,628 @@
           "samples": []
         },
         {
+          "name": "AMAZON.HelpIntent",
+          "samples": [
+            "help",
+            "what can I say",
+            "how do I use this skill"
+          ]
+        },
+        {
           "name": "AMAZON.NavigateHomeIntent",
           "samples": []
         },
         {
-          "name": "BrainDumpIntent",
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        },
+      
+        {
+          "name": "LaunchRequestIntent",
           "samples": [
-            "dump my brain",
-            "dump my brain {task}",
-            "brain dump",
-            "brain dump {task}",
-            "add tasks",
-            "add tasks {task}",
-            "capture my thoughts",
-            "capture my thoughts {task}",
-            "I need to remember",
-            "I need to remember {task}",
-            "add to my tasks",
-            "add to my tasks {task}"
-          ],
+            "open Voice Planner",
+            "start Voice Planner",
+            "launch Voice Planner",
+            "open my tasks"
+          ]
+        },
+        {
+          "name": "AddTaskPhraseIntent",
           "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
-          ]
-        },
-        {
-          "name": "PriorityListIntent",
-          "samples": [
-            "what's my priority",
-            "what are my priorities",
-            "show my priority list",
-            "what should I focus on",
-            "top priority tasks",
-            "what's important"
-          ]
-        },
-        {
-          "name": "FocusTimerIntent",
-          "samples": [
-            "start focus timer",
-            "start pomodoro",
-            "begin focus session",
-            "start a focus timer",
-            "timer for focus"
-          ]
-        },
-        {
-          "name": "EnergyTrackerIntent",
-          "samples": [
-            "log energy {energyLevel}",
-            "my energy is {energyLevel}",
-            "energy level {energyLevel}",
-            "log my energy",
-            "track energy {energyLevel}"
+            { "name": "taskName", "type": "AMAZON.SearchQuery" }
           ],
-          "slots": [
-            {
-              "name": "energyLevel",
-              "type": "AMAZON.NUMBER",
-              "samples": []
-            }
-          ]
-        },
-        {
-          "name": "ScheduleIntent",
           "samples": [
-            "what's my schedule for today",
-            "what do I have today",
-            "show my schedule",
-            "tasks for today",
-            "what's on my calendar today",
-            "today's tasks"
+            "add {taskName}",
+            "please add {taskName}",
+            "add task {taskName}",
+            "add {taskName} to my list"
           ]
         },
+      
         {
-          "name": "AddShoppingIntent",
+          "name": "CompleteTaskPhraseIntent",
+          "slots": [
+            { "name": "taskName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "complete {taskName}",
+            "mark {taskName} as done",
+            "I finished {taskName}",
+            "I completed {taskName}"
+          ]
+        },
+      
+        {
+          "name": "DeleteTaskPhraseIntent",
+          "slots": [
+            { "name": "taskName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "delete {taskName}",
+            "remove {taskName}",
+            "delete {taskName} from my list"
+          ]
+        },
+      
+        {
+          "name": "UpdateTaskStatusPhraseIntent",
+          "slots": [
+            { "name": "taskName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "start {taskName}",
+            "update {taskName}",
+            "set task {taskName}"
+          ]
+        },
+      
+        {
+          "name": "AddNotePhraseIntent",
+          "slots": [
+            { "name": "noteTitle", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "add note {noteTitle}",
+            "save note {noteTitle}",
+            "save a note called {noteTitle}"
+          ]
+        },
+      
+        {
+          "name": "LogMealPhraseIntent",
+          "slots": [
+            { "name": "mealName", "type": "AMAZON.SearchQuery" }
+          ],
+          "samples": [
+            "log {mealName}",
+            "I ate {mealName}",
+            "add meal {mealName}"
+          ]
+        },
+      
+        {
+          "name": "AddShoppingPhraseIntent",
+          "slots": [
+            { "name": "items", "type": "AMAZON.SearchQuery" }
+          ],
           "samples": [
             "add to shopping {items}",
-            "add {items} to shopping list",
-            "shopping list add {items}",
-            "add {items} to shopping"
-          ],
+            "add {items} to my shopping list",
+            "shopping list add {items}"
+          ]
+        },
+        {
+          "name": "AddTaskStructuredIntent",
           "slots": [
-            {
-              "name": "items",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
-          ]
-        },
-        {
-          "name": "ReadShoppingIntent",
-          "samples": [
-            "read my shopping list",
-            "what's on my shopping list",
-            "show shopping list",
-            "shopping list",
-            "what do I need to buy"
-          ]
-        },
-        {
-          "name": "MarkShoppingCompleteIntent",
-          "samples": [
-            "mark {item} as done",
-            "complete {item}",
-            "{item} is done",
-            "mark {item} as complete",
-            "finished {item}"
+            { "name": "taskNameValue", "type": "TASK_NAME_TYPE" },
+            { "name": "category", "type": "CATEGORY_TYPE" },
+            { "name": "priority", "type": "PRIORITY_TYPE" },
+            { "name": "dueDate", "type": "AMAZON.DATE" },
+            { "name": "recurrence", "type": "RECURRENCE_TYPE" }
           ],
+          "samples": [
+            "add a {priority} task {taskNameValue}",
+            "add a {priority} {category} task",
+            "add a task to {category}",
+            "add a task due {dueDate}",
+            "add a recurring task every {recurrence}",
+            "add {taskNameValue} due {dueDate}",
+            "add {taskNameValue} to {category}",
+            "add a {priority} task for {dueDate}"
+          ]
+        },
+      
+        {
+          "name": "CompleteTaskStructuredIntent",
           "slots": [
-            {
-              "name": "item",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
+            { "name": "taskNameValue", "type": "TASK_NAME_TYPE" }
+          ],
+          "samples": [
+            "complete task {taskNameValue}",
+            "mark task {taskNameValue} as done",
+            "I finished the task {taskNameValue}"
+          ]
+        },
+      
+        {
+          "name": "DeleteTaskStructuredIntent",
+          "slots": [
+            { "name": "taskNameValue", "type": "TASK_NAME_TYPE" }
+          ],
+          "samples": [
+            "delete task {taskNameValue}",
+            "remove task {taskNameValue}"
+          ]
+        },
+      
+        {
+          "name": "UpdateTaskStatusStructuredIntent",
+          "slots": [
+            { "name": "taskNameValue", "type": "TASK_NAME_TYPE" },
+            { "name": "status", "type": "STATUS_TYPE" }
+          ],
+          "samples": [
+            "set a task to {status}",
+            "change status to {status}",
+            "move task {taskNameValue} to {status}",
+            "set {taskNameValue} to {status}"
           ]
         },
         {
-          "name": "TaskListIntent",
+          "name": "GetTasksIntent",
+          "slots": [
+            { "name": "category", "type": "CATEGORY_TYPE" },
+            { "name": "status", "type": "STATUS_TYPE" }
+          ],
           "samples": [
             "what are my tasks",
             "read my tasks",
             "list my tasks",
-            "show my tasks",
-            "what tasks do I have"
-          ]
-        },
-        {
-          "name": "HighPriorityTasksIntent",
-          "samples": [
-            "what are my high priority tasks",
-            "what are my high-priority tasks",
-            "show high priority",
-            "high priority tasks",
-            "high-priority tasks",
-            "what's high priority",
-            "what's high-priority"
-          ]
-        },
-        {
-          "name": "ToDoListIntent",
-          "samples": [
+            "show my {category} tasks",
             "what's on my to-do list",
             "read my to-do list",
-            "my to-do list",
-            "what do I need to do"
+            "what are my {status} tasks",
+            "what are my high priority tasks"
           ]
         },
+      
         {
-          "name": "PendingTasksIntent",
-          "samples": [
-            "what are my pending tasks",
-            "show pending",
-            "pending tasks",
-            "what's pending"
-          ]
-        },
-        {
-          "name": "WorkTasksIntent",
-          "samples": [
-            "what are my work tasks",
-            "read work tasks",
-            "work tasks",
-            "what work do I have"
-          ]
-        },
-        {
-          "name": "PersonalRemindersIntent",
-          "samples": [
-            "tell me my personal reminders",
-            "personal tasks",
-            "personal reminders",
-            "what are my personal reminders"
-          ]
-        },
-        {
-          "name": "WorkoutPlanIntent",
-          "samples": [
-            "what's my workout plan",
-            "fitness tasks",
-            "workout plan",
-            "what workouts do I have"
-          ]
-        },
-        {
-          "name": "OverdueTasksIntent",
-          "samples": [
-            "what's overdue",
-            "show overdue tasks",
-            "overdue tasks",
-            "what tasks are overdue"
-          ]
-        },
-        {
-          "name": "TasksDueTomorrowIntent",
+          "name": "GetTasksByDateIntent",
+          "slots": [
+            { "name": "dueDate", "type": "AMAZON.DATE" }
+          ],
           "samples": [
             "what's due tomorrow",
-            "tomorrow's tasks",
-            "what do I have tomorrow",
-            "tasks due tomorrow"
-          ]
-        },
-        {
-          "name": "TasksDueThisWeekIntent",
-          "samples": [
+            "what's due {dueDate}",
+            "what do I have today",
             "what's due this week",
-            "this week's tasks",
-            "tasks due this week",
-            "what do I have this week"
+            "what's overdue"
+          ]
+        },
+      
+        {
+          "name": "TaskCountIntent",
+          "samples": [
+            "how many tasks do I have",
+            "how many tasks",
+            "what's my task count"
+          ]
+        },
+      
+        {
+          "name": "CompletedCountIntent",
+          "samples": [
+            "how many tasks are done",
+            "how many did I complete"
+          ]
+        },
+      
+        {
+          "name": "SummaryIntent",
+          "samples": [
+            "give me a summary",
+            "what's my productivity this week",
+            "give me an overview"
+          ]
+        },
+      
+        {
+          "name": "NextDeadlineIntent",
+          "samples": [
+            "when is my next deadline",
+            "what's my next deadline",
+            "when is the next due date"
           ]
         },
         {
-          "name": "InProgressTasksIntent",
-          "samples": [
-            "what am I working on",
-            "in progress tasks",
-            "what's in progress",
-            "what tasks are in progress"
-          ]
-        },
-        {
-          "name": "CompletedTasksIntent",
-          "samples": [
-            "what have I completed",
-            "completed tasks",
-            "what's done",
-            "what tasks have I completed"
-          ]
-        },
-        {
-          "name": "AddTaskIntent",
-          "samples": [
-            "add {task}",
-            "add {task} to my to-do list",
-            "add high priority {task}",
-            "add high-priority {task}",
-            "add {task} due tomorrow",
-            "add {task} to work",
-            "add urgent {task}",
-            "add {task} for today",
-            "remind me to {task}",
-            "remind me {task}",
-            "add {task} to shopping",
-            "add {task} to fitness",
-            "add {task} to personal"
-          ],
+          "name": "AddWorkoutIntent",
           "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
+            { "name": "workoutType", "type": "WORKOUT_TYPE" },
+            { "name": "duration", "type": "AMAZON.NUMBER" },
+            { "name": "workoutDate", "type": "AMAZON.DATE" },
+            { "name": "caloriesBurned", "type": "AMAZON.NUMBER" }
+          ],
+          "samples": [
+            "log workout {workoutType} {duration} minutes",
+            "log a {duration} minute {workoutType}",
+            "I did {workoutType} for {duration} minutes",
+            "add workout {workoutType} today",
+            "log workout {workoutType} on {workoutDate}",
+            "I burned {caloriesBurned} calories doing {workoutType}"
+          ]
+        },
+      
+        {
+          "name": "GetWorkoutsIntent",
+          "samples": [
+            "what workouts did I do",
+            "how many workouts this week",
+            "what workouts did I do this week"
           ]
         },
         {
-          "name": "MarkTaskCompleteIntent",
-          "samples": [
-            "mark {task} as done",
-            "mark {task} as complete",
-            "mark {task} done",
-            "mark {task} complete",
-            "complete {task}",
-            "{task} is done",
-            "{task} is complete",
-            "mark all today's tasks as done",
-            "complete all today's tasks",
-            "done with {task}",
-            "{task} done",
-            "mark the {task} as done",
-            "mark the {task} as complete",
-            "mark my {task} as done",
-            "mark my {task} as complete",
-            "complete the {task}",
-            "done with the {task}",
-            "done with my {task}",
-            "alexa mark {task} as done",
-            "alexa mark {task} as complete",
-            "alexa complete {task}",
-            "mark finish {task} as done"
-          ],
+          "name": "LogMealStructuredIntent",
           "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
+            { "name": "mealNameValue", "type": "MEAL_NAME_TYPE" },
+            { "name": "calories", "type": "AMAZON.NUMBER" },
+            { "name": "mealDate", "type": "AMAZON.DATE" }
+          ],
+          "samples": [
+            "log {mealNameValue} {calories} calories",
+            "I ate {mealNameValue} for {calories} calories",
+            "add meal {mealNameValue} {calories} calories",
+            "log a meal for {calories} calories",
+            "log a meal on {mealDate}"
+          ]
+        },
+      
+        {
+          "name": "GetCaloriesIntent",
+          "samples": [
+            "how many calories did I log today",
+            "how many calories have I logged",
+            "what did I eat today"
           ]
         },
         {
-          "name": "DeleteTaskIntent",
-          "samples": [
-            "delete {task}",
-            "remove {task}",
-            "delete completed tasks",
-            "remove completed tasks",
-            "delete all completed tasks",
-            "remove all completed tasks"
-          ],
+          "name": "AddNoteStructuredIntent",
           "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
+            { "name": "noteTitleValue", "type": "NOTE_TITLE_TYPE" },
+            { "name": "noteBodyValue", "type": "NOTE_BODY_TYPE" },
+            { "name": "noteDate", "type": "AMAZON.DATE" }
+          ],
+          "samples": [
+            "add note titled {noteTitleValue}",
+            "save note called {noteTitleValue} with body {noteBodyValue}",
+            "save a note called {noteTitleValue}",
+            "save a note for {noteDate}"
+          ]
+        },
+      
+        {
+          "name": "ReadNotesIntent",
+          "slots": [
+            { "name": "noteDate", "type": "AMAZON.DATE" }
+          ],
+          "samples": [
+            "read my notes from {noteDate}",
+            "read my notes",
+            "what are my notes from yesterday"
           ]
         },
         {
-          "name": "UpdateTaskStatusIntent",
-          "samples": [
-            "set {task} to in progress",
-            "move {task} to in progress",
-            "start {task}",
-            "begin {task}",
-            "set {task} to in-progress",
-            "move {task} to in-progress",
-            "set {task} to to do",
-            "set {task} to todo",
-            "move {task} to to do",
-            "move {task} to todo",
-            "set {task} to done",
-            "move {task} to done",
-            "set {task} to complete",
-            "move {task} to complete",
-            "change {task} to to do",
-            "change {task} to todo",
-            "change {task} to in progress",
-            "change {task} to done",
-            "change {task} to complete",
-            "update {task} to to do",
-            "update {task} to todo",
-            "update {task} to in progress",
-            "update {task} to done",
-            "update {task} to complete",
-            "reset {task} to to do",
-            "reset {task} to todo",
-            "mark {task} as to do",
-            "mark {task} as todo"
-          ],
+          "name": "LogEnergyIntent",
           "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "samples": []
-            }
+            { "name": "energyLevel", "type": "AMAZON.NUMBER" },
+            { "name": "energyDate", "type": "AMAZON.DATE" }
+          ],
+          "samples": [
+            "log energy {energyLevel}",
+            "my energy is {energyLevel}",
+            "track energy {energyLevel}",
+            "log energy {energyLevel} for {energyDate}"
           ]
+        },
+        {
+          "name": "AMAZON.YesIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NoIntent",
+          "samples": []
         }
       ],
-      "types": []
+
+      "types": [
+        {
+          "name": "PRIORITY_TYPE",
+          "values": [
+            { "name": { "value": "low", "synonyms": ["low priority"] } },
+            { "name": { "value": "normal", "synonyms": ["medium", "default"] } },
+            { "name": { "value": "high", "synonyms": ["high priority", "important", "urgent"] } },
+            { "name": { "value": "urgent", "synonyms": ["asap", "right away"] } }
+          ]
+        },
+      
+        {
+          "name": "CATEGORY_TYPE",
+          "values": [
+            { "name": { "value": "work", "synonyms": ["office", "job", "professional"] } },
+            { "name": { "value": "personal", "synonyms": ["home", "personal stuff"] } },
+            { "name": { "value": "shopping", "synonyms": ["grocery", "groceries"] } },
+            { "name": { "value": "fitness", "synonyms": ["workout", "exercise"] } },
+            { "name": { "value": "health", "synonyms": ["medical", "doctor"] } },
+            { "name": { "value": "notes", "synonyms": ["journal"] } },
+            { "name": { "value": "general", "synonyms": ["misc", "other"] } }
+          ]
+        },
+      
+        {
+          "name": "STATUS_TYPE",
+          "values": [
+            { "name": { "value": "to do", "synonyms": ["todo", "to-do", "not started"] } },
+            { "name": { "value": "in progress", "synonyms": ["doing", "working on"] } },
+            { "name": { "value": "done", "synonyms": ["complete", "finished"] } }
+          ]
+        },
+      
+        {
+          "name": "RECURRENCE_TYPE",
+          "values": [
+            { "name": { "value": "daily", "synonyms": ["every day", "each day"] } },
+            { "name": { "value": "weekly", "synonyms": ["every week"] } },
+            { "name": { "value": "monthly", "synonyms": ["every month"] } },
+            { "name": { "value": "yearly", "synonyms": ["every year"] } }
+          ]
+        },
+      
+        {
+          "name": "WORKOUT_TYPE",
+          "values": [
+            { "name": { "value": "chest day" } },
+            { "name": { "value": "cardio" } },
+            { "name": { "value": "yoga" } },
+            { "name": { "value": "run", "synonyms": ["running"] } },
+            { "name": { "value": "swim", "synonyms": ["swimming"] } },
+            { "name": { "value": "strength training", "synonyms": ["lifting", "weights"] } },
+            { "name": { "value": "stretching" } }
+          ]
+        },
+        {
+          "name": "TASK_NAME_TYPE",
+          "values": [
+            { "name": { "value": "finish report" } },
+            { "name": { "value": "buy groceries" } },
+            { "name": { "value": "call mom" } },
+            { "name": { "value": "email client" } },
+            { "name": { "value": "prepare presentation" } },
+            { "name": { "value": "gym session" } },
+            { "name": { "value": "review notes" } },
+            { "name": { "value": "send follow up" } },
+            { "name": { "value": "dentist appointment" } },
+            { "name": { "value": "team meeting prep" } }
+          ]
+        },
+      
+        {
+          "name": "MEAL_NAME_TYPE",
+          "values": [
+            { "name": { "value": "chicken and rice" } },
+            { "name": { "value": "oatmeal" } },
+            { "name": { "value": "protein shake" } },
+            { "name": { "value": "salad" } },
+            { "name": { "value": "pasta" } }
+          ]
+        },
+      
+        {
+          "name": "NOTE_TITLE_TYPE",
+          "values": [
+            { "name": { "value": "meeting notes" } },
+            { "name": { "value": "task ideas" } },
+            { "name": { "value": "shopping ideas" } },
+            { "name": { "value": "reminders" } }
+          ]
+        },
+      
+        {
+          "name": "NOTE_BODY_TYPE",
+          "values": [
+            { "name": { "value": "discuss project timeline" } },
+            { "name": { "value": "follow up with client" } },
+            { "name": { "value": "review deliverables" } }
+          ]
+        },
+      
+        {
+          "name": "ITEM_TYPE",
+          "values": [
+            { "name": { "value": "milk" } },
+            { "name": { "value": "eggs" } },
+            { "name": { "value": "bread" } },
+            { "name": { "value": "chicken" } },
+            { "name": { "value": "vegetables" } }
+          ]
+        }
+      ]
     },
+
     "dialog": {
       "intents": [
         {
-          "name": "BrainDumpIntent",
+          "name": "AddTaskStructuredIntent",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
             {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.Task"
-              }
+              "name": "taskNameValue",
+              "type": "TASK_NAME_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "category",
+              "type": "CATEGORY_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "priority",
+              "type": "PRIORITY_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "dueDate",
+              "type": "AMAZON.DATE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "recurrence",
+              "type": "RECURRENCE_TYPE",
+              "elicitationRequired": false
             }
-          ],
-          "delegationStrategy": "ALWAYS"
+          ]
+        },
+      
+        {
+          "name": "CompleteTaskStructuredIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "taskNameValue",
+              "type": "TASK_NAME_TYPE",
+              "elicitationRequired": false
+            }
+          ]
+        },
+      
+        {
+          "name": "DeleteTaskStructuredIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "taskNameValue",
+              "type": "TASK_NAME_TYPE",
+              "elicitationRequired": false
+            }
+          ]
+        },
+      
+        {
+          "name": "UpdateTaskStatusStructuredIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "taskNameValue",
+              "type": "TASK_NAME_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "status",
+              "type": "STATUS_TYPE",
+              "elicitationRequired": false
+            }
+          ]
         },
         {
-          "name": "EnergyTrackerIntent",
+          "name": "LogMealStructuredIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "mealNameValue",
+              "type": "MEAL_NAME_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "calories",
+              "type": "AMAZON.NUMBER",
+              "elicitationRequired": false
+            },
+            {
+              "name": "mealDate",
+              "type": "AMAZON.DATE",
+              "elicitationRequired": false
+            }
+          ]
+        },
+        {
+          "name": "AddNoteStructuredIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "noteTitleValue",
+              "type": "NOTE_TITLE_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "noteBodyValue",
+              "type": "NOTE_BODY_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "noteDate",
+              "type": "AMAZON.DATE",
+              "elicitationRequired": false
+            }
+          ]
+        },
+        {
+          "name": "AddWorkoutIntent",
+          "confirmationRequired": false,
+          "prompts": {},
+          "slots": [
+            {
+              "name": "workoutType",
+              "type": "WORKOUT_TYPE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "duration",
+              "type": "AMAZON.NUMBER",
+              "elicitationRequired": false
+            },
+            {
+              "name": "workoutDate",
+              "type": "AMAZON.DATE",
+              "elicitationRequired": false
+            },
+            {
+              "name": "caloriesBurned",
+              "type": "AMAZON.NUMBER",
+              "elicitationRequired": false
+            }
+          ]
+        },
+        {
+          "name": "LogEnergyIntent",
           "confirmationRequired": false,
           "prompts": {},
           "slots": [
             {
               "name": "energyLevel",
               "type": "AMAZON.NUMBER",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.EnergyLevel"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "AddShoppingIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
+              "elicitationRequired": false
+            },
             {
-              "name": "items",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.Items"
-              }
+              "name": "energyDate",
+              "type": "AMAZON.DATE",
+              "elicitationRequired": false
             }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "MarkShoppingCompleteIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "item",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.Item"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "AddTaskIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.TaskAdd"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "MarkTaskCompleteIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.TaskMark"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "DeleteTaskIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.TaskDelete"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
-        },
-        {
-          "name": "UpdateTaskStatusIntent",
-          "confirmationRequired": false,
-          "prompts": {},
-          "slots": [
-            {
-              "name": "task",
-              "type": "AMAZON.SearchQuery",
-              "confirmationRequired": false,
-              "elicitationRequired": true,
-              "prompts": {
-                "elicitation": "Elicit.Slot.1234567890.TaskUpdate"
-              }
-            }
-          ],
-          "delegationStrategy": "ALWAYS"
+          ]
         }
-      ],
-      "delegations": []
+      ]
     },
+
     "prompts": [
       {
-        "id": "Elicit.Slot.1234567890.Task",
+        "id": "Elicit.TaskNameValue",
         "variations": [
           {
             "type": "PlainText",
-            "value": "What tasks would you like to add?"
-          },
-          {
-            "type": "PlainText",
-            "value": "Tell me the tasks you want to add."
-          }
-        ]
-      },
-      {
-        "id": "Elicit.Slot.1234567890.EnergyLevel",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "What is your energy level from 1 to 10?"
-          },
-          {
-            "type": "PlainText",
-            "value": "Please tell me your energy level from 1 to 10."
-          }
-        ]
-      },
-      {
-        "id": "Elicit.Slot.1234567890.Items",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "What items would you like to add to your shopping list?"
-          },
-          {
-            "type": "PlainText",
-            "value": "Tell me the items you want to add."
-          }
-        ]
-      },
-      {
-        "id": "Elicit.Slot.1234567890.Item",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Which item would you like to mark as complete?"
-          },
-          {
-            "type": "PlainText",
-            "value": "Tell me the item name."
-          }
-        ]
-      },
-      {
-        "id": "Elicit.Slot.1234567890.TaskAdd",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "What task would you like to add?"
-          },
-          {
-            "type": "PlainText",
-            "value": "Tell me the task you want to add."
-          }
-        ]
-      },
-      {
-        "id": "Elicit.Slot.1234567890.TaskMark",
-        "variations": [
-          {
-            "type": "PlainText",
-            "value": "Which task would you like to mark as complete?"
+            "value": "What is the task name?"
           },
           {
             "type": "PlainText",
@@ -588,31 +642,214 @@
         ]
       },
       {
-        "id": "Elicit.Slot.1234567890.TaskDelete",
+        "id": "Elicit.Category",
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which task would you like to delete?"
+            "value": "Which category should I use?"
           },
           {
             "type": "PlainText",
-            "value": "Tell me the task name."
+            "value": "What category does this task belong to?"
           }
         ]
       },
       {
-        "id": "Elicit.Slot.1234567890.TaskUpdate",
+        "id": "Elicit.Priority",
         "variations": [
           {
             "type": "PlainText",
-            "value": "Which task would you like to update?"
+            "value": "What priority should I set?"
           },
           {
             "type": "PlainText",
-            "value": "Tell me the task name."
+            "value": "Is this low, normal, high, or urgent?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.DueDate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "When is this due?"
+          },
+          {
+            "type": "PlainText",
+            "value": "What date should I set?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Recurrence",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "How often does this repeat?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Is this daily, weekly, monthly, or yearly?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.MealNameValue",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What meal did you have?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the meal name."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Calories",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "How many calories was it?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Please provide the number of calories."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.MealDate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "When did you eat this meal?"
+          },
+          {
+            "type": "PlainText",
+            "value": "What day should I log this meal for?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.NoteTitleValue",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What is the note title?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the title of the note."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.NoteBodyValue",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What should the note say?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the content of the note."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.NoteDate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What date should I associate with this note?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Which day is this note for?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.WorkoutType",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What workout did you do?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the type of workout."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.Duration",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "How long was the workout?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Tell me the duration in minutes."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.WorkoutDate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "When did you do this workout?"
+          },
+          {
+            "type": "PlainText",
+            "value": "What day was this workout?"
+          }
+        ]
+      },
+      {
+        "id": "Elicit.CaloriesBurned",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "How many calories did you burn?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Please provide the number of calories burned."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.EnergyLevel",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "What is your energy level?"
+          },
+          {
+            "type": "PlainText",
+            "value": "Provide a number from one to ten."
+          }
+        ]
+      },
+      {
+        "id": "Elicit.EnergyDate",
+        "variations": [
+          {
+            "type": "PlainText",
+            "value": "When should I log this energy level?"
+          },
+          {
+            "type": "PlainText",
+            "value": "What date is this for?"
           }
         ]
       }
     ]
+    
   }
 }
