@@ -65,8 +65,13 @@ CREATE TABLE IF NOT EXISTS users (
 -- LICENSES TABLE
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS licenses (
-  license_key VARCHAR(255) PRIMARY KEY,
+  stripe_payment_intent_id VARCHAR(255) PRIMARY KEY, -- Stripe payment intent ID used as license key
+  license_key VARCHAR(255), -- Nullable, for backward compatibility
   status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  stripe_customer_id VARCHAR(255),
+  amount_paid DECIMAL(10,2),
+  currency VARCHAR(3) DEFAULT 'usd',
+  purchase_date TIMESTAMPTZ DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   notes TEXT
@@ -108,9 +113,9 @@ CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
 );
 
 -- OAUTH ACCESS TOKENS TABLE
--- Stores JWT access tokens for Alexa Account Linking
+-- Stores opaque access tokens (random strings) for Alexa Account Linking
 CREATE TABLE IF NOT EXISTS oauth_access_tokens (
-  token TEXT PRIMARY KEY, -- The JWT token itself
+  token TEXT PRIMARY KEY, -- Opaque token (random string), not JWT
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   client_id TEXT NOT NULL,
   scope TEXT NOT NULL DEFAULT 'alexa',
@@ -133,6 +138,20 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
 );
 
 -- ============================================================================
+-- WEBSITE REFRESH TOKENS TABLE
+-- Stores refresh tokens for website JWT sessions
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS website_refresh_tokens (
+  token TEXT PRIMARY KEY, -- Opaque refresh token
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  issued_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  revoked BOOLEAN DEFAULT FALSE,
+  revoked_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
 -- INDEXES
 -- ============================================================================
 
@@ -149,6 +168,8 @@ WHERE amazon_account_id IS NOT NULL;
 
 -- Licenses table indexes
 CREATE INDEX IF NOT EXISTS idx_licenses_status ON licenses(status);
+CREATE INDEX IF NOT EXISTS idx_licenses_stripe_payment_intent_id ON licenses(stripe_payment_intent_id);
+CREATE INDEX IF NOT EXISTS idx_licenses_stripe_customer_id ON licenses(stripe_customer_id) WHERE stripe_customer_id IS NOT NULL;
 
 -- OAuth sessions table indexes (legacy)
 CREATE INDEX IF NOT EXISTS idx_oauth_sessions_state ON oauth_sessions(state);
@@ -168,6 +189,11 @@ CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expires_at ON oauth_access_to
 -- OAuth2 refresh tokens indexes
 CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_user_id ON oauth_refresh_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_revoked ON oauth_refresh_tokens(revoked);
+
+-- Website refresh tokens indexes
+CREATE INDEX IF NOT EXISTS idx_website_refresh_tokens_user_id ON website_refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_website_refresh_tokens_expires_at ON website_refresh_tokens(expires_at);
+CREATE INDEX IF NOT EXISTS idx_website_refresh_tokens_revoked ON website_refresh_tokens(revoked, expires_at);
 
 -- ============================================================================
 -- TRIGGERS
@@ -205,6 +231,7 @@ ALTER TABLE oauth_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE oauth_authorization_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE oauth_access_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE oauth_refresh_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE website_refresh_tokens ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
 -- Service role can do everything
@@ -230,6 +257,9 @@ CREATE POLICY "Service role can manage oauth_access_tokens" ON oauth_access_toke
   FOR ALL USING (true);
 
 CREATE POLICY "Service role can manage oauth_refresh_tokens" ON oauth_refresh_tokens
+  FOR ALL USING (true);
+
+CREATE POLICY "Service role can manage website_refresh_tokens" ON website_refresh_tokens
   FOR ALL USING (true);
 
 -- ============================================================================
@@ -262,6 +292,14 @@ BEGIN
   
   -- Delete old revoked refresh tokens (after 30 days)
   DELETE FROM oauth_refresh_tokens 
+  WHERE revoked = TRUE AND revoked_at < NOW() - INTERVAL '30 days';
+  
+  -- Delete expired website refresh tokens (keep revoked for 30 days for audit)
+  DELETE FROM website_refresh_tokens 
+  WHERE expires_at < NOW() - INTERVAL '7 days' AND revoked = FALSE;
+  
+  -- Delete old revoked website refresh tokens (after 30 days)
+  DELETE FROM website_refresh_tokens 
   WHERE revoked = TRUE AND revoked_at < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;

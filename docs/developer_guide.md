@@ -393,7 +393,7 @@ Set in `web-login/.env.local` (local) or Vercel dashboard (production):
 - `NOTION_REDIRECT_URI` - OAuth redirect URI
 - `ALEXA_OAUTH_CLIENT_ID` - Alexa OAuth client ID
 - `ALEXA_OAUTH_CLIENT_SECRET` - Alexa OAuth client secret
-- `JWT_SECRET` - Secret key for signing JWT tokens
+- `JWT_SECRET` - Secret key for signing website JWT tokens (for website sessions, not Alexa tokens)
 - `NEXT_PUBLIC_SKIP_LICENSE_CHECK` - Set to `true` for testing (optional)
 
 ---
@@ -485,7 +485,7 @@ The system uses OAuth2 Authorization Code Grant flow:
    - Notion connection
    - Valid session
 4. Authorization code generated
-5. Code exchanged for JWT access token
+5. Code exchanged for opaque access token (stored in database, not a JWT)
 6. Token stored in `oauth_access_tokens` table
 7. Token sent to Alexa for account linking
 
@@ -602,7 +602,7 @@ notion-assistant-alexa-skill/
 - NextDeadlineHandler
 
 **Interceptors**: Request interceptors in `lambda/src/interceptors/`:
-- AuthInterceptor - Validates JWT tokens
+- AuthInterceptor - Validates access tokens (opaque tokens or JWTs) via introspection endpoint
 - NotionConnectionInterceptor - Sets up Notion client
 
 **Utilities**: Utility functions in `lambda/src/utils/`:
@@ -625,7 +625,7 @@ notion-assistant-alexa-skill/
 - `/api/oauth/authorize` - OAuth authorization endpoint
 - `/api/oauth/token` - OAuth token exchange endpoint
 - `/api/oauth/callback` - Notion OAuth callback
-- `/api/billing/generate-test-token` - Generate test JWT token
+- `/api/billing/generate-test-token` - **REMOVED** - Use Stripe checkout instead
 
 ---
 
@@ -685,7 +685,7 @@ notion-assistant-alexa-skill/
 - Check `ALEXA_OAUTH_CLIENT_ID` and `ALEXA_OAUTH_CLIENT_SECRET` are set
 - Verify redirect URIs match in Developer Console
 - Check user has active license and Notion connection
-- Verify JWT token generation is working
+- Verify opaque token generation is working (via Stripe webhook)
 
 ---
 

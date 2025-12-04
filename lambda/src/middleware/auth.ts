@@ -22,7 +22,8 @@ interface IntrospectResponse {
 
 /**
  * Auth Middleware Interceptor
- * Validates JWT tokens from Alexa requests and attaches user info to handlerInput
+ * Validates access tokens (opaque tokens or JWTs) from Alexa requests via introspection endpoint
+ * and attaches user info to handlerInput
  */
 export class AuthInterceptor implements RequestInterceptor {
   async process(handlerInput: HandlerInput): Promise<void> {
@@ -85,17 +86,22 @@ export class AuthInterceptor implements RequestInterceptor {
       // Validate token
       let userInfo: IntrospectResponse | null = null;
 
-      // Try local JWT verification first (faster)
-      if (JWT_SECRET && !isLegacyToken(accessToken)) {
+      // Check if token is opaque (not JWT format)
+      // Opaque tokens are random strings, not JWTs (which have 3 parts separated by dots)
+      const isOpaqueToken = !accessToken.includes('.') || accessToken.split('.').length !== 3;
+
+      // Try local JWT verification first (only for JWT tokens, not opaque)
+      // Opaque tokens must always go through introspection since they're stored in DB
+      if (JWT_SECRET && !isLegacyToken(accessToken) && !isOpaqueToken) {
         const payload = verifyAccessToken(accessToken);
         if (payload) {
-          // Token is valid, but we need to check revocation and get user info
+          // Token is valid JWT, but we need to check revocation and get user info
           // For now, we'll use introspection for full validation
           // In production, you could cache user info or verify locally
         }
       }
 
-      // Use introspection endpoint (supports both JWT and legacy tokens)
+      // Use introspection endpoint (supports opaque tokens, JWT tokens, and legacy tokens)
       try {
         const introspectResponse = await fetch(INTROSPECT_URL, {
           method: 'POST',
@@ -115,6 +121,13 @@ export class AuthInterceptor implements RequestInterceptor {
         if (!userInfo.active) {
           console.warn('[AuthInterceptor] Token is not active');
           throw new Error('TOKEN_INVALID');
+        }
+
+        // Log token type for debugging
+        if (isOpaqueToken) {
+          console.log('[AuthInterceptor] Validated opaque token via introspection');
+        } else {
+          console.log('[AuthInterceptor] Validated JWT token via introspection');
         }
       } catch (fetchError: any) {
         console.error('[AuthInterceptor] Introspection error:', fetchError);

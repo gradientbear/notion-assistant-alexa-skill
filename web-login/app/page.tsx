@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Header } from './components/Header';
@@ -19,6 +19,7 @@ function AuthPageContent() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const redirectAttemptedRef = useRef(false);
 
   useEffect(() => {
     // Check if there's a tab parameter in URL
@@ -88,25 +89,116 @@ function AuthPageContent() {
 
       // Only redirect if we have a valid user with email
       console.log('[AuthPage] Valid session found for user:', user.email, '- checking redirect');
-      const redirect = searchParams.get('redirect');
+      const redirect = searchParams.get('redirect'); // This is already decoded by Next.js
       
       console.log('[AuthPage] Redirect check:', {
         hasRedirect: !!redirect,
         redirectUrl: redirect,
         currentPath: window.location.pathname,
-        redirectIncludesPath: redirect?.includes(window.location.pathname),
+        currentHref: window.location.href,
+        isApiEndpoint: redirect?.includes('/api/'),
       });
       
       // Prevent redirect loops - if redirect URL is the same as current page, just go to dashboard
-      // But allow redirects to API endpoints (like /api/oauth/authorize)
-      if (redirect && 
-          redirect !== window.location.href && 
-          !redirect.includes(window.location.pathname) &&
-          (redirect.startsWith('/api/') || !redirect.startsWith(window.location.origin + window.location.pathname))) {
-        console.log('[AuthPage] Redirecting to:', redirect);
-        router.push(redirect);
+      // But always allow redirects to API endpoints (like /api/oauth/authorize) - these are OAuth flows
+      if (redirect) {
+        // Check if it's an API endpoint (OAuth flow)
+        const isApiEndpoint = redirect.includes('/api/');
+        
+        // Check if it's the same URL (loop prevention)
+        const isSameUrl = redirect === window.location.href;
+        
+        // Check if it's a relative path that matches current path (loop prevention)
+        const redirectPath = new URL(redirect, window.location.origin).pathname;
+        const isSamePath = redirectPath === window.location.pathname && window.location.pathname !== '/';
+        
+        // Check if redirect URL would redirect back to login page (loop detection)
+        const redirectUrlObj = new URL(redirect, window.location.origin);
+        const wouldRedirectToLogin = redirectUrlObj.pathname === window.location.pathname || 
+                                     redirectUrlObj.searchParams.get('redirect') === window.location.href;
+        
+        // For OAuth authorize endpoint, get the session token and pass it in the URL
+        // This ensures the token is available even if cookies aren't sent
+        // IMPORTANT: Check this FIRST, before sessionStorage check, to allow OAuth flow to complete
+        const isOAuthAuthorize = redirect.includes('/api/oauth/authorize');
+        console.log('[AuthPage] OAuth authorize check:', {
+          isOAuthAuthorize,
+          isApiEndpoint,
+          isSameUrl,
+          wouldRedirectToLogin,
+          redirectUrl: redirect,
+        });
+        
+        if (isOAuthAuthorize && isApiEndpoint && !isSameUrl && !wouldRedirectToLogin) {
+          console.log('[AuthPage] Processing OAuth authorize redirect...');
+          const { data: { session } } = await supabase.auth.getSession();
+          console.log('[AuthPage] Session check:', {
+            hasSession: !!session,
+            hasAccessToken: !!session?.access_token,
+          });
+          
+          if (session?.access_token) {
+            const redirectUrl = new URL(redirect);
+            // Add session token as query parameter (only for same-origin requests)
+            redirectUrl.searchParams.set('_session_token', session.access_token);
+            console.log('[AuthPage] Redirecting to OAuth authorize with session token:', {
+              redirectUrl: redirectUrl.toString(),
+              tokenLength: session.access_token.length,
+            });
+            // Clear any previous redirect attempt flag since we have a token
+            const redirectKey = `redirect_attempted_${redirect}`;
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem(redirectKey);
+              console.log('[AuthPage] Cleared sessionStorage flag:', redirectKey);
+            }
+            window.location.href = redirectUrl.toString();
+            return;
+          } else {
+            console.log('[AuthPage] No session token available, cannot redirect to OAuth authorize');
+            router.push('/dashboard');
+            return;
+          }
+        }
+        
+        // For other API endpoints or if we couldn't get a token, check for redirect loops
+        if (isApiEndpoint && !isSameUrl && !wouldRedirectToLogin) {
+          // Check if we've already attempted this redirect (prevent loops)
+          const redirectKey = `redirect_attempted_${redirect}`;
+          const hasAttempted = typeof window !== 'undefined' ? sessionStorage.getItem(redirectKey) : null;
+          
+          if (hasAttempted) {
+            console.log('[AuthPage] Redirect already attempted, going to dashboard to prevent loop');
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem(redirectKey); // Clean up
+            }
+            router.push('/dashboard');
+            return;
+          }
+          
+          // Mark as attempted before redirecting
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem(redirectKey, 'true');
+          }
+          
+          // Always allow API endpoints (OAuth flows) unless it's the exact same URL
+          // Use window.location.href for API endpoints to ensure cookies are sent
+          console.log('[AuthPage] Redirecting to API endpoint (full page reload):', redirect);
+          window.location.href = redirect;
+          return; // Don't continue execution after setting location
+        } else if (!isSameUrl && !isSamePath && !wouldRedirectToLogin) {
+          // Allow other redirects that aren't loops
+          console.log('[AuthPage] Redirecting to:', redirect);
+          router.push(redirect);
+        } else {
+          console.log('[AuthPage] Redirecting to dashboard (loop prevention or invalid redirect)', {
+            isSameUrl,
+            isSamePath,
+            wouldRedirectToLogin,
+          });
+          router.push('/dashboard');
+        }
       } else {
-        console.log('[AuthPage] Redirecting to dashboard (no valid redirect or loop prevention)');
+        console.log('[AuthPage] Redirecting to dashboard (no redirect parameter)');
         router.push('/dashboard');
       }
     } catch (err) {
@@ -152,6 +244,33 @@ function AuthPageContent() {
         }
 
         await syncUserToDatabase(data.user.id, email, 'email');
+        
+        // Get website JWT tokens after successful login
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.access_token) {
+            const tokenResponse = await fetch('/api/auth/issue-tokens', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+            });
+
+            if (tokenResponse.ok) {
+              const tokenData = await tokenResponse.json();
+              // Store tokens in localStorage
+              localStorage.setItem('website_access_token', tokenData.access_token);
+              if (tokenData.refresh_token) {
+                localStorage.setItem('website_refresh_token', tokenData.refresh_token);
+              }
+              console.log('[Login] Website JWT tokens issued and stored');
+            }
+          }
+        } catch (tokenError: any) {
+          console.error('[Login] Error issuing website tokens:', tokenError);
+          // Continue anyway - tokens will be issued on next page load
+        }
         
         const redirect = searchParams.get('redirect');
         if (redirect) {

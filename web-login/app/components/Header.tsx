@@ -25,6 +25,11 @@ export function Header({ showAuth = true }: HeaderProps) {
   };
 
   const handleLogout = async () => {
+    // Clear website JWT tokens
+    localStorage.removeItem('website_access_token');
+    localStorage.removeItem('website_refresh_token');
+    
+    // Sign out from Supabase
     await supabase.auth.signOut();
     router.push('/');
   };

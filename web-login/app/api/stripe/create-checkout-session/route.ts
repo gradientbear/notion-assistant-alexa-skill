@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { priceId, successUrl, cancelUrl, licenseKey } = body;
+    const { priceId, successUrl, cancelUrl } = body;
 
     if (!priceId || !successUrl || !cancelUrl) {
       return NextResponse.json(
@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create checkout session
+    // Note: license_key will be set to payment_intent.id by the webhook
     const session = await createCheckoutSession({
       priceId,
       successUrl,
@@ -71,7 +72,6 @@ export async function POST(request: NextRequest) {
       customerEmail: user.email,
       metadata: {
         user_id: user.id,
-        license_key: licenseKey || user.license_key || '',
         email: user.email,
       },
     });

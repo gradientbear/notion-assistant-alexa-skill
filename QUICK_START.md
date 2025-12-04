@@ -26,9 +26,9 @@ In Supabase SQL Editor, run:
 - `STRIPE_WEBHOOK_SECRET` (optional)
 
 **Lambda:**
-- `JWT_SECRET` (same as Vercel)
+- `JWT_SECRET` (same as Vercel, for backward compatibility with old JWT tokens)
 - `INTROSPECT_URL=https://voice-planner-murex.vercel.app/api/auth/introspect`
-- `LEGACY_TOKEN_SUPPORT=true`
+- `LEGACY_TOKEN_SUPPORT=true` (optional, for migration period)
 
 ## 4. Deploy
 

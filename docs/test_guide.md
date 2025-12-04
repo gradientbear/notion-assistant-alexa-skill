@@ -28,11 +28,11 @@ This guide walks you through testing the entire flow from user registration to c
    - Redirected back to dashboard
    - "Connect Notion" step shows as complete
 
-### Step 3: Generate JWT Token (Buy License)
+### Step 3: Purchase License (Buy License)
 1. On dashboard, click **"Buy License"** button
 2. On billing page, click **"Buy Lifetime License"**
 3. **Expected:**
-   - JWT token generated automatically (Phase 1 testing)
+   - Opaque access token generated automatically via Stripe webhook after payment
    - Redirected to dashboard
    - "Buy License" step shows as complete
    - **"Link Alexa" button becomes enabled**
@@ -104,7 +104,7 @@ This guide walks you through testing the entire flow from user registration to c
 7. System checks:
    - ✅ User authenticated
    - ✅ Notion connected
-   - ✅ License active (JWT token exists)
+   - ✅ License active (opaque access token exists in database)
 8. **Expected:** Redirected back to Alexa with success
 9. Account is now linked
 
@@ -327,7 +327,7 @@ Test all status transitions:
 ### Setup
 - [ ] User registered and verified email
 - [ ] Notion connected (Privacy page + 6 databases created)
-- [ ] JWT token generated (Buy License clicked)
+- [ ] Opaque access token generated (Stripe payment completed)
 - [ ] Interaction model deployed successfully
 - [ ] Account linking configured in Developer Console
 - [ ] Account linked via OAuth flow

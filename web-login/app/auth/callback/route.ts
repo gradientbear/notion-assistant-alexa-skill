@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
+import { issueWebsiteTokens } from '@/lib/jwt'
 
 export const dynamic = 'force-dynamic'
 
@@ -252,6 +253,46 @@ export async function GET(request: NextRequest) {
       }
 
       if (userCreated) {
+        // Issue website JWT and refresh token
+        try {
+          // Get user record to get the UUID
+          const { data: userRecord } = await serverSupabase
+            .from('users')
+            .select('id, auth_user_id, email')
+            .eq('auth_user_id', data.user.id)
+            .single();
+
+          if (userRecord) {
+            const tokens = await issueWebsiteTokens(
+              userRecord.id,
+              data.user.id,
+              data.user.email || ''
+            );
+
+            // Redirect to dashboard with tokens in URL fragment (client will extract and store)
+            // Or set as cookies (HTTP-only for refresh token, regular for access token)
+            const dashboardUrl = new URL('/dashboard', request.url);
+            dashboardUrl.searchParams.set('access_token', tokens.accessToken);
+            dashboardUrl.searchParams.set('refresh_token', tokens.refreshToken);
+            
+            const response = NextResponse.redirect(dashboardUrl);
+            
+            // Set refresh token as HTTP-only cookie
+            response.cookies.set('refresh_token', tokens.refreshToken, {
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              maxAge: 7 * 24 * 60 * 60, // 7 days
+              path: '/',
+            });
+
+            return response;
+          }
+        } catch (tokenError: any) {
+          console.error('[Auth Callback] Error issuing website tokens:', tokenError);
+          // Continue to redirect even if token issuance fails
+        }
+
         return NextResponse.redirect(new URL('/dashboard', request.url))
       } else {
         return NextResponse.redirect(new URL('/?error=User creation failed', request.url))
@@ -361,6 +402,35 @@ export async function GET(request: NextRequest) {
           console.log('[Auth Callback] User already exists in database:', existingUser.id)
         }
         
+        // Issue website JWT and refresh token
+        try {
+          const tokens = await issueWebsiteTokens(
+            existingUser?.id || user.id,
+            user.id,
+            user.email || ''
+          );
+
+          const dashboardUrl = new URL('/dashboard', request.url);
+          dashboardUrl.searchParams.set('access_token', tokens.accessToken);
+          dashboardUrl.searchParams.set('refresh_token', tokens.refreshToken);
+          
+          const response = NextResponse.redirect(dashboardUrl);
+          
+          // Set refresh token as HTTP-only cookie
+          response.cookies.set('refresh_token', tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60, // 7 days
+            path: '/',
+          });
+
+          return response;
+        } catch (tokenError: any) {
+          console.error('[Auth Callback] Error issuing website tokens:', tokenError);
+          // Continue to redirect even if token issuance fails
+        }
+
         // Redirect to dashboard
         return NextResponse.redirect(new URL('/dashboard', request.url))
       } else {

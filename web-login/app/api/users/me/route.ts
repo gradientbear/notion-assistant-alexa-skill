@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase'
 import { createClient } from '@supabase/supabase-js'
+import { verifyWebsiteToken } from '@/lib/jwt'
 
 // Mark route as dynamic
 export const dynamic = 'force-dynamic'
@@ -21,14 +22,39 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Verify token and get user
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    // Try to verify as website JWT first (new approach)
+    const websiteTokenPayload = verifyWebsiteToken(token);
+    let authUserId: string | null = null;
+    let userEmail: string | null = null;
+    let userProvider: string = 'email';
 
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token)
+    if (websiteTokenPayload) {
+      // Website JWT token - extract user ID and email from payload
+      authUserId = websiteTokenPayload.sub;
+      userEmail = websiteTokenPayload.email;
+      console.log('[API /users/me] Authenticated via website JWT:', authUserId);
+    } else {
+      // Fall back to Supabase session token (backward compatibility)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-    if (authError || !authUser) {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(token)
+
+      if (authError || !authUser) {
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401 }
+        )
+      }
+
+      authUserId = authUser.id;
+      userEmail = authUser.email || null;
+      userProvider = authUser.app_metadata?.provider || 'email';
+      console.log('[API /users/me] Authenticated via Supabase session token:', authUserId);
+    }
+
+    if (!authUserId) {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
@@ -47,7 +73,7 @@ export async function GET(request: NextRequest) {
     let { data: usersByAuthId, error } = await serverClient
       .from('users')
       .select('id, auth_user_id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, shopping_db_id, workouts_db_id, meals_db_id, notes_db_id, energy_logs_db_id, onboarding_complete, created_at, updated_at')
-      .eq('auth_user_id', authUser.id)
+      .eq('auth_user_id', authUserId)
     
     let user: any = null;
     
@@ -86,7 +112,7 @@ export async function GET(request: NextRequest) {
             notion_setup_complete: (u as any).notion_setup_complete,
             updated_at: u.updated_at,
           })),
-          auth_user_id: authUser.id,
+          auth_user_id: authUserId,
         });
         
         // Check if another user has Notion data but selected user doesn't
@@ -118,7 +144,7 @@ export async function GET(request: NextRequest) {
       hasError: !!error,
       errorCode: error?.code,
       errorMessage: error?.message,
-      authUserId: authUser.id,
+      authUserId: authUserId,
       totalUsersFound: usersByAuthId?.length || 0,
       selectedUserId: user?.id,
       timestamp: new Date().toISOString(),
@@ -131,20 +157,20 @@ export async function GET(request: NextRequest) {
       const { data: usersByEmail, error: emailError } = await serverClient
         .from('users')
         .select('id, auth_user_id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, shopping_db_id, workouts_db_id, meals_db_id, notes_db_id, energy_logs_db_id, onboarding_complete, created_at, updated_at')
-        .eq('email', authUser.email || '')
+        .eq('email', userEmail || '')
       
       if (usersByEmail && !emailError && usersByEmail.length > 0) {
         // If multiple users with same email, prefer:
         // 1. One with matching auth_user_id (CRITICAL - must match)
         // 2. One with Notion token (most complete) - only if no auth_user_id match
         // 3. Most recently updated - only if no auth_user_id match
-        let selectedUser = usersByEmail.find(u => u.auth_user_id === authUser.id);
+        let selectedUser = usersByEmail.find(u => u.auth_user_id === authUserId);
         
         console.log('[API /users/me] Email lookup results:', {
           total_users: usersByEmail.length,
-          users_with_matching_auth_id: usersByEmail.filter(u => u.auth_user_id === authUser.id).length,
+          users_with_matching_auth_id: usersByEmail.filter(u => u.auth_user_id === authUserId).length,
           users_with_notion_token: usersByEmail.filter(u => !!(u as any).notion_token).length,
-          auth_user_id_to_match: authUser.id,
+          auth_user_id_to_match: authUserId,
         });
         
         if (!selectedUser) {
@@ -165,22 +191,22 @@ export async function GET(request: NextRequest) {
             id: selectedUser.id,
             auth_user_id: selectedUser.auth_user_id,
             has_notion_token: !!(selectedUser as any).notion_token,
-            matches_auth_user_id: selectedUser.auth_user_id === authUser.id
+            matches_auth_user_id: selectedUser.auth_user_id === authUserId
           })
           user = selectedUser
           error = null
           
           // Update auth_user_id if it's missing or doesn't match
-          if (user && user.auth_user_id !== authUser.id) {
+          if (user && user.auth_user_id !== authUserId) {
             const { error: updateError } = await serverClient
               .from('users')
-              .update({ auth_user_id: authUser.id })
+              .update({ auth_user_id: authUserId })
               .eq('id', user.id)
             
             if (updateError) {
               console.error('[API /users/me] Failed to update auth_user_id:', updateError)
             } else {
-              user.auth_user_id = authUser.id
+              user.auth_user_id = authUserId
               console.log('[API /users/me] Updated auth_user_id successfully')
             }
           }
@@ -228,7 +254,7 @@ export async function GET(request: NextRequest) {
         const { data: simpleUser, error: simpleError } = await serverClient
           .from('users')
           .select('*')
-          .eq('auth_user_id', authUser.id)
+          .eq('auth_user_id', authUserId)
           .single()
         
         if (simpleUser && !simpleError) {
@@ -242,8 +268,7 @@ export async function GET(request: NextRequest) {
     // If user doesn't exist, create them (fallback for race conditions)
     if (error || !user) {
       console.error('[API /users/me] User not found in database, attempting to create:', {
-        auth_user_id: authUser.id,
-        email: authUser.email,
+        auth_user_id: authUserId,
         error: error ? {
           code: error.code,
           message: error.message,
@@ -253,19 +278,19 @@ export async function GET(request: NextRequest) {
 
       // Try to create the user as a fallback
       console.log('[API /users/me] Attempting to create user:', {
-        auth_user_id: authUser.id,
-        email: authUser.email,
-        provider: authUser.app_metadata?.provider || 'email',
+        auth_user_id: authUserId,
+        email: userEmail || '',
+        provider: userProvider,
         hasServiceKey: !!process.env.SUPABASE_SERVICE_KEY,
       })
       
       const { data: newUser, error: createError } = await serverClient
         .from('users')
         .insert({
-          auth_user_id: authUser.id,
-          email: authUser.email || '',
-          provider: authUser.app_metadata?.provider || 'email',
-          email_verified: authUser.email_confirmed_at ? true : (authUser.app_metadata?.provider !== 'email'),
+          auth_user_id: authUserId,
+          email: userEmail || '',
+          provider: userProvider,
+          email_verified: userProvider !== 'email',
           license_key: '',
           notion_setup_complete: false,
           onboarding_complete: false,
@@ -287,7 +312,7 @@ export async function GET(request: NextRequest) {
           const { data: fetchedUser, error: fetchError } = await serverClient
             .from('users')
             .select('id, auth_user_id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, shopping_db_id, workouts_db_id, meals_db_id, notes_db_id, energy_logs_db_id, onboarding_complete, created_at, updated_at')
-            .eq('auth_user_id', authUser.id)
+            .eq('auth_user_id', authUserId)
             .single()
           
           if (fetchedUser && !fetchError) {
@@ -301,12 +326,12 @@ export async function GET(request: NextRequest) {
           } else {
             console.error('[API /users/me] Failed to fetch user after duplicate error:', fetchError)
             // Try by email as last resort
-            if (authUser.email) {
+            if (userEmail) {
               console.log('[API /users/me] Trying email lookup as last resort...')
               const { data: userByEmail } = await serverClient
                 .from('users')
                 .select('id, auth_user_id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, shopping_db_id, workouts_db_id, meals_db_id, notes_db_id, energy_logs_db_id, onboarding_complete, created_at, updated_at')
-                .eq('email', authUser.email)
+                .eq('email', userEmail)
                 .maybeSingle()
               
               if (userByEmail) {
@@ -315,7 +340,7 @@ export async function GET(request: NextRequest) {
                 if (!userByEmail.auth_user_id) {
                   await serverClient
                     .from('users')
-                    .update({ auth_user_id: authUser.id })
+                    .update({ auth_user_id: authUserId })
                     .eq('id', userByEmail.id)
                 }
                 console.log('[API /users/me] Found user by email:', userByEmail.id)
@@ -374,8 +399,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check if user has an active JWT token
-    // Note: oauth_access_tokens table uses 'token' as PRIMARY KEY, not 'id'
+    // Check if user has an active opaque token (for Alexa account linking)
+    // Note: oauth_access_tokens table stores opaque tokens (random strings), not JWTs
     const { data: activeToken, error: tokenError } = await serverClient
       .from('oauth_access_tokens')
       .select('token, expires_at, revoked')
@@ -387,9 +412,9 @@ export async function GET(request: NextRequest) {
 
     // Log token check result for debugging
     if (tokenError) {
-      console.error('[API /users/me] Error checking for JWT token:', tokenError);
+      console.error('[API /users/me] Error checking for opaque token:', tokenError);
     } else if (activeToken) {
-      console.log('[API /users/me] Found active JWT token:', {
+      console.log('[API /users/me] Found active opaque token:', {
         token_preview: activeToken.token ? activeToken.token.substring(0, 20) + '...' : 'null',
         expires_at: activeToken.expires_at,
       });
@@ -401,7 +426,7 @@ export async function GET(request: NextRequest) {
         .eq('user_id', user.id)
         .limit(5);
       
-      console.log('[API /users/me] No active JWT token found. All tokens for user:', {
+      console.log('[API /users/me] No active opaque token found. All tokens for user:', {
         user_id: user.id,
         token_count: allTokens?.length || 0,
         tokens: allTokens?.map(t => ({
@@ -413,7 +438,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const hasJwtToken = !!activeToken;
+    const hasJwtToken = !!activeToken; // Note: This checks for opaque tokens, not JWTs (legacy naming)
 
     // Don't return sensitive data (but keep notion_token for dashboard check)
     const { password_hash, ...safeUser } = user

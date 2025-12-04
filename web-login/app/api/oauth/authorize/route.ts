@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { generateAuthorizationCode, storeAuthCode, validateRedirectUri } from '@/lib/oauth';
+import { verifyWebsiteToken } from '@/lib/jwt';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -98,59 +100,86 @@ export async function GET(request: NextRequest) {
     }
 
     // Check for authenticated session
-    // Try to get session token from cookies (Supabase sets cookies with pattern: sb-<project-ref>-auth-token)
+    // Try website JWT first, then fall back to Supabase session token
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
     const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'default'
     const cookieName = `sb-${projectRef}-auth-token`
     
     const authHeader = request.headers.get('authorization');
-    let sessionToken = authHeader?.replace('Bearer ', '');
-    
-    // Try to get from various cookie formats
-    if (!sessionToken) {
-      sessionToken = request.cookies.get('sb-access-token')?.value ||
-                    request.cookies.get(cookieName)?.value ||
-                    request.cookies.get(`sb-${projectRef}-auth-token`)?.value;
-    }
+    // Also check for session token in query parameter (from login page redirect)
+    const sessionTokenFromQuery = searchParams.get('_session_token');
+    let sessionToken = authHeader?.replace('Bearer ', '') || 
+                     sessionTokenFromQuery ||
+                     request.cookies.get('sb-access-token')?.value ||
+                     request.cookies.get(cookieName)?.value;
 
+    // Log all cookies for debugging
+    const allCookies = request.cookies.getAll();
     console.log('[OAuth Authorize] Session check:', {
       hasAuthHeader: !!authHeader,
+      hasSessionTokenFromQuery: !!sessionTokenFromQuery,
       hasAccessTokenCookie: !!request.cookies.get('sb-access-token')?.value,
       hasProjectCookie: !!request.cookies.get(cookieName)?.value,
       cookieName,
       hasSessionToken: !!sessionToken,
+      tokenSource: sessionTokenFromQuery ? 'query_param' : (authHeader ? 'header' : (request.cookies.get('sb-access-token')?.value ? 'cookie_sb-access-token' : (request.cookies.get(cookieName)?.value ? `cookie_${cookieName}` : 'none'))),
+      allCookieNames: allCookies.map(c => c.name),
+      cookieCount: allCookies.length,
+      // Try to find any Supabase-related cookies
+      supabaseCookies: allCookies.filter(c => c.name.includes('sb-') || c.name.includes('supabase')).map(c => c.name),
     });
 
     if (!sessionToken) {
       // Redirect to login page with return URL
       console.log('[OAuth Authorize] No session token found, redirecting to login');
+      console.log('[OAuth Authorize] Redirect URL will be:', request.url);
       const loginUrl = new URL('/?redirect=' + encodeURIComponent(request.url), request.url);
+      console.log('[OAuth Authorize] Login URL:', loginUrl.toString());
       return NextResponse.redirect(loginUrl);
     }
 
-    // Use anon key to validate user session (not service role)
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!supabaseAnonKey || !supabaseUrl) {
-      console.error('[OAuth Authorize] Missing Supabase environment variables');
-      return NextResponse.json(
-        { error: 'server_error', error_description: 'Server configuration error' },
-        { status: 500 }
-      );
+    // Try to verify as website JWT first (new approach)
+    const websiteTokenPayload = verifyWebsiteToken(sessionToken);
+    let authUserId: string | null = null;
+    let userEmail: string | null = null;
+
+    if (websiteTokenPayload) {
+      // Website JWT token - extract user ID from payload
+      authUserId = websiteTokenPayload.sub;
+      userEmail = websiteTokenPayload.email;
+      console.log('[OAuth Authorize] Authenticated via website JWT:', authUserId);
+    } else {
+      // Fall back to Supabase session token (backward compatibility)
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!supabaseAnonKey || !supabaseUrl) {
+        console.error('[OAuth Authorize] Missing Supabase environment variables');
+        return NextResponse.json(
+          { error: 'server_error', error_description: 'Server configuration error' },
+          { status: 500 }
+        );
+      }
+
+      const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
+
+      // Get user from Supabase Auth
+      const { data: { user: authUser }, error: authError } = await supabaseAuth.auth.getUser(sessionToken);
+      
+      if (authError || !authUser) {
+        console.log('[OAuth Authorize] Invalid session token, redirecting to login:', authError?.message);
+        const loginUrl = new URL('/?redirect=' + encodeURIComponent(request.url), request.url);
+        return NextResponse.redirect(loginUrl);
+      }
+
+      authUserId = authUser.id;
+      userEmail = authUser.email || null;
+      console.log('[OAuth Authorize] Authenticated via Supabase session token:', authUserId);
     }
 
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
-
-    // Get user from Supabase Auth
-    const { data: { user: authUser }, error: authError } = await supabaseAuth.auth.getUser(sessionToken);
-    
-    if (authError || !authUser) {
-      console.log('[OAuth Authorize] Invalid session token, redirecting to login:', authError?.message);
+    if (!authUserId) {
+      console.log('[OAuth Authorize] No auth user ID found, redirecting to login');
       const loginUrl = new URL('/?redirect=' + encodeURIComponent(request.url), request.url);
       return NextResponse.redirect(loginUrl);
     }
-
-    console.log('[OAuth Authorize] User authenticated:', authUser.id, authUser.email);
     
     // Now use service role for database operations
     const supabase = createServerClient();
@@ -160,7 +189,7 @@ export async function GET(request: NextRequest) {
     let { data: usersByAuthId, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('auth_user_id', authUser.id);
+      .eq('auth_user_id', authUserId);
     
     let user: any = null;
     
@@ -193,7 +222,7 @@ export async function GET(request: NextRequest) {
 
     if (userError || !user) {
       console.error('[OAuth Authorize] User not found:', {
-        auth_user_id: authUser.id,
+        auth_user_id: authUserId,
         error: userError,
         usersFound: usersByAuthId?.length || 0,
       });
@@ -210,8 +239,7 @@ export async function GET(request: NextRequest) {
     if (skipLicenseCheck) {
       console.log('[OAuth Authorize] License check skipped (development/test mode)');
     } else {
-      // Check for active JWT token (from "Buy License" flow)
-      // Note: oauth_access_tokens table uses 'token' as PRIMARY KEY, not 'id'
+      // Check for active opaque token (from Stripe payment webhook)
       const { data: activeToken, error: tokenError } = await supabase
         .from('oauth_access_tokens')
         .select('token, expires_at, revoked')
@@ -222,30 +250,36 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
 
       if (tokenError) {
-        console.error('[OAuth Authorize] Error checking for JWT token:', tokenError);
+        console.error('[OAuth Authorize] Error checking for opaque token:', tokenError);
       }
 
       const hasActiveToken = !!activeToken;
 
-      // Also check for legacy license_key (for backward compatibility)
+      // Check for active license using stripe_payment_intent_id (stored in user.license_key)
       let hasActiveLicense = false;
       if (user.license_key) {
+        // license_key now contains stripe_payment_intent_id
         const { data: license, error: licenseError } = await supabase
           .from('licenses')
           .select('status')
-          .eq('license_key', user.license_key)
-          .single();
+          .eq('stripe_payment_intent_id', user.license_key)
+          .maybeSingle();
 
         if (!licenseError && license && license.status === 'active') {
           hasActiveLicense = true;
         }
       }
 
-      // Require either active JWT token OR active license
-      if (!hasActiveToken && !hasActiveLicense) {
+      // Require both active opaque token AND active license
+      if (!hasActiveToken || !hasActiveLicense) {
         const errorUrl = new URL('/error', request.url);
-        errorUrl.searchParams.set('message', 'Please purchase a license to link your Alexa account.');
-        errorUrl.searchParams.set('action', 'purchase');
+        if (!hasActiveLicense) {
+          errorUrl.searchParams.set('message', 'Please purchase a license to link your Alexa account.');
+          errorUrl.searchParams.set('action', 'purchase');
+        } else {
+          errorUrl.searchParams.set('message', 'Please complete your license purchase to link your Alexa account.');
+          errorUrl.searchParams.set('action', 'purchase');
+        }
         return NextResponse.redirect(errorUrl);
       }
 
@@ -283,6 +317,7 @@ export async function GET(request: NextRequest) {
     if (state) {
       redirectUrl.searchParams.set('state', state);
     }
+    // Note: _session_token is not included in the redirect to Alexa (it was only for internal use)
 
     console.log('[OAuth Authorize] Issued code for user:', user.id, 'redirect:', redirectUri);
 

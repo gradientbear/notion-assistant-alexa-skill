@@ -29,30 +29,48 @@ export default function BillingPage() {
     setError('');
 
     try {
-      // Get session token
+      // Get website JWT token or Supabase session token
+      const websiteAccessToken = localStorage.getItem('website_access_token');
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
+      const authToken = websiteAccessToken || session?.access_token;
+
+      if (!authToken) {
         throw new Error('Not authenticated');
       }
 
-      // Phase 1: Generate JWT token directly (skip Stripe payment)
-      const response = await fetch('/api/billing/generate-test-token', {
+      // Get Stripe price ID from environment or use default
+      const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || '';
+      if (!priceId) {
+        throw new Error('Stripe price ID not configured');
+      }
+
+      // Create Stripe checkout session
+      const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${authToken}`,
         },
+        body: JSON.stringify({
+          priceId,
+          successUrl: `${window.location.origin}/billing/success`,
+          cancelUrl: `${window.location.origin}/billing`,
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error_description || errorData.error || 'Failed to generate token');
+        throw new Error(errorData.error_description || errorData.error || 'Failed to create checkout session');
       }
 
       const result = await response.json();
       
-      // Redirect to dashboard with success message
-      router.push('/dashboard?token_generated=true');
+      // Redirect to Stripe checkout
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        throw new Error('No checkout URL returned');
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred');
       setLoading(false);

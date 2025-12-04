@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyWebhookSignature } from '@/lib/stripe';
-import { revokeUserTokens } from '@/lib/oauth';
+import { revokeUserTokens, issueAccessToken } from '@/lib/oauth';
 import { createServerClient } from '@/lib/supabase';
 import Stripe from 'stripe';
 
@@ -43,21 +43,71 @@ export async function POST(request: NextRequest) {
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        const licenseKey = paymentIntent.metadata?.license_key;
         const userId = paymentIntent.metadata?.user_id;
+        const paymentIntentId = paymentIntent.id; // Use payment intent ID as license key
 
-        if (licenseKey) {
-          // Activate license
-          const { error } = await supabase
-            .from('licenses')
-            .update({ status: 'active', updated_at: new Date().toISOString() })
-            .eq('license_key', licenseKey);
+        if (!userId) {
+          console.error('[Stripe Webhook] Missing user_id in payment intent metadata');
+          break;
+        }
 
-          if (error) {
-            console.error('[Stripe Webhook] Error activating license:', error);
-          } else {
-            console.log('[Stripe Webhook] License activated:', licenseKey);
-          }
+        // Get user record
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('id, email, auth_user_id')
+          .eq('id', userId)
+          .single();
+
+        if (userError || !user) {
+          console.error('[Stripe Webhook] User not found:', userId);
+          break;
+        }
+
+        // Create or update license record using payment_intent.id as primary key
+        const { error: licenseError } = await supabase
+          .from('licenses')
+          .upsert({
+            stripe_payment_intent_id: paymentIntentId,
+            license_key: paymentIntentId, // Store payment intent ID as license key for backward compatibility
+            status: 'active',
+            stripe_customer_id: paymentIntent.customer as string || null,
+            amount_paid: paymentIntent.amount ? paymentIntent.amount / 100 : null, // Convert cents to dollars
+            currency: paymentIntent.currency || 'usd',
+            purchase_date: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'stripe_payment_intent_id',
+          });
+
+        if (licenseError) {
+          console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
+        } else {
+          console.log('[Stripe Webhook] License activated:', paymentIntentId);
+        }
+
+        // Update user's license_key field
+        const { error: updateUserError } = await supabase
+          .from('users')
+          .update({ license_key: paymentIntentId })
+          .eq('id', userId);
+
+        if (updateUserError) {
+          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
+        }
+
+        // Generate opaque Alexa token
+        try {
+          const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
+          const tokenResult = await issueAccessToken(
+            userId,
+            ALEXA_CLIENT_ID,
+            'alexa'
+          );
+
+          console.log('[Stripe Webhook] Generated opaque token for user:', userId);
+        } catch (tokenError: any) {
+          console.error('[Stripe Webhook] Error generating token:', tokenError);
+          // Don't fail the webhook if token generation fails
         }
 
         break;
@@ -66,22 +116,22 @@ export async function POST(request: NextRequest) {
       case 'charge.refunded':
       case 'payment_intent.canceled': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent | Stripe.Charge;
-        const licenseKey = (paymentIntent as any).metadata?.license_key || 
-                          (paymentIntent as any).payment_intent?.metadata?.license_key;
+        const paymentIntentId = (paymentIntent as any).id || 
+                                 (paymentIntent as any).payment_intent?.id;
         const userId = (paymentIntent as any).metadata?.user_id ||
                        (paymentIntent as any).payment_intent?.metadata?.user_id;
 
-        if (licenseKey) {
-          // Deactivate license
+        if (paymentIntentId) {
+          // Deactivate license using stripe_payment_intent_id
           const { error: licenseError } = await supabase
             .from('licenses')
             .update({ status: 'inactive', updated_at: new Date().toISOString() })
-            .eq('license_key', licenseKey);
+            .eq('stripe_payment_intent_id', paymentIntentId);
 
           if (licenseError) {
             console.error('[Stripe Webhook] Error deactivating license:', licenseError);
           } else {
-            console.log('[Stripe Webhook] License deactivated:', licenseKey);
+            console.log('[Stripe Webhook] License deactivated:', paymentIntentId);
           }
 
           // Revoke all tokens for users with this license
@@ -93,11 +143,11 @@ export async function POST(request: NextRequest) {
               console.error('[Stripe Webhook] Error revoking tokens:', revokeError);
             }
           } else {
-            // Find all users with this license and revoke their tokens
+            // Find all users with this license (stored in license_key field) and revoke their tokens
             const { data: users } = await supabase
               .from('users')
               .select('id')
-              .eq('license_key', licenseKey);
+              .eq('license_key', paymentIntentId);
 
             if (users) {
               for (const user of users) {
@@ -109,6 +159,12 @@ export async function POST(request: NextRequest) {
               }
             }
           }
+
+          // Clear license_key from users
+          await supabase
+            .from('users')
+            .update({ license_key: null })
+            .eq('license_key', paymentIntentId);
         }
 
         break;

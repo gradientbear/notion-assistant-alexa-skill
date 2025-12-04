@@ -38,17 +38,33 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Check if coming back from Notion OAuth or license purchase
+    // Check if coming back from auth callback with website JWT tokens
     const urlParams = new URLSearchParams(window.location.search);
+    const accessToken = urlParams.get('access_token');
+    const refreshToken = urlParams.get('refresh_token');
     const notionConnected = urlParams.get('notion_connected') === 'true';
     const tokenGenerated = urlParams.get('token_generated') === 'true';
     
-    if (notionConnected || tokenGenerated) {
+    // Store website JWT tokens if present (from auth callback)
+    if (accessToken) {
+      localStorage.setItem('website_access_token', accessToken);
+      console.log('[Dashboard] Stored website access token');
+    }
+    
+    if (refreshToken) {
+      // Refresh token is also stored in HTTP-only cookie by auth callback
+      // But we can also store it in localStorage as backup (less secure but works)
+      localStorage.setItem('website_refresh_token', refreshToken);
+      console.log('[Dashboard] Stored website refresh token');
+    }
+    
+    if (notionConnected || tokenGenerated || accessToken) {
       console.log('[Dashboard] Detected state change, refreshing user data...', {
         notionConnected,
         tokenGenerated,
+        hasAccessToken: !!accessToken,
       });
-      // Remove the query parameter first
+      // Remove the query parameters first
       window.history.replaceState({}, '', '/dashboard');
       
       // Refresh user data to show updated status
@@ -118,10 +134,13 @@ export default function DashboardPage() {
         return;
       }
 
-      // Get session token
+      // Try to get website JWT token first, fall back to Supabase session
+      const websiteAccessToken = localStorage.getItem('website_access_token');
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        console.error('[Dashboard] No session token available');
+      const authToken = websiteAccessToken || session?.access_token;
+
+      if (!authToken) {
+        console.error('[Dashboard] No session or website token available');
         if (retryCount < 2) {
           // Wait and retry (session might be establishing)
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -139,7 +158,7 @@ export default function DashboardPage() {
         try {
           response = await fetch('/api/users/me', {
             headers: {
-              'Authorization': `Bearer ${session.access_token}`,
+              'Authorization': `Bearer ${authToken}`,
             },
           });
 
@@ -268,11 +287,12 @@ export default function DashboardPage() {
       const { createClient } = await import('@supabase/supabase-js');
       const client = createClient(supabaseUrl, supabaseAnonKey);
       
+      // license_key now contains stripe_payment_intent_id
       const { data: license } = await client
         .from('licenses')
         .select('status')
-        .eq('license_key', licenseKey)
-        .single();
+        .eq('stripe_payment_intent_id', licenseKey)
+        .maybeSingle();
 
       setLicenseActive(license?.status === 'active');
     } catch (error) {

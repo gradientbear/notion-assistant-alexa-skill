@@ -30,6 +30,7 @@ function base64UrlDecode(str: string): Buffer {
 
 /**
  * Verify JWT token signature (HS256)
+ * Note: This only works for JWT tokens. Opaque tokens must be validated via introspection endpoint.
  */
 export function verifyAccessToken(token: string): JWTPayload | null {
   if (!JWT_SECRET) {
@@ -39,6 +40,8 @@ export function verifyAccessToken(token: string): JWTPayload | null {
 
   try {
     const parts = token.split('.');
+    // JWT tokens have exactly 3 parts (header.payload.signature)
+    // Opaque tokens are random strings without dots, so they won't pass this check
     if (parts.length !== 3) {
       return null;
     }

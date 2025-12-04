@@ -147,19 +147,13 @@ export async function issueAccessToken(
     throw new Error('User not found');
   }
 
-  // Sign JWT
-  const accessToken = signAccessToken({
-    userId: user.auth_user_id || userId,
-    email: user.email,
-    scope,
-    notionDbId,
-    amazonAccountId,
-  });
+  // Generate opaque token (random string) instead of JWT
+  const accessToken = crypto.randomBytes(32).toString('base64url');
 
-  const expiresIn = parseInt(process.env.JWT_EXPIRES_IN || '3600', 10);
+  const expiresIn = parseInt(process.env.ALEXA_TOKEN_EXPIRES_IN || '86400', 10); // 24 hours default
   const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-  // Store access token
+  // Store opaque token in database
   const { error: tokenError } = await supabase
     .from('oauth_access_tokens')
     .insert({
@@ -175,6 +169,8 @@ export async function issueAccessToken(
     console.error('[OAuth] Error storing access token:', tokenError);
     throw new Error('Failed to store access token');
   }
+
+  console.log('[OAuth] Issued opaque access token for user:', userId, 'expires:', expiresAt.toISOString());
 
   // Generate refresh token if enabled
   let refreshToken: string | undefined;
