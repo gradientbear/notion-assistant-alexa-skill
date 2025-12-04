@@ -119,14 +119,27 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate and consume authorization code
+      console.log('[OAuth Token] Validating authorization code:', {
+        code_preview: code ? code.substring(0, 10) + '...' : 'missing',
+        client_id: clientId ? clientId.substring(0, 8) + '...' : 'missing',
+        redirect_uri: redirectUri,
+        has_code_verifier: !!codeVerifier,
+      });
+
       const validationResult = await validateAuthCode(code, clientId, redirectUri, codeVerifier);
 
       if (!validationResult) {
+        console.error('[OAuth Token] Authorization code validation failed');
         return NextResponse.json(
           { error: 'invalid_grant', error_description: 'Invalid or expired authorization code' },
           { status: 400 }
         );
       }
+
+      console.log('[OAuth Token] Authorization code validated successfully:', {
+        user_id: validationResult.userId,
+        scope: validationResult.scope,
+      });
 
       // Get user info
       const supabase = createServerClient();
@@ -152,7 +165,13 @@ export async function POST(request: NextRequest) {
         user.amazon_account_id || undefined
       );
 
-      console.log('[OAuth Token] Issued token for user:', user.id);
+      console.log('[OAuth Token] Issued token for user:', {
+        user_id: user.id,
+        email: user.email,
+        has_amazon_account_id: !!user.amazon_account_id,
+        token_preview: tokenResult.access_token.substring(0, 20) + '...',
+        expires_in: tokenResult.expires_in,
+      });
 
       return NextResponse.json({
         access_token: tokenResult.access_token,

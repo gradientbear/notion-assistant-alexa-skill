@@ -309,6 +309,35 @@ export async function updateUserNotionSetup(
   }
 }
 
+/**
+ * Update user's Amazon account ID
+ * Called after successful account linking to store the Amazon user ID
+ */
+export async function updateUserAmazonAccountId(
+  userId: string,
+  amazonAccountId: string
+): Promise<void> {
+  console.log('[updateUserAmazonAccountId] Updating amazon_account_id:', {
+    user_id: userId,
+    amazon_account_id: amazonAccountId,
+  });
+
+  const { error } = await supabase
+    .from('users')
+    .update({
+      amazon_account_id: amazonAccountId,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  if (error) {
+    console.error('[updateUserAmazonAccountId] Error:', error);
+    throw new Error(`Failed to update Amazon account ID: ${error.message}`);
+  }
+
+  console.log('[updateUserAmazonAccountId] Successfully updated amazon_account_id');
+}
+
 export async function validateLicense(licenseKey: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('licenses')

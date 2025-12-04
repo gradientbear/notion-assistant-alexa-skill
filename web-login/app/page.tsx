@@ -87,15 +87,26 @@ function AuthPageContent() {
       }
 
       // Only redirect if we have a valid user with email
-      console.log('[AuthPage] Valid session found for user:', user.email, '- redirecting to dashboard');
+      console.log('[AuthPage] Valid session found for user:', user.email, '- checking redirect');
       const redirect = searchParams.get('redirect');
       
+      console.log('[AuthPage] Redirect check:', {
+        hasRedirect: !!redirect,
+        redirectUrl: redirect,
+        currentPath: window.location.pathname,
+        redirectIncludesPath: redirect?.includes(window.location.pathname),
+      });
+      
       // Prevent redirect loops - if redirect URL is the same as current page, just go to dashboard
-      if (redirect && redirect !== window.location.href && !redirect.includes(window.location.pathname)) {
+      // But allow redirects to API endpoints (like /api/oauth/authorize)
+      if (redirect && 
+          redirect !== window.location.href && 
+          !redirect.includes(window.location.pathname) &&
+          (redirect.startsWith('/api/') || !redirect.startsWith(window.location.origin + window.location.pathname))) {
         console.log('[AuthPage] Redirecting to:', redirect);
         router.push(redirect);
       } else {
-        console.log('[AuthPage] Redirecting to dashboard');
+        console.log('[AuthPage] Redirecting to dashboard (no valid redirect or loop prevention)');
         router.push('/dashboard');
       }
     } catch (err) {

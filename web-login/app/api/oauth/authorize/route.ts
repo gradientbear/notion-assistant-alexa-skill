@@ -29,6 +29,9 @@ export async function GET(request: NextRequest) {
       searchParams: Object.fromEntries(searchParams.entries()),
     });
     
+    // ADD THIS - Log immediately after to ensure we get here
+    console.log('[OAuth Authorize] Processing request, checking parameters...');
+    
     const responseType = searchParams.get('response_type');
     const clientId = searchParams.get('client_id')?.trim(); // Trim whitespace
     const redirectUri = searchParams.get('redirect_uri');
@@ -153,13 +156,47 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient();
 
     // Get user record from custom users table
-    const { data: user, error: userError } = await supabase
+    // Use .select() instead of .single() to handle duplicate auth_user_id cases
+    let { data: usersByAuthId, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('auth_user_id', authUser.id)
-      .single();
+      .eq('auth_user_id', authUser.id);
+    
+    let user: any = null;
+    
+    // Handle multiple users with same auth_user_id (same logic as /api/users/me)
+    if (usersByAuthId && usersByAuthId.length > 0) {
+      // If multiple users found, prefer:
+      // 1. User with Notion token (most complete)
+      // 2. Most recently updated
+      const userWithToken = usersByAuthId.find(u => !!(u as any).notion_token);
+      if (userWithToken) {
+        user = userWithToken;
+        console.log('[OAuth Authorize] Selected user with Notion token:', user.id);
+      } else {
+        user = usersByAuthId.sort((a, b) => 
+          new Date(b.updated_at || b.created_at).getTime() - 
+          new Date(a.updated_at || a.created_at).getTime()
+        )[0];
+        console.log('[OAuth Authorize] Selected most recently updated user:', user.id);
+      }
+      
+      if (usersByAuthId.length > 1) {
+        console.warn('[OAuth Authorize] ⚠️ Multiple users found with same auth_user_id!', {
+          total_users: usersByAuthId.length,
+          selected_user_id: user.id,
+        });
+      }
+      
+      userError = null; // Clear error since we found users
+    }
 
     if (userError || !user) {
+      console.error('[OAuth Authorize] User not found:', {
+        auth_user_id: authUser.id,
+        error: userError,
+        usersFound: usersByAuthId?.length || 0,
+      });
       return NextResponse.json(
         { error: 'server_error', error_description: 'User not found' },
         { status: 500 }
@@ -173,7 +210,25 @@ export async function GET(request: NextRequest) {
     if (skipLicenseCheck) {
       console.log('[OAuth Authorize] License check skipped (development/test mode)');
     } else {
-      // Validate license is active
+      // Check for active JWT token (from "Buy License" flow)
+      // Note: oauth_access_tokens table uses 'token' as PRIMARY KEY, not 'id'
+      const { data: activeToken, error: tokenError } = await supabase
+        .from('oauth_access_tokens')
+        .select('token, expires_at, revoked')
+        .eq('user_id', user.id)
+        .eq('revoked', false)
+        .gt('expires_at', new Date().toISOString())
+        .limit(1)
+        .maybeSingle();
+
+      if (tokenError) {
+        console.error('[OAuth Authorize] Error checking for JWT token:', tokenError);
+      }
+
+      const hasActiveToken = !!activeToken;
+
+      // Also check for legacy license_key (for backward compatibility)
+      let hasActiveLicense = false;
       if (user.license_key) {
         const { data: license, error: licenseError } = await supabase
           .from('licenses')
@@ -181,20 +236,23 @@ export async function GET(request: NextRequest) {
           .eq('license_key', user.license_key)
           .single();
 
-        if (licenseError || !license || license.status !== 'active') {
-          // Show friendly error page
-          const errorUrl = new URL('/error', request.url);
-          errorUrl.searchParams.set('message', 'Your license is not active. Please purchase or activate a license to link your Alexa account.');
-          errorUrl.searchParams.set('action', 'purchase');
-          return NextResponse.redirect(errorUrl);
+        if (!licenseError && license && license.status === 'active') {
+          hasActiveLicense = true;
         }
-      } else {
-        // No license key - show purchase page
+      }
+
+      // Require either active JWT token OR active license
+      if (!hasActiveToken && !hasActiveLicense) {
         const errorUrl = new URL('/error', request.url);
         errorUrl.searchParams.set('message', 'Please purchase a license to link your Alexa account.');
         errorUrl.searchParams.set('action', 'purchase');
         return NextResponse.redirect(errorUrl);
       }
+
+      console.log('[OAuth Authorize] License validation passed:', {
+        hasActiveToken,
+        hasActiveLicense,
+      });
     }
 
     // Validate Notion is connected

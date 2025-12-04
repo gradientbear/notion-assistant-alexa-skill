@@ -38,21 +38,32 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Check if coming back from Notion OAuth
+    // Check if coming back from Notion OAuth or license purchase
     const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('notion_connected') === 'true') {
-      console.log('[Dashboard] Detected Notion connection, refreshing user data...');
-      // Refresh user data to show updated status (don't wait for user to be set)
-      fetchUserData();
-      // Remove the query parameter
+    const notionConnected = urlParams.get('notion_connected') === 'true';
+    const tokenGenerated = urlParams.get('token_generated') === 'true';
+    
+    if (notionConnected || tokenGenerated) {
+      console.log('[Dashboard] Detected state change, refreshing user data...', {
+        notionConnected,
+        tokenGenerated,
+      });
+      // Remove the query parameter first
       window.history.replaceState({}, '', '/dashboard');
-    }
-    // Check if coming back from token generation
-    if (urlParams.get('token_generated') === 'true') {
-      console.log('[Dashboard] Token generated, refreshing user data...');
-      fetchUserData();
-      // Remove the query parameter
-      window.history.replaceState({}, '', '/dashboard');
+      
+      // Refresh user data to show updated status
+      // For token generation, add a longer delay to ensure token is queryable
+      // Database writes might take a moment to be visible in queries
+      const delay = tokenGenerated ? 2000 : 500;
+      setTimeout(() => {
+        fetchUserData();
+        // Also refresh again after another delay to ensure data is updated
+        if (tokenGenerated) {
+          setTimeout(() => {
+            fetchUserData();
+          }, 2000);
+        }
+      }, delay);
     }
   }, []); // Run once on mount, not dependent on user
 
@@ -166,7 +177,35 @@ export default function DashboardPage() {
         email: userData.email,
         notion_setup_complete: userData.notion_setup_complete,
         has_notion_token: !!(userData as any).notion_token,
+        notion_token_length: (userData as any).notion_token?.length || 0,
+        notion_token_preview: (userData as any).notion_token ? (userData as any).notion_token.substring(0, 10) + '...' : 'NULL',
+        has_jwt_token: (userData as any).has_jwt_token,
+        license_key: userData.license_key,
+        amazon_account_id: userData.amazon_account_id,
       });
+      
+      // Log the full response to see what's actually being returned
+      console.log('[Dashboard] Full API response:', JSON.stringify(userData, null, 2));
+      
+      // Validate critical fields
+      const hasValidNotion = userData.notion_setup_complete && !!(userData as any).notion_token;
+      const hasValidLicense = !!(userData as any).has_jwt_token;
+      
+      console.log('[Dashboard] Validation check:', {
+        hasValidNotion,
+        hasValidLicense,
+        notion_setup_complete: userData.notion_setup_complete,
+        notion_token_exists: !!(userData as any).notion_token,
+        has_jwt_token: (userData as any).has_jwt_token,
+      });
+      
+      // Warn if user says Notion is connected but API shows it's not
+      // This indicates duplicate user records issue
+      if (!hasValidNotion && userData.notion_setup_complete === false && !!(userData as any).notion_token === false) {
+        console.warn('[Dashboard] ⚠️ Notion appears disconnected, but user may have connected it to a different user record.');
+        console.warn('[Dashboard] ⚠️ Solution: Reconnect Notion to update the correct user record.');
+      }
+      
       setUser(userData);
       setLoading(false); // User data loaded successfully, stop loading
 
@@ -251,6 +290,20 @@ export default function DashboardPage() {
     router.push('/billing');
   };
 
+  const handleRefreshData = async () => {
+    console.log('[Dashboard] Manual refresh triggered');
+    setLoading(true);
+    try {
+      await fetchUserData();
+      console.log('[Dashboard] Manual refresh completed');
+    } catch (error) {
+      console.error('[Dashboard] Manual refresh failed:', error);
+      setError('Failed to refresh data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLinkAlexa = () => {
     // Redirect to instructions page
     // Users can follow the instructions to link their Alexa account
@@ -306,9 +359,18 @@ export default function DashboardPage() {
       <Header />
       
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Voice Planner</h1>
-          <p className="text-gray-600">Complete the steps below to get started</p>
+        <div className="mb-8 flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Voice Planner</h1>
+            <p className="text-gray-600">Complete the steps below to get started</p>
+          </div>
+          <Button 
+            onClick={handleRefreshData}
+            variant="outline"
+            className="text-sm"
+          >
+            Refresh
+          </Button>
         </div>
 
         <Card className="p-8">
@@ -326,9 +388,20 @@ export default function DashboardPage() {
               number={2}
               title="Connect Notion"
               description="Link your Notion workspace to create and manage tasks"
-              status={user.notion_setup_complete ? 'complete' : 'current'}
+              status={(user.notion_setup_complete && !!(user as any).notion_token) ? 'complete' : 'current'}
             >
-              {!user.notion_setup_complete && (
+              {(user.notion_setup_complete && !!(user as any).notion_token) ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-green-600 font-medium">✓ Notion connected</p>
+                  <Button 
+                    onClick={handleConnectNotion}
+                    variant="outline"
+                    className="text-sm"
+                  >
+                    Reconnect Notion
+                  </Button>
+                </div>
+              ) : (
                 <Button onClick={handleConnectNotion}>
                   Connect Notion
                 </Button>
@@ -341,36 +414,36 @@ export default function DashboardPage() {
               title="Buy License"
               description="Purchase a lifetime license to activate your account"
               status={
-                licenseActive && (user.has_jwt_token || !skipLicenseCheck)
+                user.has_jwt_token
                   ? 'complete'
-                  : user.license_key && !licenseActive
-                  ? 'current'
-                  : !user.license_key || (skipLicenseCheck && !user.has_jwt_token)
-                  ? 'current'
-                  : 'pending'
+                  : 'current'
               }
             >
               {(() => {
-                // Show button if:
-                // 1. License is not active, OR
-                // 2. In test mode and JWT token doesn't exist yet
-                const shouldShowButton = !licenseActive || (skipLicenseCheck && !user.has_jwt_token);
-                
-                if (shouldShowButton) {
+                // Show "Buy License" button ONLY if JWT token doesn't exist
+                // JWT token is created when license is purchased, so its existence = purchase completed
+                if (!user.has_jwt_token) {
                   return (
-                    <Button onClick={handleBuyLicense}>
-                      Buy License
-                    </Button>
+                    <div className="space-y-2">
+                      <Button onClick={handleBuyLicense}>
+                        Buy License
+                      </Button>
+                      <Button 
+                        onClick={handleRefreshData}
+                        variant="outline"
+                        className="text-sm w-full"
+                        title="Refresh data if you just purchased license"
+                      >
+                        ↻ Refresh Status
+                      </Button>
+                    </div>
                   );
                 }
                 
-                if (licenseActive && user.has_jwt_token) {
-                  return (
-                    <p className="text-sm text-green-600 font-medium">✓ License activated</p>
-                  );
-                }
-                
-                return null;
+                // JWT token exists = license purchased
+                return (
+                  <p className="text-sm text-green-600 font-medium">✓ License activated</p>
+                );
               })()}
             </Step>
 
@@ -382,7 +455,7 @@ export default function DashboardPage() {
               status={
                 user.amazon_account_id
                   ? 'complete'
-                  : (!!user.notion_token || skipLicenseCheck) && (licenseActive || skipLicenseCheck)
+                  : ((user.notion_setup_complete && !!(user as any).notion_token) && user.has_jwt_token) || skipLicenseCheck
                   ? 'current'
                   : 'pending'
               }
@@ -390,21 +463,29 @@ export default function DashboardPage() {
               {(() => {
                 const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
                                          process.env.NODE_ENV === 'development';
-                // Enable if Notion is connected AND (license is active OR skipLicenseCheck) AND JWT token exists
-                const hasNotionConnection = !!user.notion_token;
+                // Check if Notion is connected - require BOTH notion_setup_complete AND notion_token
+                // This ensures Notion is actually connected, not just marked as complete
+                const hasNotionConnection = user.notion_setup_complete && !!(user as any).notion_token;
                 const hasJwtToken = user.has_jwt_token || skipLicenseCheck;
-                const licenseOk = licenseActive || skipLicenseCheck;
-                const canLink = hasNotionConnection && hasJwtToken && licenseOk && !user.amazon_account_id;
+                const canLink = hasNotionConnection && hasJwtToken && !user.amazon_account_id;
                 
                 console.log('[Dashboard] Alexa link button check:', {
+                  hasNotionToken: !!user.notion_token,
+                  notionTokenValue: user.notion_token ? 'EXISTS' : 'NULL',
+                  notionSetupComplete: user.notion_setup_complete,
                   hasNotionConnection,
                   hasJwtToken,
-                  licenseActive,
-                  licenseOk,
+                  userHasJwtToken: user.has_jwt_token,
                   skipLicenseCheck,
-                  notionSetupComplete: user.notion_setup_complete,
                   canLink,
                   hasAmazonAccount: !!user.amazon_account_id,
+                  userObject: {
+                    id: user.id,
+                    email: user.email,
+                    notion_setup_complete: user.notion_setup_complete,
+                    has_jwt_token: user.has_jwt_token,
+                    amazon_account_id: user.amazon_account_id,
+                  }
                 });
                 
                 if (canLink) {
@@ -423,17 +504,45 @@ export default function DashboardPage() {
                 
                 if (!hasNotionConnection) {
                   return (
-                    <p className="text-sm text-gray-500">
-                      Connect Notion first to enable Alexa linking
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-500">
+                        Connect Notion first to enable Alexa linking
+                      </p>
+                      <Button 
+                        onClick={handleConnectNotion}
+                        variant="outline"
+                        className="text-sm"
+                      >
+                        Connect Notion
+                      </Button>
+                    </div>
                   );
                 }
                 
                 if (!hasJwtToken && !skipLicenseCheck) {
                   return (
-                    <p className="text-sm text-gray-500">
-                      Complete license purchase to enable Alexa linking
-                    </p>
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-500">
+                        Complete license purchase to enable Alexa linking
+                      </p>
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={handleBuyLicense}
+                          variant="outline"
+                          className="text-sm flex-1"
+                        >
+                          Buy License
+                        </Button>
+                        <Button 
+                          onClick={handleRefreshData}
+                          variant="outline"
+                          className="text-sm"
+                          title="Refresh data if you just purchased license"
+                        >
+                          ↻ Refresh
+                        </Button>
+                      </div>
+                    </div>
                   );
                 }
                 

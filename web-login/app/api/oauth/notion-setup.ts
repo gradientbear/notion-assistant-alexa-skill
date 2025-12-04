@@ -796,10 +796,14 @@ export async function setupNotionWorkspace(
     const energyLogsDbId = await createEnergyLogsDatabase(client, privacyPageId);
     console.log('EnergyLogs DB result:', energyLogsDbId ? `✓ Created: ${energyLogsDbId}` : '✗ Failed');
 
-    const success = !!(privacyPageId && tasksDbId && shoppingDbId && workoutsDbId && mealsDbId && notesDbId && energyLogsDbId);
+    // Success requires: Voice Planner page + Tasks database (critical)
+    // Other databases are optional but recommended
+    const criticalSuccess = !!(privacyPageId && tasksDbId);
+    const allSuccess = !!(privacyPageId && tasksDbId && shoppingDbId && workoutsDbId && mealsDbId && notesDbId && energyLogsDbId);
     
     console.log('=== Notion Workspace Setup Complete ===');
-    console.log('Success:', success);
+    console.log('Critical Success (Page + Tasks):', criticalSuccess);
+    console.log('Full Success (All databases):', allSuccess);
     console.log('Results:', {
       privacyPageId,
       tasksDbId,
@@ -810,15 +814,17 @@ export async function setupNotionWorkspace(
       energyLogsDbId,
     });
 
+    // Return success=true only if critical components are created
+    // But return all IDs that were successfully created (even if some failed)
     return {
-      privacyPageId,
+      privacyPageId: privacyPageId || null,
       tasksDbId: tasksDbId || null,
       shoppingDbId: shoppingDbId || null,
       workoutsDbId: workoutsDbId || null,
       mealsDbId: mealsDbId || null,
       notesDbId: notesDbId || null,
       energyLogsDbId: energyLogsDbId || null,
-      success,
+      success: criticalSuccess, // Success if at least page + Tasks DB are created
     };
   } catch (error: any) {
     console.error('=== Error setting up Notion workspace ===');

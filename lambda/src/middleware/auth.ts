@@ -176,6 +176,23 @@ export class AuthInterceptor implements RequestInterceptor {
         attributes.notionClient = createNotionClient(user.notion_token);
       }
 
+      // Update amazon_account_id if missing (first request after account linking)
+      const amazonUserId = handlerInput.requestEnvelope.session?.user?.userId;
+      if (amazonUserId && !user.amazon_account_id) {
+        console.log('[AuthInterceptor] Updating missing amazon_account_id for user:', user.id);
+        try {
+          const { updateUserAmazonAccountId } = await import('../utils/database');
+          await updateUserAmazonAccountId(user.id, amazonUserId);
+          // Update local user object
+          user.amazon_account_id = amazonUserId;
+          attributes.user = user;
+          console.log('[AuthInterceptor] Successfully updated amazon_account_id');
+        } catch (updateError: any) {
+          console.error('[AuthInterceptor] Failed to update amazon_account_id:', updateError);
+          // Don't throw - continue with request even if update fails
+        }
+      }
+
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
       console.log('[AuthInterceptor] Token validated successfully for user:', userInfo.email);

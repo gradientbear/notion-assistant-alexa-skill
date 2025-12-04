@@ -213,22 +213,58 @@ export async function GET(request: NextRequest) {
 
       if (existingUser) {
         console.log('Found existing user:', existingUser.id);
-        const { data: updateData, error: updateError } = await supabase
+        
+        // Prepare update data - only include database IDs that were actually created
+        // notion_setup_complete should be true if we have a token AND critical setup succeeded
+        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        const updateData: any = {
+          email: session.email,
+          license_key: session.license_key,
+          notion_token: access_token,
+          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+          updated_at: new Date().toISOString(),
+        };
+        
+        // Only update database IDs if they were successfully created (not null)
+        if (setupResult.privacyPageId) {
+          updateData.privacy_page_id = setupResult.privacyPageId;
+        }
+        if (setupResult.tasksDbId) {
+          updateData.tasks_db_id = setupResult.tasksDbId;
+        }
+        if (setupResult.shoppingDbId) {
+          updateData.shopping_db_id = setupResult.shoppingDbId;
+        }
+        if (setupResult.workoutsDbId) {
+          updateData.workouts_db_id = setupResult.workoutsDbId;
+        }
+        if (setupResult.mealsDbId) {
+          updateData.meals_db_id = setupResult.mealsDbId;
+        }
+        if (setupResult.notesDbId) {
+          updateData.notes_db_id = setupResult.notesDbId;
+        }
+        if (setupResult.energyLogsDbId) {
+          updateData.energy_logs_db_id = setupResult.energyLogsDbId;
+        }
+        
+        console.log('Update data prepared (Alexa flow):', {
+          has_notion_token: !!updateData.notion_token,
+          notion_setup_complete: updateData.notion_setup_complete,
+          database_ids: {
+            privacy_page: !!updateData.privacy_page_id,
+            tasks: !!updateData.tasks_db_id,
+            shopping: !!updateData.shopping_db_id,
+            workouts: !!updateData.workouts_db_id,
+            meals: !!updateData.meals_db_id,
+            notes: !!updateData.notes_db_id,
+            energy_logs: !!updateData.energy_logs_db_id,
+          }
+        });
+        
+        const { data: updateResult, error: updateError } = await supabase
           .from('users')
-          .update({
-            email: session.email,
-            license_key: session.license_key,
-            notion_token: access_token,
-            notion_setup_complete: setupResult.success,
-            privacy_page_id: setupResult.privacyPageId,
-            tasks_db_id: setupResult.tasksDbId,
-            shopping_db_id: setupResult.shoppingDbId,
-            workouts_db_id: setupResult.workoutsDbId,
-            meals_db_id: setupResult.mealsDbId,
-            notes_db_id: setupResult.notesDbId,
-            energy_logs_db_id: setupResult.energyLogsDbId,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', existingUser.id)
           .select();
         
@@ -240,22 +276,58 @@ export async function GET(request: NextRequest) {
         }
       } else {
         console.log('User not found, creating new user (Alexa flow)');
+        
+        // Only include database IDs that were actually created (not null)
+        // notion_setup_complete should be true if we have a token AND critical setup succeeded
+        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        const insertDataObj: any = {
+          amazon_account_id: session.amazon_account_id,
+          email: session.email,
+          license_key: session.license_key,
+          notion_token: access_token,
+          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+        };
+        
+        // Only add database IDs if they were successfully created
+        if (setupResult.privacyPageId) {
+          insertDataObj.privacy_page_id = setupResult.privacyPageId;
+        }
+        if (setupResult.tasksDbId) {
+          insertDataObj.tasks_db_id = setupResult.tasksDbId;
+        }
+        if (setupResult.shoppingDbId) {
+          insertDataObj.shopping_db_id = setupResult.shoppingDbId;
+        }
+        if (setupResult.workoutsDbId) {
+          insertDataObj.workouts_db_id = setupResult.workoutsDbId;
+        }
+        if (setupResult.mealsDbId) {
+          insertDataObj.meals_db_id = setupResult.mealsDbId;
+        }
+        if (setupResult.notesDbId) {
+          insertDataObj.notes_db_id = setupResult.notesDbId;
+        }
+        if (setupResult.energyLogsDbId) {
+          insertDataObj.energy_logs_db_id = setupResult.energyLogsDbId;
+        }
+        
+        console.log('Insert data prepared (Alexa flow):', {
+          has_notion_token: !!insertDataObj.notion_token,
+          notion_setup_complete: insertDataObj.notion_setup_complete,
+          database_ids: {
+            privacy_page: !!insertDataObj.privacy_page_id,
+            tasks: !!insertDataObj.tasks_db_id,
+            shopping: !!insertDataObj.shopping_db_id,
+            workouts: !!insertDataObj.workouts_db_id,
+            meals: !!insertDataObj.meals_db_id,
+            notes: !!insertDataObj.notes_db_id,
+            energy_logs: !!insertDataObj.energy_logs_db_id,
+          }
+        });
+        
         const { data: insertData, error: insertError } = await supabase
           .from('users')
-          .insert({
-            amazon_account_id: session.amazon_account_id,
-            email: session.email,
-            license_key: session.license_key,
-            notion_token: access_token,
-            notion_setup_complete: setupResult.success,
-            privacy_page_id: setupResult.privacyPageId,
-            tasks_db_id: setupResult.tasksDbId,
-            shopping_db_id: setupResult.shoppingDbId,
-            workouts_db_id: setupResult.workoutsDbId,
-            meals_db_id: setupResult.mealsDbId,
-            notes_db_id: setupResult.notesDbId,
-            energy_logs_db_id: setupResult.energyLogsDbId,
-          })
+          .insert(insertDataObj)
           .select();
         
         if (insertError) {
@@ -273,54 +345,199 @@ export async function GET(request: NextRequest) {
       
       if (authUserId) {
         console.log('Trying to find user by auth_user_id:', authUserId);
-        const { data, error: lookupError } = await supabase
+        // Use .select() instead of .maybeSingle() to handle duplicate auth_user_id cases
+        // Same logic as /api/users/me to ensure consistency
+        const { data: usersByAuthId, error: lookupError } = await supabase
           .from('users')
           .select('*')
-          .eq('auth_user_id', authUserId)
-          .maybeSingle();
+          .eq('auth_user_id', authUserId);
         
         if (lookupError) {
           console.error('Error looking up by auth_user_id:', lookupError);
-        } else if (data) {
-          existingUser = data;
+        } else if (usersByAuthId && usersByAuthId.length > 0) {
+          // If multiple users found, prefer:
+          // 1. User with Notion token (most complete) - same as /api/users/me
+          // 2. Most recently updated
+          const userWithToken = usersByAuthId.find(u => !!(u as any).notion_token);
+          if (userWithToken) {
+            existingUser = userWithToken;
+            console.log('✅ Found user by auth_user_id with Notion token:', {
+              user_id: existingUser.id,
+              has_notion_token: true,
+            });
+          } else {
+            existingUser = usersByAuthId.sort((a, b) => 
+              new Date(b.updated_at || b.created_at).getTime() - 
+              new Date(a.updated_at || a.created_at).getTime()
+            )[0];
+            console.log('✅ Found user by auth_user_id (most recent):', {
+              user_id: existingUser.id,
+              updated_at: existingUser.updated_at,
+            });
+          }
+          
+          if (usersByAuthId.length > 1) {
+            console.warn('⚠️ Multiple users found with same auth_user_id!', {
+              total_users: usersByAuthId.length,
+              selected_user_id: existingUser.id,
+              all_user_ids: usersByAuthId.map(u => ({
+                id: u.id,
+                has_notion_token: !!(u as any).notion_token,
+                updated_at: u.updated_at,
+              })),
+              auth_user_id: authUserId,
+            });
+          }
+          
           lookupMethod = 'auth_user_id';
-          console.log('✅ Found user by auth_user_id:', data.id);
         }
       }
       
       if (!existingUser && session.email) {
         console.log('Trying to find user by email:', session.email);
-        const { data, error: lookupError } = await supabase
+        // Use .select() instead of .maybeSingle() to handle multiple users
+        const { data: usersByEmail, error: lookupError } = await supabase
           .from('users')
           .select('*')
-          .eq('email', session.email)
-          .maybeSingle();
+          .eq('email', session.email);
         
         if (lookupError) {
           console.error('Error looking up by email:', lookupError);
-        } else if (data) {
-          existingUser = data;
+        } else if (usersByEmail && usersByEmail.length > 0) {
+          // If multiple users found, prioritize:
+          // 1. User with matching auth_user_id (if we have it)
+          // 2. User with notion_token (already connected)
+          // 3. Most recently updated user
+          let selectedUser = usersByEmail[0];
+          
+          // CRITICAL: If we have auth_user_id, prioritize user with matching auth_user_id
+          // This ensures we update the correct user record
+          if (authUserId) {
+            const userWithAuthId = usersByEmail.find(u => u.auth_user_id === authUserId);
+            if (userWithAuthId) {
+              selectedUser = userWithAuthId;
+              console.log('✅ Found user by email + auth_user_id match:', {
+                user_id: selectedUser.id,
+                auth_user_id: selectedUser.auth_user_id,
+                matches: selectedUser.auth_user_id === authUserId,
+              });
+            } else {
+              console.warn('⚠️ No user found with matching auth_user_id:', {
+                auth_user_id: authUserId,
+                available_auth_user_ids: usersByEmail.map(u => u.auth_user_id),
+                user_ids: usersByEmail.map(u => u.id),
+              });
+            }
+          }
+          
+          // Only fall back to user with token if we don't have auth_user_id match
+          if (!authUserId && !selectedUser.notion_token) {
+            const userWithToken = usersByEmail.find(u => !!(u as any).notion_token);
+            if (userWithToken) {
+              selectedUser = userWithToken;
+              console.log('✅ Found user by email with existing Notion token:', selectedUser.id);
+            }
+          }
+          
+          existingUser = selectedUser;
           lookupMethod = 'email';
-          console.log('✅ Found user by email:', data.id);
+          console.log('✅ Selected user by email:', existingUser.id);
+          
+          // If auth_user_id is missing but we have it, update it
+          if (!existingUser.auth_user_id && authUserId) {
+            console.log('Updating missing auth_user_id for user found by email');
+            await supabase
+              .from('users')
+              .update({ auth_user_id: authUserId })
+              .eq('id', existingUser.id);
+          }
         }
       }
 
       if (existingUser) {
-        console.log(`Updating existing user (found by ${lookupMethod}):`, existingUser.id);
-        const { data: updateData, error: updateError } = await supabase
+        console.log(`Updating existing user (found by ${lookupMethod}):`, {
+          user_id: existingUser.id,
+          auth_user_id: existingUser.auth_user_id,
+          session_auth_user_id: authUserId,
+          email: existingUser.email,
+          session_email: session.email,
+          matches_auth_user_id: existingUser.auth_user_id === authUserId,
+        });
+        
+        // CRITICAL: If auth_user_id doesn't match and we have it, this might be the wrong user
+        // In this case, we should still update but also log a warning
+        if (authUserId && existingUser.auth_user_id && existingUser.auth_user_id !== authUserId) {
+          console.warn('⚠️ WARNING: User found but auth_user_id mismatch!', {
+            found_user_id: existingUser.id,
+            found_auth_user_id: existingUser.auth_user_id,
+            session_auth_user_id: authUserId,
+            lookup_method: lookupMethod,
+          });
+          console.warn('⚠️ This might indicate duplicate user records. Updating anyway, but verify data integrity.');
+        }
+        
+        // Prepare update data - only include database IDs that were actually created
+        // notion_setup_complete should be true if we have a token AND critical setup succeeded
+        // Critical setup = Voice Planner page + Tasks database
+        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        const updateData: any = {
+          notion_token: access_token,
+          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+          updated_at: new Date().toISOString(),
+        };
+        
+        // Only update database IDs if they were successfully created (not null)
+        if (setupResult.privacyPageId) {
+          updateData.privacy_page_id = setupResult.privacyPageId;
+        }
+        if (setupResult.tasksDbId) {
+          updateData.tasks_db_id = setupResult.tasksDbId;
+        }
+        if (setupResult.shoppingDbId) {
+          updateData.shopping_db_id = setupResult.shoppingDbId;
+        }
+        if (setupResult.workoutsDbId) {
+          updateData.workouts_db_id = setupResult.workoutsDbId;
+        }
+        if (setupResult.mealsDbId) {
+          updateData.meals_db_id = setupResult.mealsDbId;
+        }
+        if (setupResult.notesDbId) {
+          updateData.notes_db_id = setupResult.notesDbId;
+        }
+        if (setupResult.energyLogsDbId) {
+          updateData.energy_logs_db_id = setupResult.energyLogsDbId;
+        }
+        
+        // CRITICAL: Always ensure auth_user_id is set correctly
+        // If auth_user_id is missing or doesn't match, update it
+        if (authUserId) {
+          if (!existingUser.auth_user_id || existingUser.auth_user_id !== authUserId) {
+            updateData.auth_user_id = authUserId;
+            console.log('Updating auth_user_id to match session:', {
+              old_auth_user_id: existingUser.auth_user_id,
+              new_auth_user_id: authUserId,
+            });
+          }
+        }
+        
+        console.log('Update data prepared:', {
+          has_notion_token: !!updateData.notion_token,
+          notion_setup_complete: updateData.notion_setup_complete,
+          database_ids: {
+            privacy_page: !!updateData.privacy_page_id,
+            tasks: !!updateData.tasks_db_id,
+            shopping: !!updateData.shopping_db_id,
+            workouts: !!updateData.workouts_db_id,
+            meals: !!updateData.meals_db_id,
+            notes: !!updateData.notes_db_id,
+            energy_logs: !!updateData.energy_logs_db_id,
+          }
+        });
+        
+        const { data: updateResult, error: updateError } = await supabase
           .from('users')
-          .update({
-            notion_token: access_token,
-            notion_setup_complete: setupResult.success,
-            privacy_page_id: setupResult.privacyPageId,
-            tasks_db_id: setupResult.tasksDbId,
-            shopping_db_id: setupResult.shoppingDbId,
-            workouts_db_id: setupResult.workoutsDbId,
-            meals_db_id: setupResult.mealsDbId,
-            notes_db_id: setupResult.notesDbId,
-            energy_logs_db_id: setupResult.energyLogsDbId,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', existingUser.id)
           .select();
         
@@ -330,10 +547,59 @@ export async function GET(request: NextRequest) {
           console.error('Update query details:', {
             user_id: existingUser.id,
             notion_token_length: access_token?.length,
-            setup_success: setupResult.success
+            setup_success: setupResult.success,
+            critical_setup_success: !!(setupResult.privacyPageId && setupResult.tasksDbId),
           });
         } else {
-          console.log('✅ Successfully updated user (Web flow):', updateData);
+          console.log('✅ Successfully updated user (Web flow):', {
+            user_id: updateResult?.[0]?.id,
+            notion_token_set: !!updateResult?.[0]?.notion_token,
+            notion_setup_complete: updateResult?.[0]?.notion_setup_complete,
+            update_data_sent: updateData,
+          });
+          
+          // Verify the update by querying the user back immediately
+          const { data: verifyUser, error: verifyError } = await supabase
+            .from('users')
+            .select('id, auth_user_id, notion_token, notion_setup_complete, tasks_db_id, privacy_page_id')
+            .eq('id', existingUser.id)
+            .single();
+          
+          if (verifyError) {
+            console.error('❌ Error verifying user update:', verifyError);
+          } else {
+            console.log('✅ User update verified:', {
+              user_id: verifyUser.id,
+              auth_user_id: verifyUser.auth_user_id,
+              has_notion_token: !!verifyUser.notion_token,
+              notion_token_length: verifyUser.notion_token?.length || 0,
+              notion_setup_complete: verifyUser.notion_setup_complete,
+              has_tasks_db: !!verifyUser.tasks_db_id,
+              has_privacy_page: !!verifyUser.privacy_page_id,
+            });
+            
+            // If verification shows update didn't work, log critical error
+            if (!verifyUser.notion_token) {
+              console.error('❌ CRITICAL: notion_token is NULL after update!', {
+                user_id: verifyUser.id,
+                update_data_sent: {
+                  notion_token_length: access_token?.length,
+                  notion_setup_complete: criticalSetupSuccess,
+                },
+                actual_values: {
+                  notion_token: verifyUser.notion_token,
+                  notion_setup_complete: verifyUser.notion_setup_complete,
+                },
+              });
+            } else if (verifyUser.notion_setup_complete !== criticalSetupSuccess) {
+              console.warn('⚠️ notion_setup_complete mismatch:', {
+                expected: criticalSetupSuccess,
+                actual: verifyUser.notion_setup_complete,
+                has_privacy_page: !!verifyUser.privacy_page_id,
+                has_tasks_db: !!verifyUser.tasks_db_id,
+              });
+            }
+          }
         }
       } else {
         console.warn('⚠️ User not found for Notion connection');
@@ -345,23 +611,59 @@ export async function GET(request: NextRequest) {
         // Try to create user if we have enough info
         if (authUserId || session.email) {
           console.log('Attempting to create new user...');
+          
+          // Only include database IDs that were actually created (not null)
+          // notion_setup_complete should be true if we have a token AND critical setup succeeded
+          const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+          const insertDataObj: any = {
+            auth_user_id: authUserId,
+            email: session.email,
+            notion_token: access_token,
+            notion_setup_complete: criticalSetupSuccess, // True if critical components created
+            license_key: session.license_key || '',
+            onboarding_complete: false,
+          };
+          
+          // Only add database IDs if they were successfully created
+          if (setupResult.privacyPageId) {
+            insertDataObj.privacy_page_id = setupResult.privacyPageId;
+          }
+          if (setupResult.tasksDbId) {
+            insertDataObj.tasks_db_id = setupResult.tasksDbId;
+          }
+          if (setupResult.shoppingDbId) {
+            insertDataObj.shopping_db_id = setupResult.shoppingDbId;
+          }
+          if (setupResult.workoutsDbId) {
+            insertDataObj.workouts_db_id = setupResult.workoutsDbId;
+          }
+          if (setupResult.mealsDbId) {
+            insertDataObj.meals_db_id = setupResult.mealsDbId;
+          }
+          if (setupResult.notesDbId) {
+            insertDataObj.notes_db_id = setupResult.notesDbId;
+          }
+          if (setupResult.energyLogsDbId) {
+            insertDataObj.energy_logs_db_id = setupResult.energyLogsDbId;
+          }
+          
+          console.log('Insert data prepared:', {
+            has_notion_token: !!insertDataObj.notion_token,
+            notion_setup_complete: insertDataObj.notion_setup_complete,
+            database_ids: {
+              privacy_page: !!insertDataObj.privacy_page_id,
+              tasks: !!insertDataObj.tasks_db_id,
+              shopping: !!insertDataObj.shopping_db_id,
+              workouts: !!insertDataObj.workouts_db_id,
+              meals: !!insertDataObj.meals_db_id,
+              notes: !!insertDataObj.notes_db_id,
+              energy_logs: !!insertDataObj.energy_logs_db_id,
+            }
+          });
+          
           const { data: insertData, error: insertError } = await supabase
             .from('users')
-            .insert({
-              auth_user_id: authUserId,
-              email: session.email,
-              notion_token: access_token,
-              notion_setup_complete: setupResult.success,
-              privacy_page_id: setupResult.privacyPageId,
-              tasks_db_id: setupResult.tasksDbId,
-              shopping_db_id: setupResult.shoppingDbId,
-              workouts_db_id: setupResult.workoutsDbId,
-              meals_db_id: setupResult.mealsDbId,
-              notes_db_id: setupResult.notesDbId,
-              energy_logs_db_id: setupResult.energyLogsDbId,
-              license_key: session.license_key || '',
-              onboarding_complete: false,
-            })
+            .insert(insertDataObj)
             .select();
           
           if (insertError) {
@@ -406,10 +708,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Regular web flow - redirect to dashboard with success message
+    // Use critical success (page + Tasks DB) instead of full success (all databases)
+    const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
     const redirectUrl = new URL('/dashboard', request.url);
-    if (setupResult.success) {
+    
+    // Always set notion_connected flag if we have a token (even if setup partially failed)
+    // The dashboard will check notion_setup_complete to determine if setup was successful
+    if (access_token) {
       redirectUrl.searchParams.set('notion_connected', 'true');
+      console.log('✅ Redirecting to dashboard with notion_connected=true (token obtained)');
+      if (!criticalSetupSuccess) {
+        console.warn('⚠️ Warning: Notion token obtained but critical setup failed:', {
+          privacyPageId: setupResult.privacyPageId,
+          tasksDbId: setupResult.tasksDbId,
+        });
+      }
+    } else {
+      console.error('❌ No access token obtained, redirecting without notion_connected flag');
     }
+    
     return NextResponse.redirect(redirectUrl);
   } catch (error: any) {
     console.error('OAuth callback error:', error);
