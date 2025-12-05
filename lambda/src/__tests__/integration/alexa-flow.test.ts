@@ -20,12 +20,6 @@ jest.mock('../../utils/notion', () => ({
   createNotionClient: jest.fn(() => ({})),
   findDatabaseByName: jest.fn().mockResolvedValue('db-id'),
   getTopPriorityTasks: jest.fn().mockResolvedValue([]),
-  createBrainDump: jest.fn().mockResolvedValue({}),
-  logFocusTime: jest.fn().mockResolvedValue({}),
-  logEnergyLevel: jest.fn().mockResolvedValue({}),
-  getScheduleItems: jest.fn().mockResolvedValue([]),
-  getShoppingListItems: jest.fn().mockResolvedValue([]),
-  addShoppingListItem: jest.fn().mockResolvedValue({}),
 }));
 
 import { handler } from '../../index';
@@ -97,7 +91,7 @@ describe('Alexa Skill Integration', () => {
         locale: 'en-US',
         dialogState: 'COMPLETED',
         intent: {
-          name: 'PriorityListIntent',
+          name: 'QueryTasksIntent',
           confirmationStatus: 'NONE',
         },
       },

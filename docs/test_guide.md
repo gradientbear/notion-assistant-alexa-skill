@@ -119,275 +119,209 @@ This guide walks you through testing the entire flow from user registration to c
 
 ## Phase 4: Testing Voice Commands
 
-### Step 12: Test Launch Request
-1. In **Test** tab, type: `open Voice Planner`
-2. **Expected:** Welcome message like "Welcome to Voice Planner..."
+✅ ADD TASK — Sample Test Sentences (≈ 35)
 
-### Step 13: Test Adding Tasks
-1. Type: `add finish the report`
-2. **Expected:** "I've added finish the report to your tasks"
-3. Type: `add call mom`
-4. **Expected:** Task added confirmation
-5. **Verify in Notion:** Check your Tasks database - tasks should appear
+These simulate natural, messy user requests.
 
-### Step 14: Test Listing Tasks
-1. Type: `what are my tasks`
-2. **Expected:** Alexa reads your tasks from Notion
-3. Type: `read my tasks`
-4. **Expected:** Same result
+🧪 Basic adds
 
-### Step 15: Test Marking Tasks Complete
-1. Type: `mark finish the report as done`
-2. **Expected:** "I've marked finish the report as complete"
-3. **Verify in Notion:** Task status should be "Done"
+"add buy milk"
 
-### Step 16: Test Shopping List
-1. Type: `add to shopping: milk, eggs, bread`
-2. **Expected:** Items added to shopping list
-3. Type: `read my shopping list`
-4. **Expected:** Alexa reads shopping items
+"add pick up dry cleaning tomorrow"
 
-### Step 17: Test Workouts
-1. Type: `log workout running 30 minutes`
-2. **Expected:** Workout logged confirmation
-3. **Verify in Notion:** Check Workouts database
+"create a task to call Sarah"
 
-### Step 18: Test Meals
-1. Type: `log breakfast 500 calories`
-2. **Expected:** Meal logged confirmation
-3. **Verify in Notion:** Check Meals database
+"add take out the trash tonight"
 
-### Step 19: Test Notes
-1. Type: `add note meeting notes`
-2. **Expected:** Note added confirmation
-3. Type: `read my notes`
-4. **Expected:** Alexa reads your notes
+"add schedule dentist appointment"
 
-### Step 20: Test Energy Tracking
-1. Type: `log energy 7`
-2. **Expected:** Energy logged confirmation
-3. **Verify in Notion:** Check EnergyLogs database
+🧪 Adds with time parsing (chrono-node)
 
-### Step 21: Test Statistics
-1. Type: `how many tasks do I have`
-2. **Expected:** Task count
-3. Type: `give me a summary`
-4. **Expected:** Productivity summary
-5. Type: `when is my next deadline`
-6. **Expected:** Next deadline information
+"add pay rent next Tuesday"
 
----
+"remind me to water the plants every morning"
 
-## Phase 5: Comprehensive Test Scenarios
+"create a task to send the invoice at 4 pm"
 
-### Test Scenario 1: Complete CRUD Workflow
-1. **Create**: "Alexa, add finish quarterly report"
-2. **Read**: "Alexa, what are my tasks" (verify task appears)
-3. **Update**: "Alexa, set finish quarterly report to in progress"
-4. **Read**: "Alexa, what am I working on" (verify status changed)
-5. **Update**: "Alexa, mark finish quarterly report as done"
-6. **Read**: "Alexa, what have I completed" (verify completion)
-7. **Delete**: "Alexa, delete finish quarterly report"
-8. **Read**: "Alexa, what are my tasks" (verify task removed)
+"add book flight in two weeks"
 
-### Test Scenario 2: Task Status Updates
-Test all status transitions:
-- **To Do → In Progress**: "set [task] to in progress"
-- **In Progress → Done**: "set [task] to done"
-- **Done → To Do**: "set [task] to to do"
-- **Explicit status**: Verify explicit status is respected even if it matches current status
+"schedule gym session for tomorrow morning"
 
-### Test Scenario 3: Date-Based Queries
-- "what's due tomorrow"
-- "what's due today"
-- "what's overdue"
-- "what's due this week"
+🧪 Adds with category
 
-### Test Scenario 4: Category and Priority Filters
-- "what are my work tasks"
-- "what are my high priority tasks"
-- "what are my personal tasks"
+"add finish presentation to my work list"
 
-### Test Scenario 5: Statistics and Summaries
-- "how many tasks do I have"
-- "how many tasks are done"
-- "give me a summary"
-- "when is my next deadline"
+"add buy groceries to my personal list"
 
----
+🧪 Adds with complex phrasing
 
-## Test Sentences Reference
+"set a reminder to check the oven in 20 minutes"
 
-### Task Management
-- "add finish the report"
-- "add call mom high priority"
-- "add buy groceries due tomorrow"
-- "what are my tasks"
-- "what are my work tasks"
-- "what's due tomorrow"
-- "mark finish report as done"
-- "set finish report to in progress"
-- "delete finish report"
-- "how many tasks do I have"
-- "give me a summary"
+"add prepare report due Friday afternoon"
 
-### Shopping
-- "add milk to shopping list"
-- "read my shopping list"
-- "mark milk as bought"
+"create call mom Sunday evening"
 
-### Workouts
-- "log workout running 30 minutes"
-- "I did chest day for 45 minutes"
+"add revise homework before next Monday"
 
-### Meals
-- "log breakfast 500 calories"
-- "I ate pizza for 800 calories"
+"add finish the code review after lunch"
 
-### Notes
-- "add note meeting notes"
-- "read my notes"
+🧪 Adds with priority
 
-### Energy
-- "log energy 7"
-- "my energy is 5"
+"add urgent task submit tax forms today"
 
----
+"add high priority update project timeline"
 
-## Verification Steps
+🧪 Messy / natural language
 
-### Step 22: Check CloudWatch Logs
-1. Go to **AWS Console → CloudWatch**
-2. Find your Lambda function logs
-3. Look for:
-   - `[AuthInterceptor] Token validated successfully`
-   - `[Request Interceptor] Intent name: AddTaskIntent`
-   - Handler invocation messages
-4. **Expected:** All requests logged successfully
+"hey remind me to get a birthday gift for John"
 
-### Step 23: Check Database
-1. Query `oauth_access_tokens` table:
-   ```sql
-   SELECT * FROM oauth_access_tokens 
-   WHERE user_id = 'YOUR_USER_ID' 
-   AND revoked = false;
-   ```
-2. **Expected:** Active token exists
+"uh add feed the dog at 7"
 
-### Step 24: Verify Voice Planner
-1. Check Tasks database in Notion
-2. Verify tasks created via voice commands appear
-3. Verify status updates are reflected
-4. Check other databases (Shopping, Workouts, Meals, Notes, EnergyLogs)
+"I need to remember to email the bank tomorrow morning"
 
----
+✅ UPDATE TASK — Sample Test Sentences (≈ 30)
+🧪 Rename tasks
 
-## Troubleshooting
+"rename buy milk to buy almond milk"
 
-### "Link Alexa" button disabled:
-- Check browser console for `hasNotionConnection` and `hasJwtToken`
-- Ensure Notion is connected
-- Ensure you clicked "Buy License"
+"change task call mom to call mom and dad"
 
-### Account linking fails:
-- Check `ALEXA_OAUTH_CLIENT_ID` and `ALEXA_OAUTH_CLIENT_SECRET` are set
-- Verify redirect URIs match in Developer Console
-- Check user has active license and Notion connection
+"change fix sink to repair kitchen sink"
 
-### Intent not recognized:
-- Verify interaction model is built successfully
-- Check JSON Input tab shows correct intent name
-- Try re-building the interaction model
+🧪 Reschedule (date, time, both)
 
-### No CloudWatch logs:
-- Verify Lambda ARN is correct in Endpoint settings
-- Check skill is enabled for testing
-- Ensure account is linked
+"move dentist appointment to next Friday"
 
-### Task not found errors:
-- Verify task exists in Notion
-- Check task name matches exactly
-- Try using the full task name
+"reschedule pay rent to tomorrow morning"
 
-### Database not found errors:
-- Verify all 6 databases exist in Notion
-- Check database names match exactly (case-sensitive)
-- Try reconnecting Notion from dashboard
+"change meeting with Steve to 4 pm"
 
-### Email verification not received:
-- Check spam folder
-- Verify email address is correct
-- Check Supabase Auth logs
-- Consider disabling email confirmation for testing
+"set house cleaning for Saturday at 2 pm"
 
----
+"move morning workout to next Monday at 6 am"
 
-## Test Checklist
+🧪 Change status
 
-### Setup
-- [ ] User registered and verified email
-- [ ] Notion connected (Privacy page + 6 databases created)
-- [ ] Opaque access token generated (Stripe payment completed)
-- [ ] Interaction model deployed successfully
-- [ ] Account linking configured in Developer Console
-- [ ] Account linked via OAuth flow
+"mark buy milk as in process"
 
-### Basic Operations
-- [ ] Can launch skill: "open Voice Planner"
-- [ ] Can add tasks: "add [task]"
-- [ ] Can list tasks: "what are my tasks"
-- [ ] Can mark complete: "mark [task] as done"
-- [ ] Can update status: "set [task] to in progress"
-- [ ] Can delete tasks: "delete [task]"
+"set email bank to done"
 
-### Advanced Operations
-- [ ] Can filter by category: "what are my work tasks"
-- [ ] Can filter by priority: "what are my high priority tasks"
-- [ ] Can query by date: "what's due tomorrow"
-- [ ] Can get statistics: "how many tasks do I have"
-- [ ] Can get summary: "give me a summary"
-- [ ] Can find deadlines: "when is my next deadline"
+"set laundry task to to do"
 
-### New Features
-- [ ] Can add shopping items: "add milk to shopping list"
-- [ ] Can read shopping list: "read my shopping list"
-- [ ] Can log workouts: "log workout running 30 minutes"
-- [ ] Can log meals: "log breakfast 500 calories"
-- [ ] Can add notes: "add note meeting notes"
-- [ ] Can read notes: "read my notes"
-- [ ] Can log energy: "log energy 7"
+🧪 Change category
 
-### Verification
-- [ ] Tasks appear in Voice Plannerbase
-- [ ] CloudWatch logs show successful requests
-- [ ] All databases are accessible
-- [ ] Status updates are reflected in Notion
+"move presentation draft to work category"
 
----
+"set grocery shopping to personal category"
 
-## Notes
+🧪 Complex update sentences
 
-- You can test everything **without certification** using the Alexa Developer Console Test tab
-- Certification is only needed to publish to the Skills Store
-- All testing can be done in development mode before submission
-- Use the test sentences reference for comprehensive testing
+"update finish taxes move it to Tuesday afternoon"
 
----
+"change call with doctor move it to tomorrow at noon"
 
-## Quick Test Commands
+"reschedule submit report from Friday to Monday morning"
 
-### Basic Operations:
-- `open Voice Planner` - Launch skill
-- `add [task name]` - Add task
-- `what are my tasks` - List tasks
-- `mark [task] as done` - Complete task
-- `delete [task]` - Remove task
+✅ DELETE TASK — Sample Test Sentences (≈ 25)
+🧪 Delete by name
 
-### Advanced:
-- `what are my work tasks` - Filter by category
-- `what's due tomorrow` - Date-based query
-- `how many tasks do I have` - Statistics
-- `give me a summary` - Productivity summary
-- `add to shopping: [items]` - Add to shopping list
-- `log workout running 30 minutes` - Log workout
-- `log energy 7` - Log energy level
+"delete buy milk"
+
+"remove dentist appointment"
+
+"erase task call John"
+
+🧪 Delete by status
+
+"delete all completed tasks"
+
+"clear all done tasks"
+
+"remove in process tasks"
+
+🧪 Delete by time
+
+"delete tasks due today"
+
+"remove overdue tasks"
+
+"clear tasks due tomorrow"
+
+🧪 Delete bulk
+
+"delete everything"
+
+"clear entire list"
+
+"remove all tasks"
+
+🧪 Natural messy phrasing
+
+"ugh delete that task about fixing the sink"
+
+"remove whatever is done already"
+
+✅ QUERY TASKS — Sample Test Sentences (≈ 35)
+🧪 General queries
+
+"what’s on my todo list"
+
+"read my tasks"
+
+"what do I need to do"
+
+"show all tasks"
+
+🧪 Time-based
+
+"what do I need to do today"
+
+"what are my tasks for tomorrow"
+
+"what tasks are due next week"
+
+"show tasks due after 5 pm"
+
+"what’s scheduled for Sunday morning"
+
+"what’s overdue"
+
+"what do I have this afternoon"
+
+🧪 Status-based
+
+"what tasks are incomplete"
+
+"show done tasks"
+
+"what did I finish today"
+
+"what is in process"
+
+🧪 Category and priority
+
+"show my work tasks"
+
+"read my personal reminders"
+
+"what are my high priority tasks"
+
+🧪 Keyword search
+
+"do I have anything about groceries"
+
+"show tasks related to the bank"
+
+"is there anything about cleaning"
+
+"what tasks mention birthday"
+
+🧪 Messy / complex
+
+"what incomplete tasks do I have for tomorrow"
+
+"show personal tasks due today"
+
+"what work tasks are overdue"
+
+"list my tasks after noon that are not done"

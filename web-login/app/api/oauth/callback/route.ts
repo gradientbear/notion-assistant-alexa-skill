@@ -285,11 +285,6 @@ export async function GET(request: NextRequest) {
       success: setupResult.success,
       privacyPageId: setupResult.privacyPageId,
       tasksDbId: setupResult.tasksDbId,
-      shoppingDbId: setupResult.shoppingDbId,
-      workoutsDbId: setupResult.workoutsDbId,
-      mealsDbId: setupResult.mealsDbId,
-      notesDbId: setupResult.notesDbId,
-      energyLogsDbId: setupResult.energyLogsDbId
     });
 
     if (session.amazon_account_id) {
@@ -326,21 +321,6 @@ export async function GET(request: NextRequest) {
         if (setupResult.tasksDbId) {
           updateData.tasks_db_id = setupResult.tasksDbId;
         }
-        if (setupResult.shoppingDbId) {
-          updateData.shopping_db_id = setupResult.shoppingDbId;
-        }
-        if (setupResult.workoutsDbId) {
-          updateData.workouts_db_id = setupResult.workoutsDbId;
-        }
-        if (setupResult.mealsDbId) {
-          updateData.meals_db_id = setupResult.mealsDbId;
-        }
-        if (setupResult.notesDbId) {
-          updateData.notes_db_id = setupResult.notesDbId;
-        }
-        if (setupResult.energyLogsDbId) {
-          updateData.energy_logs_db_id = setupResult.energyLogsDbId;
-        }
         
         console.log('Update data prepared (Alexa flow):', {
           has_notion_token: !!updateData.notion_token,
@@ -348,11 +328,6 @@ export async function GET(request: NextRequest) {
           database_ids: {
             privacy_page: !!updateData.privacy_page_id,
             tasks: !!updateData.tasks_db_id,
-            shopping: !!updateData.shopping_db_id,
-            workouts: !!updateData.workouts_db_id,
-            meals: !!updateData.meals_db_id,
-            notes: !!updateData.notes_db_id,
-            energy_logs: !!updateData.energy_logs_db_id,
           }
         });
         
@@ -389,21 +364,6 @@ export async function GET(request: NextRequest) {
         if (setupResult.tasksDbId) {
           insertDataObj.tasks_db_id = setupResult.tasksDbId;
         }
-        if (setupResult.shoppingDbId) {
-          insertDataObj.shopping_db_id = setupResult.shoppingDbId;
-        }
-        if (setupResult.workoutsDbId) {
-          insertDataObj.workouts_db_id = setupResult.workoutsDbId;
-        }
-        if (setupResult.mealsDbId) {
-          insertDataObj.meals_db_id = setupResult.mealsDbId;
-        }
-        if (setupResult.notesDbId) {
-          insertDataObj.notes_db_id = setupResult.notesDbId;
-        }
-        if (setupResult.energyLogsDbId) {
-          insertDataObj.energy_logs_db_id = setupResult.energyLogsDbId;
-        }
         
         console.log('Insert data prepared (Alexa flow):', {
           has_notion_token: !!insertDataObj.notion_token,
@@ -411,11 +371,6 @@ export async function GET(request: NextRequest) {
           database_ids: {
             privacy_page: !!insertDataObj.privacy_page_id,
             tasks: !!insertDataObj.tasks_db_id,
-            shopping: !!insertDataObj.shopping_db_id,
-            workouts: !!insertDataObj.workouts_db_id,
-            meals: !!insertDataObj.meals_db_id,
-            notes: !!insertDataObj.notes_db_id,
-            energy_logs: !!insertDataObj.energy_logs_db_id,
           }
         });
         
@@ -541,21 +496,6 @@ export async function GET(request: NextRequest) {
         if (setupResult.tasksDbId) {
           updateData.tasks_db_id = setupResult.tasksDbId;
         }
-        if (setupResult.shoppingDbId) {
-          updateData.shopping_db_id = setupResult.shoppingDbId;
-        }
-        if (setupResult.workoutsDbId) {
-          updateData.workouts_db_id = setupResult.workoutsDbId;
-        }
-        if (setupResult.mealsDbId) {
-          updateData.meals_db_id = setupResult.mealsDbId;
-        }
-        if (setupResult.notesDbId) {
-          updateData.notes_db_id = setupResult.notesDbId;
-        }
-        if (setupResult.energyLogsDbId) {
-          updateData.energy_logs_db_id = setupResult.energyLogsDbId;
-        }
         
         // Note: users.id should already match Supabase Auth user id (authUserId)
         // If there's a mismatch, it indicates a data integrity issue that should be fixed separately
@@ -573,11 +513,6 @@ export async function GET(request: NextRequest) {
           database_ids: {
             privacy_page: !!updateData.privacy_page_id,
             tasks: !!updateData.tasks_db_id,
-            shopping: !!updateData.shopping_db_id,
-            workouts: !!updateData.workouts_db_id,
-            meals: !!updateData.meals_db_id,
-            notes: !!updateData.notes_db_id,
-            energy_logs: !!updateData.energy_logs_db_id,
           }
         });
         
@@ -768,21 +703,6 @@ export async function GET(request: NextRequest) {
           if (setupResult.tasksDbId) {
             insertDataObj.tasks_db_id = setupResult.tasksDbId;
           }
-          if (setupResult.shoppingDbId) {
-            insertDataObj.shopping_db_id = setupResult.shoppingDbId;
-          }
-          if (setupResult.workoutsDbId) {
-            insertDataObj.workouts_db_id = setupResult.workoutsDbId;
-          }
-          if (setupResult.mealsDbId) {
-            insertDataObj.meals_db_id = setupResult.mealsDbId;
-          }
-          if (setupResult.notesDbId) {
-            insertDataObj.notes_db_id = setupResult.notesDbId;
-          }
-          if (setupResult.energyLogsDbId) {
-            insertDataObj.energy_logs_db_id = setupResult.energyLogsDbId;
-          }
           
           console.log('Insert data prepared:', {
             has_notion_token: !!insertDataObj.notion_token,
@@ -790,11 +710,6 @@ export async function GET(request: NextRequest) {
             database_ids: {
               privacy_page: !!insertDataObj.privacy_page_id,
               tasks: !!insertDataObj.tasks_db_id,
-              shopping: !!insertDataObj.shopping_db_id,
-              workouts: !!insertDataObj.workouts_db_id,
-              meals: !!insertDataObj.meals_db_id,
-              notes: !!insertDataObj.notes_db_id,
-              energy_logs: !!insertDataObj.energy_logs_db_id,
             }
           });
           

@@ -312,11 +312,6 @@ export async function updateUserNotionSetup(
   setupData: {
     privacyPageId?: string | null;
     tasksDbId?: string | null;
-    shoppingDbId?: string | null;
-    workoutsDbId?: string | null;
-    mealsDbId?: string | null;
-    notesDbId?: string | null;
-    energyLogsDbId?: string | null;
     setupComplete?: boolean;
   }
 ): Promise<void> {
@@ -329,21 +324,6 @@ export async function updateUserNotionSetup(
   }
   if (setupData.tasksDbId !== undefined) {
     updateData.tasks_db_id = setupData.tasksDbId;
-  }
-  if (setupData.shoppingDbId !== undefined) {
-    updateData.shopping_db_id = setupData.shoppingDbId;
-  }
-  if (setupData.workoutsDbId !== undefined) {
-    updateData.workouts_db_id = setupData.workoutsDbId;
-  }
-  if (setupData.mealsDbId !== undefined) {
-    updateData.meals_db_id = setupData.mealsDbId;
-  }
-  if (setupData.notesDbId !== undefined) {
-    updateData.notes_db_id = setupData.notesDbId;
-  }
-  if (setupData.energyLogsDbId !== undefined) {
-    updateData.energy_logs_db_id = setupData.energyLogsDbId;
   }
   if (setupData.setupComplete !== undefined) {
     updateData.notion_setup_complete = setupData.setupComplete;

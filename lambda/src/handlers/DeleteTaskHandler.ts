@@ -15,11 +15,7 @@ export class DeleteTaskHandler implements RequestHandler {
     const intentName = isIntentRequest 
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
-    // Handle both DeleteTaskPhraseIntent and DeleteTaskStructuredIntent
-    const canHandle = isIntentRequest && (
-      intentName === 'DeleteTaskPhraseIntent' || 
-      intentName === 'DeleteTaskStructuredIntent'
-    );
+    const canHandle = isIntentRequest && intentName === 'DeleteTaskIntent';
     
     if (isIntentRequest) {
       console.log('[DeleteTaskHandler] canHandle check:', {
@@ -56,10 +52,22 @@ export class DeleteTaskHandler implements RequestHandler {
 
     try {
       const request = handlerInput.requestEnvelope.request as any;
-      // Handle both Phrase (taskName) and Structured (taskNameValue) intents, also check for 'task' slot
-      const taskSlot = request.intent.slots?.task?.value || 
-                       request.intent.slots?.taskName?.value || 
-                       request.intent.slots?.taskNameValue?.value;
+      const slots = request.intent.slots || {};
+      
+      // Extract userRequest from AMAZON.SearchQuery slot
+      const userRequest = slots.userRequest?.value;
+      
+      console.log('[DeleteTaskHandler] userRequest:', userRequest);
+      
+      if (!userRequest || userRequest.trim().length === 0) {
+        return buildResponse(
+          handlerInput,
+          'What task would you like to delete?',
+          'Tell me which task to delete.'
+        );
+      }
+      
+      const taskSlot = userRequest;
 
       const tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
       if (!tasksDbId) {
@@ -89,15 +97,6 @@ export class DeleteTaskHandler implements RequestHandler {
           handlerInput,
           `Deleted all completed tasks.`,
           'What else would you like to do?'
-        );
-      }
-
-      // Single task deletion
-      if (!taskSlot || taskSlot.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          'Which task would you like to delete?',
-          'Tell me the task name.'
         );
       }
 

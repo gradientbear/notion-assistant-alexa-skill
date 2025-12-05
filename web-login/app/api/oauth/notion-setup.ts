@@ -203,70 +203,44 @@ async function createTasksDatabase(
           },
         ],
         properties: {
-          Name: {
+          'Task Name': {
             title: {},
           },
-          Category: {
-            select: {
-              options: [
-                { name: 'work', color: 'orange' },
-                { name: 'personal', color: 'purple' },
-                { name: 'shopping', color: 'green' },
-                { name: 'fitness', color: 'pink' },
-                { name: 'health', color: 'red' },
-                { name: 'notes', color: 'blue' },
-                { name: 'general', color: 'gray' },
-              ],
-            },
+          'Parsed Name': {
+            rich_text: {},
           },
           Priority: {
             select: {
               options: [
-                { name: 'low', color: 'blue' },
-                { name: 'normal', color: 'yellow' },
-                { name: 'high', color: 'red' },
-                { name: 'urgent', color: 'red' },
+                { name: 'HIGH', color: 'red' },
+                { name: 'NORMAL', color: 'yellow' },
+                { name: 'LOW', color: 'blue' },
               ],
             },
           },
           Status: {
             select: {
               options: [
-                { name: 'to do', color: 'gray' },
-                { name: 'in progress', color: 'blue' },
-                { name: 'done', color: 'green' },
+                { name: 'TO DO', color: 'gray' },
+                { name: 'IN_PROCESS', color: 'blue' },
+                { name: 'DONE', color: 'green' },
               ],
             },
           },
-          'Due Date': {
-            date: {},
+          Category: {
+            select: {
+              options: [
+                { name: 'WORK', color: 'orange' },
+                { name: 'PERSONAL', color: 'purple' },
+              ],
+            },
           },
-          'Created At': {
-            created_time: {},
-          },
-          'Completed At': {
+          'Due Date Time': {
             date: {},
           },
           Notes: {
             rich_text: {},
           },
-          Tags: {
-            multi_select: {},
-          },
-          Recurring: {
-            select: {
-              options: [
-                { name: 'none', color: 'gray' },
-                { name: 'daily', color: 'green' },
-                { name: 'weekly', color: 'blue' },
-                { name: 'monthly', color: 'purple' },
-                { name: 'yearly', color: 'orange' },
-              ],
-            },
-          },
-          // Note: Formula properties (Next Occurrence, Overdue) are calculated by Notion
-          // They will be automatically created when the database is set up in Notion UI
-          // For now, we'll create them as placeholder properties that users can convert to formulas
           NotionID: {
             rich_text: {},
           },
@@ -288,463 +262,18 @@ async function createTasksDatabase(
   }
 }
 
-/**
- * Create Focus_Logs database on a parent page
- */
-async function createFocusLogsDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    // Check if database already exists
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Focus_Logs',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Focus_Logs'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    // Create Focus_Logs database
-    console.log(`Creating Focus_Logs database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Focus_Logs',
-            },
-          },
-        ],
-        properties: {
-          'Entry': {
-            title: {},
-          },
-          Date: {
-            date: {},
-          },
-          'Duration (minutes)': {
-            number: {},
-          },
-          'Focus Level': {
-            select: {
-              options: [
-                { name: 'Low', color: 'red' },
-                { name: 'Medium', color: 'yellow' },
-                { name: 'High', color: 'green' },
-              ],
-            },
-          },
-          Notes: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Focus_Logs database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Focus_Logs database:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      status: error.status,
-      body: error.body,
-    });
-    return null;
-  }
-}
-
-/**
- * Create Shopping database on a parent page
- */
-async function createShoppingDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Shopping',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Shopping'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    console.log(`Creating Shopping database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Shopping',
-            },
-          },
-        ],
-        properties: {
-          Name: {
-            title: {},
-          },
-          Quantity: {
-            number: {},
-          },
-          Status: {
-            select: {
-              options: [
-                { name: 'needed', color: 'red' },
-                { name: 'bought', color: 'green' },
-              ],
-            },
-          },
-          'Added At': {
-            created_time: {},
-          },
-          Notes: {
-            rich_text: {},
-          },
-          NotionID: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Shopping database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Shopping database:', error);
-    return null;
-  }
-}
-
-/**
- * Create Workouts database on a parent page
- */
-async function createWorkoutsDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Workouts',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Workouts'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    console.log(`Creating Workouts database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Workouts',
-            },
-          },
-        ],
-        properties: {
-          Workout: {
-            title: {},
-          },
-          Date: {
-            date: {},
-          },
-          'Duration (min)': {
-            number: {},
-          },
-          'Calories Burned': {
-            number: {},
-          },
-          Notes: {
-            rich_text: {},
-          },
-          NotionID: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Workouts database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Workouts database:', error);
-    return null;
-  }
-}
-
-/**
- * Create Meals database on a parent page
- */
-async function createMealsDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Meals',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Meals'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    console.log(`Creating Meals database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Meals',
-            },
-          },
-        ],
-        properties: {
-          Meal: {
-            title: {},
-          },
-          Calories: {
-            number: {},
-          },
-          Date: {
-            date: {},
-          },
-          Notes: {
-            rich_text: {},
-          },
-          NotionID: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Meals database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Meals database:', error);
-    return null;
-  }
-}
-
-/**
- * Create Notes database on a parent page
- */
-async function createNotesDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Notes',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Notes'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    console.log(`Creating Notes database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Notes',
-            },
-          },
-        ],
-        properties: {
-          Title: {
-            title: {},
-          },
-          Content: {
-            rich_text: {},
-          },
-          Date: {
-            date: {},
-          },
-          Tags: {
-            multi_select: {},
-          },
-          NotionID: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Notes database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Notes database:', error);
-    return null;
-  }
-}
-
-/**
- * Create EnergyLogs database on a parent page
- */
-async function createEnergyLogsDatabase(
-  client: Client,
-  parentPageId: string
-): Promise<string | null> {
-  try {
-    // Check if database already exists
-    const searchResponse = await withRetry(() =>
-      client.search({
-        query: 'Energy_Logs',
-        filter: {
-          property: 'object',
-          value: 'database',
-        },
-      })
-    );
-
-    const existingDb = searchResponse.results.find(
-      (item: any) => item.object === 'database' && item.title?.[0]?.plain_text === 'Energy_Logs'
-    );
-
-    if (existingDb) {
-      return (existingDb as any).id;
-    }
-
-    // Create Energy_Logs database
-    console.log(`Creating Energy_Logs database on page: ${parentPageId}`);
-    const dbResponse = await withRetry(() =>
-      client.databases.create({
-        parent: {
-          type: 'page_id',
-          page_id: parentPageId,
-        },
-        title: [
-          {
-            text: {
-              content: 'Energy_Logs',
-            },
-          },
-        ],
-        properties: {
-          Entry: {
-            title: {},
-          },
-          EnergyLevel: {
-            number: {},
-          },
-          Date: {
-            date: {},
-          },
-          Notes: {
-            rich_text: {},
-          },
-          NotionID: {
-            rich_text: {},
-          },
-        },
-      })
-    );
-
-    console.log('Successfully created Energy_Logs database:', dbResponse.id);
-    return dbResponse.id;
-  } catch (error: any) {
-    console.error('Error creating Energy_Logs database:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      status: error.status,
-      body: error.body,
-    });
-    return null;
-  }
-}
 
 /**
  * Complete Notion setup for a user:
  * 1. Create Voice Planner page
- * 2. Create six databases (Tasks, Shopping, Workouts, Meals, Notes, EnergyLogs)
- * Returns an object with all created IDs
+ * 2. Create Tasks database
+ * Returns an object with created IDs
  */
 export async function setupNotionWorkspace(
   accessToken: string
 ): Promise<{
   privacyPageId: string | null;
   tasksDbId: string | null;
-  shoppingDbId: string | null;
-  workoutsDbId: string | null;
-  mealsDbId: string | null;
-  notesDbId: string | null;
-  energyLogsDbId: string | null;
   success: boolean;
 }> {
   try {
@@ -771,60 +300,25 @@ export async function setupNotionWorkspace(
     console.log('Waiting for Notion to process the page...');
     await sleep(2000);
 
-    // Step 2: Create databases on the Voice Planner page
-    console.log('Step 2: Creating databases on Voice Planner page...');
+    // Step 2: Create Tasks database on the Voice Planner page
+    console.log('Step 2: Creating Tasks database on Voice Planner page...');
     const tasksDbId = await createTasksDatabase(client, privacyPageId);
     console.log('Tasks DB result:', tasksDbId ? `✓ Created: ${tasksDbId}` : '✗ Failed');
-    await sleep(1000);
-    
-    const shoppingDbId = await createShoppingDatabase(client, privacyPageId);
-    console.log('Shopping DB result:', shoppingDbId ? `✓ Created: ${shoppingDbId}` : '✗ Failed');
-    await sleep(1000);
-    
-    const workoutsDbId = await createWorkoutsDatabase(client, privacyPageId);
-    console.log('Workouts DB result:', workoutsDbId ? `✓ Created: ${workoutsDbId}` : '✗ Failed');
-    await sleep(1000);
-    
-    const mealsDbId = await createMealsDatabase(client, privacyPageId);
-    console.log('Meals DB result:', mealsDbId ? `✓ Created: ${mealsDbId}` : '✗ Failed');
-    await sleep(1000);
-    
-    const notesDbId = await createNotesDatabase(client, privacyPageId);
-    console.log('Notes DB result:', notesDbId ? `✓ Created: ${notesDbId}` : '✗ Failed');
-    await sleep(1000);
-    
-    const energyLogsDbId = await createEnergyLogsDatabase(client, privacyPageId);
-    console.log('EnergyLogs DB result:', energyLogsDbId ? `✓ Created: ${energyLogsDbId}` : '✗ Failed');
 
-    // Success requires: Voice Planner page + Tasks database (critical)
-    // Other databases are optional but recommended
-    const criticalSuccess = !!(privacyPageId && tasksDbId);
-    const allSuccess = !!(privacyPageId && tasksDbId && shoppingDbId && workoutsDbId && mealsDbId && notesDbId && energyLogsDbId);
+    // Success requires: Voice Planner page + Tasks database
+    const success = !!(privacyPageId && tasksDbId);
     
     console.log('=== Notion Workspace Setup Complete ===');
-    console.log('Critical Success (Page + Tasks):', criticalSuccess);
-    console.log('Full Success (All databases):', allSuccess);
+    console.log('Success:', success);
     console.log('Results:', {
       privacyPageId,
       tasksDbId,
-      shoppingDbId,
-      workoutsDbId,
-      mealsDbId,
-      notesDbId,
-      energyLogsDbId,
     });
 
-    // Return success=true only if critical components are created
-    // But return all IDs that were successfully created (even if some failed)
     return {
       privacyPageId: privacyPageId || null,
       tasksDbId: tasksDbId || null,
-      shoppingDbId: shoppingDbId || null,
-      workoutsDbId: workoutsDbId || null,
-      mealsDbId: mealsDbId || null,
-      notesDbId: notesDbId || null,
-      energyLogsDbId: energyLogsDbId || null,
-      success: criticalSuccess, // Success if at least page + Tasks DB are created
+      success,
     };
   } catch (error: any) {
     console.error('=== Error setting up Notion workspace ===');
@@ -839,11 +333,6 @@ export async function setupNotionWorkspace(
     return {
       privacyPageId: null,
       tasksDbId: null,
-      shoppingDbId: null,
-      workoutsDbId: null,
-      mealsDbId: null,
-      notesDbId: null,
-      energyLogsDbId: null,
       success: false,
     };
   }

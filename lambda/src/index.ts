@@ -1,24 +1,9 @@
 import { SkillBuilders } from 'ask-sdk-core';
 import { LaunchRequestHandler } from './handlers/LaunchRequestHandler';
-import { GetTasksHandler } from './handlers/GetTasksHandler';
-import { GetTasksByDateHandler } from './handlers/GetTasksByDateHandler';
+import { QueryTasksHandler } from './handlers/QueryTasksHandler';
 import { AddTaskHandler } from './handlers/AddTaskHandler';
-import { CompleteTaskHandler } from './handlers/CompleteTaskHandler';
-import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
+import { UpdateTaskHandler } from './handlers/UpdateTaskHandler';
 import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
-import { AddWorkoutHandler } from './handlers/AddWorkoutHandler';
-import { GetWorkoutsHandler } from './handlers/GetWorkoutsHandler';
-import { LogMealHandler } from './handlers/LogMealHandler';
-import { GetCaloriesHandler } from './handlers/GetCaloriesHandler';
-import { AddNoteHandler } from './handlers/AddNoteHandler';
-import { ReadNotesHandler } from './handlers/ReadNotesHandler';
-import { LogEnergyHandler } from './handlers/LogEnergyHandler';
-import { TaskCountHandler } from './handlers/TaskCountHandler';
-import { CompletedCountHandler } from './handlers/CompletedCountHandler';
-import { SummaryHandler } from './handlers/SummaryHandler';
-import { NextDeadlineHandler } from './handlers/NextDeadlineHandler';
-import { ShoppingListHandler } from './handlers/ShoppingListHandler';
-import { ConnectionStatusHandler } from './handlers/ConnectionStatusHandler';
 import { UnhandledIntentHandler } from './handlers/UnhandledIntentHandler';
 import { SessionEndedHandler } from './handlers/SessionEndedHandler';
 import { ErrorHandler } from './handlers/ErrorHandler';
@@ -33,32 +18,12 @@ import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInte
 const skill = SkillBuilders.custom()
   .addRequestHandlers(
     new LaunchRequestHandler(),
-    // Task handlers
-    new GetTasksHandler(),
-    new GetTasksByDateHandler(),
+    // Task handlers (new interaction model)
+    new QueryTasksHandler(),
     new AddTaskHandler(),
-    new CompleteTaskHandler(),
-    new UpdateTaskStatusHandler(),
+    new UpdateTaskHandler(),
     new DeleteTaskHandler(),
-    new TaskCountHandler(),
-    new CompletedCountHandler(),
-    new SummaryHandler(),
-    new NextDeadlineHandler(),
-    // Shopping handler
-    new ShoppingListHandler(),
-    // Workout handlers
-    new AddWorkoutHandler(),
-    new GetWorkoutsHandler(),
-    // Meal handlers
-    new LogMealHandler(),
-    new GetCaloriesHandler(),
-    // Note handlers
-    new AddNoteHandler(),
-    new ReadNotesHandler(),
-    // Energy handler
-    new LogEnergyHandler(),
     // Utility handlers
-    new ConnectionStatusHandler(),
     new UnhandledIntentHandler(),
     new SessionEndedHandler()
   )

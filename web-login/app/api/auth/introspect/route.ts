@@ -88,13 +88,34 @@ export async function POST(request: NextRequest) {
 
     // Look up opaque token in database (new approach)
     // First try as opaque token, then fall back to JWT for backward compatibility
+    console.log('[Introspect] Looking up token in database...', {
+      tokenPreview: token.substring(0, 20) + '...',
+      tokenLength: token.length,
+    });
+    
     const { data: tokenData, error: tokenError } = await supabase
       .from('oauth_access_tokens')
       .select('*')
       .eq('token', token)
-      .single();
+      .maybeSingle();
 
-    if (tokenError || !tokenData) {
+    console.log('[Introspect] Token lookup result:', {
+      found: !!tokenData,
+      error: tokenError?.code,
+      errorMessage: tokenError?.message,
+      tokenId: tokenData?.token?.substring(0, 20) + '...',
+    });
+
+    if (tokenError && tokenError.code !== 'PGRST116') {
+      // Database error (not "not found")
+      console.error('[Introspect] Database error looking up token:', tokenError);
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Database error during token lookup' },
+        { status: 500 }
+      );
+    }
+
+    if (!tokenData) {
       // Token not found in DB - try as JWT (backward compatibility)
       console.log('[Introspect] Token not found in DB, trying as JWT...');
       const payload = verifyAccessToken(token);

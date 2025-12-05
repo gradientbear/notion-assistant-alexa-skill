@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
       // Supabase doesn't cache queries by default, so this should always be fresh
       const result = await serverClient
         .from('users')
-        .select('id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, shopping_db_id, workouts_db_id, meals_db_id, notes_db_id, energy_logs_db_id, onboarding_complete, created_at, updated_at')
+        .select('id, email, password_hash, email_verified, provider, provider_id, amazon_account_id, license_key, notion_token, notion_setup_complete, privacy_page_id, tasks_db_id, onboarding_complete, created_at, updated_at')
         .eq('id', authUserId)
         .single();
       

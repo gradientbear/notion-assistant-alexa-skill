@@ -102,6 +102,12 @@ export class AuthInterceptor implements RequestInterceptor {
 
       // Use introspection endpoint (supports opaque tokens, JWT tokens, and legacy tokens)
       try {
+        console.log('[AuthInterceptor] Calling introspection endpoint:', {
+          url: INTROSPECT_URL,
+          tokenPreview: accessToken.substring(0, 20) + '...',
+          tokenLength: accessToken.length,
+        });
+        
         const introspectResponse = await fetch(INTROSPECT_URL, {
           method: 'POST',
           headers: {
@@ -110,8 +116,15 @@ export class AuthInterceptor implements RequestInterceptor {
           },
         });
 
+        console.log('[AuthInterceptor] Introspection response status:', introspectResponse.status);
+
         if (!introspectResponse.ok) {
-          console.warn('[AuthInterceptor] Introspection failed:', introspectResponse.status);
+          const errorText = await introspectResponse.text();
+          console.warn('[AuthInterceptor] Introspection failed:', {
+            status: introspectResponse.status,
+            statusText: introspectResponse.statusText,
+            errorBody: errorText,
+          });
           throw new Error('TOKEN_INVALID');
         }
 

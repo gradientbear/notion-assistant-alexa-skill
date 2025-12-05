@@ -62,12 +62,7 @@ CREATE TABLE IF NOT EXISTS users (
   notion_token TEXT,
   notion_setup_complete BOOLEAN DEFAULT FALSE,
   privacy_page_id TEXT,
-  tasks_db_id TEXT,
-  shopping_db_id TEXT,
-  workouts_db_id TEXT,
-  meals_db_id TEXT,
-  notes_db_id TEXT,
-  energy_logs_db_id TEXT,
+  tasks_db_id TEXT, -- Active: Used for task management
   
   -- Onboarding tracking
   onboarding_complete BOOLEAN DEFAULT FALSE,
@@ -476,6 +471,27 @@ FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- PERMISSIONS & GRANTS
+-- ============================================================================
+
+-- Grant schema usage to Supabase roles
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+
+-- Grant table permissions to Supabase roles
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Grant function permissions
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Grant sequence permissions (for auto-increment columns if any)
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- Set default privileges for future tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO anon, authenticated, service_role;
+
+-- ============================================================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================================================
 
@@ -489,40 +505,40 @@ ALTER TABLE oauth_refresh_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE website_refresh_tokens ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
--- Service role can do everything
+-- Service role can do everything (USING for SELECT, WITH CHECK for INSERT/UPDATE)
 DROP POLICY IF EXISTS "Service role can manage users" ON users;
 CREATE POLICY "Service role can manage users" ON users
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for licenses table
 -- Service role can do everything
 DROP POLICY IF EXISTS "Service role can manage licenses" ON licenses;
 CREATE POLICY "Service role can manage licenses" ON licenses
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for oauth_sessions table (legacy)
 -- Service role can do everything
 DROP POLICY IF EXISTS "Service role can manage oauth_sessions" ON oauth_sessions;
 CREATE POLICY "Service role can manage oauth_sessions" ON oauth_sessions
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- RLS Policies for OAuth2 tables
 -- Service role can do everything
 DROP POLICY IF EXISTS "Service role can manage oauth_authorization_codes" ON oauth_authorization_codes;
 CREATE POLICY "Service role can manage oauth_authorization_codes" ON oauth_authorization_codes
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role can manage oauth_access_tokens" ON oauth_access_tokens;
 CREATE POLICY "Service role can manage oauth_access_tokens" ON oauth_access_tokens
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role can manage oauth_refresh_tokens" ON oauth_refresh_tokens;
 CREATE POLICY "Service role can manage oauth_refresh_tokens" ON oauth_refresh_tokens
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role can manage website_refresh_tokens" ON website_refresh_tokens;
 CREATE POLICY "Service role can manage website_refresh_tokens" ON website_refresh_tokens
-  FOR ALL USING (true);
+  FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================================================
 -- UTILITY FUNCTIONS
@@ -565,93 +581,3 @@ BEGIN
   WHERE revoked = TRUE AND revoked_at < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;
-
--- ============================================================================
--- SAMPLE DATA (Optional - Uncomment to add test data)
--- ============================================================================
-
--- INSERT INTO licenses (stripe_payment_intent_id, license_key, status, notes) VALUES
---   ('pi_test_001', 'TEST-LICENSE-001', 'active', 'Test license key'),
---   ('pi_test_002', 'TEST-LICENSE-002', 'active', 'Another test license');
-
--- ============================================================================
--- TEST USER CREATION (Optional - for testing)
--- ============================================================================
-
--- Create Test User for Alexa Skill Testing
--- Replace 'YOUR_AMAZON_ACCOUNT_ID_HERE' with the actual userId from Alexa Developer Console Simulator
--- Replace 'YOUR_NOTION_TOKEN_HERE' with your Notion integration token
---
--- INSERT INTO users (
---   amazon_account_id,
---   email,
---   license_key,
---   notion_token,
---   notion_setup_complete,
---   onboarding_complete,
---   created_at,
---   updated_at
--- ) VALUES (
---   'amzn1.ask.account.XXXXXXXXXXXXX',  -- Replace with actual Amazon Account ID from simulator
---   'test@example.com',                  -- Your test email
---   'pi_test_001',                       -- Stripe payment intent ID
---   'secret_XXXXXXXXXXXXXXXXXXXXXXXX',   -- Replace with your Notion integration token
---   false,                               -- Will be set to true after setup
---   false,
---   NOW(),
---   NOW()
--- )
--- ON CONFLICT (amazon_account_id) 
--- DO UPDATE SET
---   email = EXCLUDED.email,
---   notion_token = EXCLUDED.notion_token,  -- Update token if user exists
---   updated_at = NOW();
-
--- ============================================================================
--- VERIFICATION QUERIES (Run these to verify setup)
--- ============================================================================
-
--- Check tables exist
--- SELECT table_name FROM information_schema.tables 
--- WHERE table_schema = 'public' 
--- AND table_name IN (
---   'users', 
---   'licenses', 
---   'oauth_sessions',
---   'oauth_authorization_codes',
---   'oauth_access_tokens',
---   'oauth_refresh_tokens',
---   'website_refresh_tokens'
--- );
-
--- Check users table columns (should NOT have auth_user_id after migration 002)
--- SELECT column_name, data_type, is_nullable, column_default
--- FROM information_schema.columns
--- WHERE table_name = 'users'
--- ORDER BY ordinal_position;
-
--- Check oauth_sessions table columns (should HAVE auth_user_id)
--- SELECT column_name, data_type, is_nullable
--- FROM information_schema.columns
--- WHERE table_name = 'oauth_sessions'
--- ORDER BY ordinal_position;
-
--- Check licenses table structure
--- SELECT column_name, data_type, is_nullable, column_default
--- FROM information_schema.columns
--- WHERE table_name = 'licenses'
--- ORDER BY ordinal_position;
-
--- Check indexes
--- SELECT indexname, indexdef 
--- FROM pg_indexes 
--- WHERE schemaname = 'public' 
--- AND tablename IN (
---   'users', 
---   'licenses', 
---   'oauth_sessions',
---   'oauth_authorization_codes',
---   'oauth_access_tokens',
---   'oauth_refresh_tokens',
---   'website_refresh_tokens'
--- );

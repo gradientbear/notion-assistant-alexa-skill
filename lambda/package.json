@@ -16,7 +16,8 @@
     "@supabase/supabase-js": "^2.38.5",
     "ask-sdk-core": "^2.14.0",
     "ask-sdk-model": "^1.75.0",
-    "axios": "^1.6.2"
+    "axios": "^1.6.2",
+    "chrono-node": "^2.7.8"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.130",
