@@ -23,26 +23,21 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     
-    // Log the full request for debugging
-    console.log('[OAuth Authorize] Full request:', {
+    console.log('[OAuth Authorize] Request received:', {
       url: request.url,
       method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
       searchParams: Object.fromEntries(searchParams.entries()),
     });
     
-    // ADD THIS - Log immediately after to ensure we get here
-    console.log('[OAuth Authorize] Processing request, checking parameters...');
-    
+    // Validate required parameters
     const responseType = searchParams.get('response_type');
-    const clientId = searchParams.get('client_id')?.trim(); // Trim whitespace
+    const clientId = searchParams.get('client_id')?.trim();
     const redirectUri = searchParams.get('redirect_uri');
     const scope = searchParams.get('scope') || 'alexa';
     const state = searchParams.get('state');
     const codeChallenge = searchParams.get('code_challenge');
     const codeChallengeMethod = searchParams.get('code_challenge_method') || 'S256';
 
-    // Validate required parameters
     if (responseType !== 'code') {
       return NextResponse.json(
         { error: 'unsupported_response_type', error_description: 'Only "code" response type is supported' },
@@ -50,42 +45,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Log for debugging (don't log actual secrets in production)
-    const expectedClientId = process.env.ALEXA_OAUTH_CLIENT_ID?.trim(); // Trim whitespace
-    console.log('[OAuth Authorize] Client ID validation:', {
-      received: clientId ? `${clientId.substring(0, 8)}...` : 'missing',
-      receivedLength: clientId?.length || 0,
-      expected: expectedClientId ? `${expectedClientId.substring(0, 8)}...` : 'missing',
-      expectedLength: expectedClientId?.length || 0,
-      match: clientId === expectedClientId,
-      hasEnvVar: !!expectedClientId,
-      // Log first and last chars to detect encoding issues
-      receivedFirstChar: clientId?.[0],
-      receivedLastChar: clientId?.[clientId.length - 1],
-      expectedFirstChar: expectedClientId?.[0],
-      expectedLastChar: expectedClientId?.[expectedClientId.length - 1],
-    });
-
-    if (!clientId) {
-      return NextResponse.json(
-        { error: 'invalid_client', error_description: 'Missing client_id parameter' },
-        { status: 400 }
-      );
-    }
-
-    if (!expectedClientId) {
-      console.error('[OAuth Authorize] ALEXA_OAUTH_CLIENT_ID environment variable is not set');
-      return NextResponse.json(
-        { error: 'server_error', error_description: 'Server configuration error' },
-        { status: 500 }
-      );
-    }
-
-    if (clientId !== expectedClientId) {
-      console.error('[OAuth Authorize] Client ID mismatch:', {
-        received: clientId,
-        expected: expectedClientId
-      });
+    const expectedClientId = process.env.ALEXA_OAUTH_CLIENT_ID?.trim();
+    if (!clientId || !expectedClientId || clientId !== expectedClientId) {
+      console.error('[OAuth Authorize] Invalid client_id');
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client_id' },
         { status: 400 }
@@ -99,69 +61,45 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check for authenticated session
-    // Try website JWT first, then fall back to Supabase session token
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const projectRef = supabaseUrl.split('//')[1]?.split('.')[0] || 'default'
-    const cookieName = `sb-${projectRef}-auth-token`
+    // ============================================================================
+    // STEP 1: Authenticate user via Supabase session token ONLY
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 1: Authenticating user...');
     
-    const authHeader = request.headers.get('authorization');
-    // Also check for session token in query parameter (from login page redirect)
-    const sessionTokenFromQuery = searchParams.get('_session_token');
-    let sessionToken = authHeader?.replace('Bearer ', '') || 
-                     sessionTokenFromQuery ||
-                     request.cookies.get('sb-access-token')?.value ||
-                     request.cookies.get(cookieName)?.value;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.error('[OAuth Authorize] Missing Supabase environment variables');
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
 
-    // Log all cookies for debugging
-    const allCookies = request.cookies.getAll();
-    console.log('[OAuth Authorize] Session check:', {
-      hasAuthHeader: !!authHeader,
-      hasSessionTokenFromQuery: !!sessionTokenFromQuery,
-      hasAccessTokenCookie: !!request.cookies.get('sb-access-token')?.value,
-      hasProjectCookie: !!request.cookies.get(cookieName)?.value,
-      cookieName,
-      hasSessionToken: !!sessionToken,
-      tokenSource: sessionTokenFromQuery ? 'query_param' : (authHeader ? 'header' : (request.cookies.get('sb-access-token')?.value ? 'cookie_sb-access-token' : (request.cookies.get(cookieName)?.value ? `cookie_${cookieName}` : 'none'))),
-      allCookieNames: allCookies.map(c => c.name),
-      cookieCount: allCookies.length,
-      // Try to find any Supabase-related cookies
-      supabaseCookies: allCookies.filter(c => c.name.includes('sb-') || c.name.includes('supabase')).map(c => c.name),
-    });
+    // Get session token from query parameter (from login page redirect) or Authorization header
+    const sessionTokenFromQuery = searchParams.get('_session_token');
+    const authHeader = request.headers.get('authorization');
+    const sessionToken = authHeader?.replace('Bearer ', '') || sessionTokenFromQuery;
 
     if (!sessionToken) {
-      // Redirect to login page with return URL
       console.log('[OAuth Authorize] No session token found, redirecting to login');
-      console.log('[OAuth Authorize] Redirect URL will be:', request.url);
       const loginUrl = new URL('/?redirect=' + encodeURIComponent(request.url), request.url);
-      console.log('[OAuth Authorize] Login URL:', loginUrl.toString());
       return NextResponse.redirect(loginUrl);
     }
 
-    // Try to verify as website JWT first (new approach)
-    const websiteTokenPayload = verifyWebsiteToken(sessionToken);
+    // Try website JWT first, then fall back to Supabase session token
     let authUserId: string | null = null;
     let userEmail: string | null = null;
 
+    const websiteTokenPayload = verifyWebsiteToken(sessionToken);
     if (websiteTokenPayload) {
-      // Website JWT token - extract user ID from payload
       authUserId = websiteTokenPayload.sub;
       userEmail = websiteTokenPayload.email;
-      console.log('[OAuth Authorize] Authenticated via website JWT:', authUserId);
+      console.log('[OAuth Authorize] Authenticated via website JWT:', { auth_user_id: authUserId });
     } else {
-      // Fall back to Supabase session token (backward compatibility)
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!supabaseAnonKey || !supabaseUrl) {
-        console.error('[OAuth Authorize] Missing Supabase environment variables');
-        return NextResponse.json(
-          { error: 'server_error', error_description: 'Server configuration error' },
-          { status: 500 }
-        );
-      }
-
+      // Use Supabase Auth to verify session token
       const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey);
-
-      // Get user from Supabase Auth
       const { data: { user: authUser }, error: authError } = await supabaseAuth.auth.getUser(sessionToken);
       
       if (authError || !authUser) {
@@ -172,73 +110,62 @@ export async function GET(request: NextRequest) {
 
       authUserId = authUser.id;
       userEmail = authUser.email || null;
-      console.log('[OAuth Authorize] Authenticated via Supabase session token:', authUserId);
+      console.log('[OAuth Authorize] Authenticated via Supabase session token:', { auth_user_id: authUserId });
     }
 
     if (!authUserId) {
-      console.log('[OAuth Authorize] No auth user ID found, redirecting to login');
+      console.log('[OAuth Authorize] No auth_user_id found, redirecting to login');
       const loginUrl = new URL('/?redirect=' + encodeURIComponent(request.url), request.url);
       return NextResponse.redirect(loginUrl);
     }
-    
-    // Now use service role for database operations
-    const supabase = createServerClient();
 
-    // Get user record from custom users table
-    // Use .select() instead of .single() to handle duplicate auth_user_id cases
-    let { data: usersByAuthId, error: userError } = await supabase
+    // ============================================================================
+    // STEP 2: Get user from database and VALIDATE it exists
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 2: Looking up user in database...');
+    
+    const supabase = createServerClient();
+    
+    // Query users table by id (which matches Supabase Auth user id)
+    const { data: user, error: userQueryError } = await supabase
       .from('users')
       .select('*')
-      .eq('auth_user_id', authUserId);
-    
-    let user: any = null;
-    
-    // Handle multiple users with same auth_user_id (same logic as /api/users/me)
-    if (usersByAuthId && usersByAuthId.length > 0) {
-      // If multiple users found, prefer:
-      // 1. User with Notion token (most complete)
-      // 2. Most recently updated
-      const userWithToken = usersByAuthId.find(u => !!(u as any).notion_token);
-      if (userWithToken) {
-        user = userWithToken;
-        console.log('[OAuth Authorize] Selected user with Notion token:', user.id);
-      } else {
-        user = usersByAuthId.sort((a, b) => 
-          new Date(b.updated_at || b.created_at).getTime() - 
-          new Date(a.updated_at || a.created_at).getTime()
-        )[0];
-        console.log('[OAuth Authorize] Selected most recently updated user:', user.id);
-      }
-      
-      if (usersByAuthId.length > 1) {
-        console.warn('[OAuth Authorize] ⚠️ Multiple users found with same auth_user_id!', {
-          total_users: usersByAuthId.length,
-          selected_user_id: user.id,
-        });
-      }
-      
-      userError = null; // Clear error since we found users
-    }
+      .eq('id', authUserId)
+      .single();
 
-    if (userError || !user) {
-      console.error('[OAuth Authorize] User not found:', {
-        auth_user_id: authUserId,
-        error: userError,
-        usersFound: usersByAuthId?.length || 0,
+    if (userQueryError || !user) {
+      console.error('[OAuth Authorize] User not found in database:', {
+        id: authUserId,
+        email: userEmail,
+        error: userQueryError,
       });
       return NextResponse.json(
-        { error: 'server_error', error_description: 'User not found' },
-        { status: 500 }
+        { 
+          error: 'user_not_found', 
+          error_description: 'User account does not exist. Please sign in again.' 
+        },
+        { status: 400 }
       );
     }
 
-    // Skip license check in development/test mode
+    console.log('[OAuth Authorize] User found:', { user_id: user.id });
+    console.log('[OAuth Authorize] User validated successfully:', {
+      user_id: user.id,
+      email: user.email,
+      has_notion_token: !!user.notion_token,
+      notion_setup_complete: user.notion_setup_complete,
+    });
+
+    // ============================================================================
+    // STEP 4: Check license status
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 4: Checking license status...');
+    
     const skipLicenseCheck = process.env.SKIP_LICENSE_CHECK === 'true' || 
+                             process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' ||
                              process.env.NODE_ENV === 'development';
     
-    if (skipLicenseCheck) {
-      console.log('[OAuth Authorize] License check skipped (development/test mode)');
-    } else {
+    if (!skipLicenseCheck) {
       // Check for active opaque token (from Stripe payment webhook)
       const { data: activeToken, error: tokenError } = await supabase
         .from('oauth_access_tokens')
@@ -255,10 +182,9 @@ export async function GET(request: NextRequest) {
 
       const hasActiveToken = !!activeToken;
 
-      // Check for active license using stripe_payment_intent_id (stored in user.license_key)
+      // Check for active license
       let hasActiveLicense = false;
       if (user.license_key) {
-        // license_key now contains stripe_payment_intent_id
         const { data: license, error: licenseError } = await supabase
           .from('licenses')
           .select('status')
@@ -270,8 +196,12 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Require both active opaque token AND active license
       if (!hasActiveToken || !hasActiveLicense) {
+        console.warn('[OAuth Authorize] License check failed:', {
+          hasActiveToken,
+          hasActiveLicense,
+          user_id: user.id,
+        });
         const errorUrl = new URL('/error', request.url);
         if (!hasActiveLicense) {
           errorUrl.searchParams.set('message', 'Please purchase a license to link your Alexa account.');
@@ -287,47 +217,85 @@ export async function GET(request: NextRequest) {
         hasActiveToken,
         hasActiveLicense,
       });
+    } else {
+      console.log('[OAuth Authorize] License check skipped (development/test mode)');
     }
 
-    // Validate Notion is connected
+    // ============================================================================
+    // STEP 5: Validate Notion is connected
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 5: Checking Notion connection...');
+    
     if (!user.notion_setup_complete || !user.notion_token) {
+      console.warn('[OAuth Authorize] Notion not connected:', {
+        notion_setup_complete: user.notion_setup_complete,
+        has_notion_token: !!user.notion_token,
+        user_id: user.id,
+      });
       const errorUrl = new URL('/error', request.url);
       errorUrl.searchParams.set('message', 'Please connect your Notion account first. Go to onboarding and complete the Notion connection step.');
       errorUrl.searchParams.set('action', 'notion');
       return NextResponse.redirect(errorUrl);
     }
 
-    // Generate authorization code
+    console.log('[OAuth Authorize] Notion connection validated');
+
+    // ============================================================================
+    // STEP 6: Generate and store authorization code
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 6: Generating authorization code...');
+    
     const authCode = generateAuthorizationCode();
 
-    // Store authorization code
-    await storeAuthCode(
-      authCode,
-      user.id,
-      clientId,
-      redirectUri,
-      scope,
-      codeChallenge || undefined,
-      codeChallengeMethod !== 'S256' ? undefined : codeChallengeMethod
-    );
+    try {
+      await storeAuthCode(
+        authCode,
+        user.id,
+        clientId,
+        redirectUri,
+        scope,
+        codeChallenge || undefined,
+        codeChallengeMethod !== 'S256' ? undefined : codeChallengeMethod
+      );
+      console.log('[OAuth Authorize] Authorization code stored successfully');
+    } catch (error: any) {
+      console.error('[OAuth Authorize] Failed to store authorization code:', {
+        error: error.message,
+        user_id: user.id,
+      });
+      return NextResponse.json(
+        { error: 'server_error', error_description: 'Failed to generate authorization code' },
+        { status: 500 }
+      );
+    }
 
-    // Build redirect URL with code
+    // ============================================================================
+    // STEP 7: Redirect back to Alexa with authorization code
+    // ============================================================================
+    console.log('[OAuth Authorize] Step 7: Redirecting to Alexa...');
+    
     const redirectUrl = new URL(redirectUri);
     redirectUrl.searchParams.set('code', authCode);
     if (state) {
       redirectUrl.searchParams.set('state', state);
     }
-    // Note: _session_token is not included in the redirect to Alexa (it was only for internal use)
 
-    console.log('[OAuth Authorize] Issued code for user:', user.id, 'redirect:', redirectUri);
+    console.log('[OAuth Authorize] Account linking successful:', {
+      user_id: user.id,
+      email: user.email,
+      redirect_uri: redirectUri,
+    });
 
     return NextResponse.redirect(redirectUrl);
   } catch (error: any) {
-    console.error('[OAuth Authorize] Error:', error);
+    console.error('[OAuth Authorize] Unexpected error:', {
+      error: error,
+      error_message: error?.message,
+      error_stack: error?.stack,
+    });
     return NextResponse.json(
       { error: 'server_error', error_description: 'Internal server error' },
       { status: 500 }
     );
   }
 }
-

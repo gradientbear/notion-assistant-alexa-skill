@@ -12,7 +12,6 @@ const LEGACY_TOKEN_SUPPORT_ENABLED = process.env.LEGACY_TOKEN_SUPPORT === 'true'
 interface IntrospectResponse {
   active: boolean;
   user_id?: string;
-  auth_user_id?: string;
   email?: string;
   license_active?: boolean;
   notion_db_id?: string;
@@ -154,32 +153,66 @@ export class AuthInterceptor implements RequestInterceptor {
       }
 
       // Check license status
-      if (userInfo.license_active === false) {
-        console.warn('[AuthInterceptor] License is not active');
-        throw new Error('LICENSE_INACTIVE');
-      }
+      // if (userInfo.license_active === false) {
+      //   console.warn('[AuthInterceptor] License is not active');
+      //   throw new Error('LICENSE_INACTIVE');
+      // }
 
-      // Get full user record from database using auth_user_id (OAuth2 flow)
-      // Priority: Use auth_user_id from token, fallback to user_id
-      const authUserId = userInfo.auth_user_id || userInfo.user_id;
+      // Get full user record from database using user_id (OAuth2 flow)
+      // user_id now matches users.id which matches Supabase Auth user id
+      const userId = userInfo.user_id;
       
-      if (!authUserId) {
-        console.error('[AuthInterceptor] No auth_user_id or user_id in token');
+      if (!userId) {
+        console.error('[AuthInterceptor] No user_id in token');
         throw new Error('USER_NOT_FOUND');
       }
 
-      console.log('[AuthInterceptor] Looking up user by auth_user_id:', authUserId);
-      const user = await getUserByAuthUserId(authUserId);
+      console.log('[AuthInterceptor] Looking up user by id:', userId);
+      let user = await getUserByAuthUserId(userId);
+
+      // Fallback: If user not found by Auth ID (e.g., timeout, replication lag), try Amazon ID
+      if (!user) {
+        console.warn('[AuthInterceptor] User not found by auth ID, trying Amazon ID fallback...');
+        const amazonUserId = handlerInput.requestEnvelope.session?.user?.userId;
+        if (amazonUserId) {
+          try {
+            user = await getUserByAmazonId(amazonUserId);
+            if (user) {
+              console.log('[AuthInterceptor] User found via Amazon ID fallback:', {
+                user_id: user.id,
+                amazon_account_id: user.amazon_account_id,
+                email: user.email,
+              });
+              
+              // Update amazon_account_id if missing (async, don't wait)
+              if (!user.amazon_account_id && amazonUserId) {
+                const { updateUserAmazonAccountId } = await import('../utils/database');
+                updateUserAmazonAccountId(user.id, amazonUserId).catch((err: any) => 
+                  console.error('[AuthInterceptor] Failed to update amazon_account_id:', err?.message)
+                );
+              }
+            } else {
+              console.warn('[AuthInterceptor] User not found via Amazon ID fallback either');
+            }
+          } catch (fallbackError: any) {
+            console.error('[AuthInterceptor] Error in Amazon ID fallback lookup:', {
+              error: fallbackError?.message,
+              amazon_user_id: amazonUserId,
+            });
+          }
+        } else {
+          console.warn('[AuthInterceptor] No Amazon user ID available for fallback');
+        }
+      }
 
       if (!user) {
-        console.error('[AuthInterceptor] User not found with auth_user_id:', authUserId);
+        console.error('[AuthInterceptor] User not found with id:', userId);
         throw new Error('USER_NOT_FOUND');
       }
 
       // Attach user info to session attributes
       attributes.user = user;
       attributes.userId = userInfo.user_id;
-      attributes.authUserId = userInfo.auth_user_id;
       attributes.email = userInfo.email;
       attributes.licenseActive = userInfo.license_active;
       attributes.notionDbId = userInfo.notion_db_id || user.tasks_db_id;

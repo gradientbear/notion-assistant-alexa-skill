@@ -59,6 +59,32 @@ NOTION_REDIRECT_URI=https://your-domain.vercel.app/api/oauth/callback
 4. **Client Secret**: Click "Show" to reveal (only shown once!)
 5. **Redirect URI**: Should match your Vercel domain: `https://your-domain.vercel.app/api/oauth/callback`
 
+### Test Mode (Skip Payment)
+
+To skip payment/license checks during testing:
+
+```env
+NEXT_PUBLIC_SKIP_LICENSE_CHECK=true
+SKIP_LICENSE_CHECK=true
+```
+
+**Note:** Set both variables:
+- `NEXT_PUBLIC_SKIP_LICENSE_CHECK` - for client-side (dashboard)
+- `SKIP_LICENSE_CHECK` - for server-side (API routes like OAuth authorize)
+
+**Local Development:**
+- Add both to `.env.local` in `web-login` directory
+- Restart dev server
+
+**Vercel:**
+- Add both as environment variables in Vercel dashboard
+- Redeploy application
+
+When enabled:
+- Dashboard will show license as active without payment
+- OAuth authorize endpoint will skip license checks
+- Useful for testing without Stripe integration
+
 ## Verification
 
 After setting environment variables:

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         license_key,
         updated_at: new Date().toISOString(),
       })
-      .eq('auth_user_id', authUser.id)
+      .eq('id', authUser.id)
       .select()
       .single()
 

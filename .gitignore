@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+web-login/node_modules/
+lambda/node_modules/
+web-login/.next/
+lambda/.aws-sam/
 .pnp
 .pnp.js
 

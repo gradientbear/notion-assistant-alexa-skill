@@ -31,15 +31,21 @@ console.log('[Database] Supabase client created successfully');
 /**
  * Get user by Supabase Auth user ID (OAuth2 flow)
  * This is the primary method for OAuth2 users
+ * Note: users.id now matches Supabase Auth user id directly
  */
 export async function getUserByAuthUserId(authUserId: string): Promise<User | null> {
-  console.log('[getUserByAuthUserId] Looking up user with auth_user_id:', authUserId);
+  console.log('[getUserByAuthUserId] Looking up user with id:', authUserId);
+  console.log('[getUserByAuthUserId] ID type:', typeof authUserId);
+  console.log('[getUserByAuthUserId] ID length:', authUserId.length);
+  console.log('[getUserByAuthUserId] Supabase URL:', supabaseUrl);
+  console.log('[getUserByAuthUserId] Has service key:', !!supabaseKey);
   
   try {
+    const startTime = Date.now();
     const queryPromise = supabase
       .from('users')
       .select('*')
-      .eq('auth_user_id', authUserId)
+      .eq('id', authUserId)
       .maybeSingle();
 
     const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
@@ -50,11 +56,25 @@ export async function getUserByAuthUserId(authUserId: string): Promise<User | nu
     });
 
     const result = await Promise.race([queryPromise, timeoutPromise]);
+    const elapsed = Date.now() - startTime;
     const { data, error } = result as any;
+    
+    console.log('[getUserByAuthUserId] Query completed in', elapsed, 'ms');
+    console.log('[getUserByAuthUserId] Query result:', {
+      has_data: !!data,
+      has_error: !!error,
+      error_code: error?.code,
+      error_message: error?.message,
+      error_details: error?.details,
+      error_hint: error?.hint,
+      data_keys: data ? Object.keys(data) : null,
+      data_id: data?.id,
+    });
 
     if (error) {
       if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
         console.error('[getUserByAuthUserId] Supabase error:', error);
+        console.error('[getUserByAuthUserId] Full error object:', JSON.stringify(error, null, 2));
       } else if (error.code === 'PGRST116') {
         console.log('[getUserByAuthUserId] No user found (expected for new users)');
       }
@@ -62,7 +82,37 @@ export async function getUserByAuthUserId(authUserId: string): Promise<User | nu
     }
 
     if (!data) {
-      console.log('[getUserByAuthUserId] No user found with auth_user_id:', authUserId);
+      console.log('[getUserByAuthUserId] No user found with id:', authUserId);
+      // Try direct query to verify user exists and database is accessible
+      console.log('[getUserByAuthUserId] Verifying database connectivity...');
+      try {
+        const { data: allUsers, error: allError } = await supabase
+          .from('users')
+          .select('id, email')
+          .limit(5);
+        console.log('[getUserByAuthUserId] Sample users in DB:', {
+          count: allUsers?.length || 0,
+          sample_ids: allUsers?.map((u: any) => u.id) || [],
+          sample_emails: allUsers?.map((u: any) => u.email) || [],
+          error: allError,
+          error_code: allError?.code,
+          error_message: allError?.message,
+        });
+        
+        // Try exact match query with different method
+        const { data: exactMatch, error: exactError } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('id', authUserId);
+        console.log('[getUserByAuthUserId] Direct exact match query:', {
+          has_data: !!exactMatch,
+          data_count: exactMatch?.length || 0,
+          data_ids: exactMatch?.map((u: any) => u.id) || [],
+          error: exactError,
+        });
+      } catch (verifyError: any) {
+        console.error('[getUserByAuthUserId] Error verifying database:', verifyError?.message);
+      }
       return null;
     }
 

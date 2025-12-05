@@ -1,13 +1,21 @@
 -- ============================================================================
 -- Voice Planner Alexa Skill - Complete Database Schema
 -- ============================================================================
--- This file contains the complete database schema including all migrations.
--- Run this file in Supabase SQL Editor for a fresh database setup.
+-- This is the SINGLE SOURCE OF TRUTH for the database schema.
+-- All migrations have been consolidated into this file.
+-- 
+-- Run this file in Supabase SQL Editor for:
+-- - Fresh database setup
+-- - Migrating existing databases
+-- - Applying all schema changes in one go
+--
+-- This file is idempotent - safe to run multiple times.
 --
 -- This schema supports:
 -- - User Registration & Authentication (Supabase Auth + OAuth2)
 -- - Payment Integration (Stripe one-time purchases via licenses table)
--- - OAuth2 Account Linking (JWT tokens for Alexa)
+-- - OAuth2 Account Linking (Opaque tokens for Alexa)
+-- - Website JWT Sessions (Stateless JWTs with refresh tokens)
 -- - Notion Integration (token storage and database IDs)
 --
 -- Tables:
@@ -15,8 +23,14 @@
 -- - licenses: License keys for payment/activation (Stripe webhook updates status)
 -- - oauth_sessions: Legacy OAuth state (backward compatibility)
 -- - oauth_authorization_codes: OAuth2 authorization codes
--- - oauth_access_tokens: JWT access tokens for Alexa Account Linking
+-- - oauth_access_tokens: Opaque access tokens for Alexa Account Linking
 -- - oauth_refresh_tokens: Refresh tokens (optional)
+-- - website_refresh_tokens: Refresh tokens for website JWT sessions
+--
+-- IMPORTANT IDENTITY ALIGNMENT:
+-- - users.id = auth.users.id (one source of truth, no default, no auth_user_id column)
+-- - oauth_sessions.auth_user_id = temporary storage during OAuth flow (MUST exist)
+-- - Code uses users.id for all user lookups, oauth_sessions.auth_user_id for OAuth state
 -- ============================================================================
 
 -- Enable UUID extension
@@ -25,22 +39,24 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ============================================================================
 -- USERS TABLE
 -- ============================================================================
+-- IMPORTANT: users.id = auth.users.id (one source of truth)
+-- No auth_user_id column in users table (removed in migration 002)
+-- No default on id (must match Supabase Auth exactly)
 CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY, -- NO DEFAULT - must match auth.users.id exactly
   
   -- Authentication fields
-  auth_user_id UUID UNIQUE, -- Supabase Auth user ID
-  email VARCHAR(255) NOT NULL,
+  email VARCHAR(255) NOT NULL UNIQUE,
   password_hash TEXT, -- For email/password auth (if not using Supabase Auth)
   email_verified BOOLEAN DEFAULT FALSE,
   provider VARCHAR(50) DEFAULT 'email', -- 'email', 'google', 'microsoft', 'apple'
   provider_id VARCHAR(255),
   
   -- Alexa integration
-  amazon_account_id VARCHAR(255) UNIQUE, -- Nullable, linked during onboarding
+  amazon_account_id VARCHAR(255), -- Nullable, linked during onboarding
   
   -- License
-  license_key VARCHAR(255), -- Nullable, entered during onboarding
+  license_key VARCHAR(255), -- Nullable, stores stripe_payment_intent_id for backward compatibility
   
   -- Notion integration
   notion_token TEXT,
@@ -61,39 +77,276 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Migration 002: Sync users.id with auth.users.id and remove auth_user_id
+DO $$
+DECLARE
+  has_auth_user_id BOOLEAN;
+  id_has_default BOOLEAN;
+BEGIN
+  -- Check if auth_user_id column exists (old schema)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' AND column_name = 'auth_user_id'
+  ) INTO has_auth_user_id;
+  
+  -- Check if id column has a default (should not have one)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' 
+    AND column_name = 'id' 
+    AND column_default IS NOT NULL
+  ) INTO id_has_default;
+  
+  -- Always ensure id has no default (critical for identity alignment)
+  IF id_has_default THEN
+    ALTER TABLE users ALTER COLUMN id DROP DEFAULT;
+    RAISE NOTICE 'Removed default from users.id column (must match auth.users.id exactly)';
+  END IF;
+  
+  IF has_auth_user_id THEN
+    -- Step 1: Sync IDs - Update users.id to match auth_user_id where they differ
+    UPDATE users 
+    SET id = auth_user_id 
+    WHERE auth_user_id IS NOT NULL 
+      AND id != auth_user_id;
+    
+    RAISE NOTICE 'Synced user IDs to match auth_user_id';
+    
+    -- Step 2: Drop constraints that might conflict
+    ALTER TABLE oauth_authorization_codes 
+      DROP CONSTRAINT IF EXISTS oauth_authorization_codes_user_id_fkey;
+    
+    ALTER TABLE oauth_access_tokens 
+      DROP CONSTRAINT IF EXISTS oauth_access_tokens_user_id_fkey;
+    
+    ALTER TABLE oauth_refresh_tokens 
+      DROP CONSTRAINT IF EXISTS oauth_refresh_tokens_user_id_fkey;
+    
+    ALTER TABLE website_refresh_tokens 
+      DROP CONSTRAINT IF EXISTS website_refresh_tokens_user_id_fkey;
+    
+    -- Drop primary key constraint if it exists (we'll recreate it)
+    ALTER TABLE users 
+      DROP CONSTRAINT IF EXISTS users_pkey;
+    
+    -- Drop unique constraints that might conflict
+    ALTER TABLE users 
+      DROP CONSTRAINT IF EXISTS users_id_key;
+    
+    ALTER TABLE users 
+      DROP CONSTRAINT IF EXISTS users_email_key;
+    
+    ALTER TABLE users 
+      DROP CONSTRAINT IF EXISTS users_auth_user_id_key;
+    
+    -- Drop indexes that reference auth_user_id
+    DROP INDEX IF EXISTS idx_users_auth_user_id;
+    
+    -- Step 3: Remove default from id column (must match Supabase Auth, no auto-generation)
+    ALTER TABLE users 
+      ALTER COLUMN id DROP DEFAULT;
+    
+    -- Step 4: Make id the primary key
+    ALTER TABLE users 
+      ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+    
+    -- Step 5: Add foreign key constraint to auth.users(id)
+    BEGIN
+      ALTER TABLE users
+        ADD CONSTRAINT users_id_fkey
+        FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+      
+      RAISE NOTICE 'Added foreign key constraint to auth.users(id)';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'Could not add foreign key constraint to auth.users(id): %', SQLERRM;
+      RAISE NOTICE 'You may need to add this constraint manually with appropriate permissions';
+    END;
+    
+    -- Step 6: Add UNIQUE constraints
+    ALTER TABLE users 
+      ADD CONSTRAINT users_id_unique UNIQUE (id);
+    
+    ALTER TABLE users 
+      ADD CONSTRAINT users_email_unique UNIQUE (email);
+    
+    -- Step 7: Drop auth_user_id column from users table
+    ALTER TABLE users 
+      DROP COLUMN IF EXISTS auth_user_id;
+    
+    RAISE NOTICE 'Migration 002: Removed auth_user_id from users table (users.id now matches auth.users.id)';
+  ELSE
+    RAISE NOTICE 'Migration 002: users table already migrated (no auth_user_id found)';
+    -- Even if already migrated, ensure id has no default
+    IF id_has_default THEN
+      RAISE NOTICE 'Migration 002: Removed default from id column (was already migrated but had default)';
+    END IF;
+  END IF;
+END $$;
+
 -- ============================================================================
 -- LICENSES TABLE
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS licenses (
-  stripe_payment_intent_id VARCHAR(255) PRIMARY KEY, -- Stripe payment intent ID used as license key
-  license_key VARCHAR(255), -- Nullable, for backward compatibility
-  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
-  stripe_customer_id VARCHAR(255),
-  amount_paid DECIMAL(10,2),
-  currency VARCHAR(3) DEFAULT 'usd',
-  purchase_date TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  notes TEXT
-);
+-- Uses stripe_payment_intent_id as primary key (not license_key)
+DO $$
+DECLARE
+  has_stripe_payment_intent_id BOOLEAN;
+  table_exists BOOLEAN;
+  has_pk BOOLEAN;
+BEGIN
+  -- Check if table exists
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_name = 'licenses'
+  ) INTO table_exists;
+  
+  -- Check if stripe_payment_intent_id column exists
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'licenses' AND column_name = 'stripe_payment_intent_id'
+  ) INTO has_stripe_payment_intent_id;
+  
+  -- Check if primary key constraint exists
+  IF table_exists THEN
+    SELECT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE table_name = 'licenses' 
+      AND constraint_type = 'PRIMARY KEY'
+    ) INTO has_pk;
+  ELSE
+    has_pk := FALSE;
+  END IF;
+  
+  -- Step 1: Always drop existing PK constraint first (regardless of which column it's on)
+  -- This is safe and necessary for migration
+  IF has_pk THEN
+    ALTER TABLE licenses DROP CONSTRAINT IF EXISTS licenses_pkey;
+    RAISE NOTICE 'Dropped existing primary key constraint';
+  END IF;
+  
+  IF NOT has_stripe_payment_intent_id THEN
+    -- Old schema detected - need to migrate
+    
+    -- Create table if it doesn't exist (without PK first, we'll add it later)
+    CREATE TABLE IF NOT EXISTS licenses (
+      license_key VARCHAR(255),
+      status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      notes TEXT
+    );
+    
+    -- Step 2: Make license_key nullable (now safe since PK is dropped)
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'licenses' 
+      AND column_name = 'license_key' 
+      AND is_nullable = 'NO'
+    ) THEN
+      ALTER TABLE licenses ALTER COLUMN license_key DROP NOT NULL;
+      RAISE NOTICE 'Made license_key nullable';
+    END IF;
+    
+    -- Step 3: Add new Stripe fields
+    ALTER TABLE licenses 
+      ADD COLUMN IF NOT EXISTS stripe_payment_intent_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'usd',
+      ADD COLUMN IF NOT EXISTS purchase_date TIMESTAMPTZ DEFAULT NOW();
+    
+    -- Step 4: Migrate existing license_key values to stripe_payment_intent_id
+    -- For existing rows, use license_key if available, otherwise generate a value
+    UPDATE licenses 
+    SET stripe_payment_intent_id = COALESCE(
+      license_key, 
+      'legacy_' || gen_random_uuid()::text
+    )
+    WHERE stripe_payment_intent_id IS NULL;
+    
+    -- Step 5: Set stripe_payment_intent_id as primary key
+    ALTER TABLE licenses 
+      ADD CONSTRAINT licenses_pkey PRIMARY KEY (stripe_payment_intent_id);
+    RAISE NOTICE 'Set stripe_payment_intent_id as primary key';
+    
+    RAISE NOTICE 'Migrated licenses table to new schema';
+  ELSE
+    -- New schema already exists, create table with new schema if it doesn't exist
+    CREATE TABLE IF NOT EXISTS licenses (
+      stripe_payment_intent_id VARCHAR(255) PRIMARY KEY,
+      license_key VARCHAR(255),
+      status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+      stripe_customer_id VARCHAR(255),
+      amount_paid DECIMAL(10,2),
+      currency VARCHAR(3) DEFAULT 'usd',
+      purchase_date TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      notes TEXT
+    );
+    
+    -- Ensure all columns are present
+    ALTER TABLE licenses 
+      ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2),
+      ADD COLUMN IF NOT EXISTS currency VARCHAR(3) DEFAULT 'usd',
+      ADD COLUMN IF NOT EXISTS purchase_date TIMESTAMPTZ DEFAULT NOW();
+    
+    -- Make license_key nullable if it isn't already
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'licenses' 
+      AND column_name = 'license_key' 
+      AND is_nullable = 'NO'
+    ) THEN
+      ALTER TABLE licenses ALTER COLUMN license_key DROP NOT NULL;
+    END IF;
+    
+    -- Ensure PK is on stripe_payment_intent_id (recreate if needed)
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.table_constraints 
+      WHERE table_name = 'licenses' 
+      AND constraint_type = 'PRIMARY KEY'
+    ) THEN
+      ALTER TABLE licenses 
+        ADD CONSTRAINT licenses_pkey PRIMARY KEY (stripe_payment_intent_id);
+      RAISE NOTICE 'Added primary key constraint on stripe_payment_intent_id';
+    END IF;
+    
+    RAISE NOTICE 'Licenses table already has new schema, ensuring all columns exist';
+  END IF;
+END $$;
 
 -- ============================================================================
 -- OAUTH SESSIONS TABLE (Legacy - for backward compatibility)
 -- ============================================================================
+-- IMPORTANT: auth_user_id MUST remain in this table (it's used for OAuth flows)
+-- This is temporary session storage, different from users.auth_user_id
 CREATE TABLE IF NOT EXISTS oauth_sessions (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   state VARCHAR(255) UNIQUE NOT NULL,
   email VARCHAR(255) NOT NULL,
   license_key VARCHAR(255), -- Optional for web flow
   amazon_account_id VARCHAR(255),
-  auth_user_id UUID, -- For web auth flow
+  auth_user_id UUID, -- For web auth flow - MUST KEEP THIS COLUMN!
   code_verifier TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 
+-- Ensure auth_user_id column exists in oauth_sessions (fix for migration 002 bug)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'oauth_sessions' AND column_name = 'auth_user_id'
+  ) THEN
+    ALTER TABLE oauth_sessions ADD COLUMN auth_user_id UUID;
+    RAISE NOTICE 'Added auth_user_id column to oauth_sessions (fixing migration 002 bug)';
+  END IF;
+END $$;
+
 -- ============================================================================
--- OAUTH2 TABLES (For JWT Token Management)
+-- OAUTH2 TABLES (For Opaque Token Management)
 -- ============================================================================
 
 -- OAUTH AUTHORIZATION CODES TABLE
@@ -155,8 +408,8 @@ CREATE TABLE IF NOT EXISTS website_refresh_tokens (
 -- INDEXES
 -- ============================================================================
 
--- Users table indexes
-CREATE INDEX IF NOT EXISTS idx_users_auth_user_id ON users(auth_user_id) WHERE auth_user_id IS NOT NULL;
+-- Users table indexes (after migration 002: use id, not auth_user_id)
+CREATE INDEX IF NOT EXISTS idx_users_id ON users(id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_amazon_account_id ON users(amazon_account_id) WHERE amazon_account_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_license_key ON users(license_key) WHERE license_key IS NOT NULL;
@@ -209,12 +462,14 @@ END;
 $$ language 'plpgsql';
 
 -- Trigger for users table
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at 
 BEFORE UPDATE ON users
 FOR EACH ROW 
 EXECUTE FUNCTION update_updated_at_column();
 
 -- Trigger for licenses table
+DROP TRIGGER IF EXISTS update_licenses_updated_at ON licenses;
 CREATE TRIGGER update_licenses_updated_at 
 BEFORE UPDATE ON licenses
 FOR EACH ROW 
@@ -235,30 +490,37 @@ ALTER TABLE website_refresh_tokens ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users table
 -- Service role can do everything
+DROP POLICY IF EXISTS "Service role can manage users" ON users;
 CREATE POLICY "Service role can manage users" ON users
   FOR ALL USING (true);
 
 -- RLS Policies for licenses table
 -- Service role can do everything
+DROP POLICY IF EXISTS "Service role can manage licenses" ON licenses;
 CREATE POLICY "Service role can manage licenses" ON licenses
   FOR ALL USING (true);
 
 -- RLS Policies for oauth_sessions table (legacy)
 -- Service role can do everything
+DROP POLICY IF EXISTS "Service role can manage oauth_sessions" ON oauth_sessions;
 CREATE POLICY "Service role can manage oauth_sessions" ON oauth_sessions
   FOR ALL USING (true);
 
 -- RLS Policies for OAuth2 tables
 -- Service role can do everything
+DROP POLICY IF EXISTS "Service role can manage oauth_authorization_codes" ON oauth_authorization_codes;
 CREATE POLICY "Service role can manage oauth_authorization_codes" ON oauth_authorization_codes
   FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage oauth_access_tokens" ON oauth_access_tokens;
 CREATE POLICY "Service role can manage oauth_access_tokens" ON oauth_access_tokens
   FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage oauth_refresh_tokens" ON oauth_refresh_tokens;
 CREATE POLICY "Service role can manage oauth_refresh_tokens" ON oauth_refresh_tokens
   FOR ALL USING (true);
 
+DROP POLICY IF EXISTS "Service role can manage website_refresh_tokens" ON website_refresh_tokens;
 CREATE POLICY "Service role can manage website_refresh_tokens" ON website_refresh_tokens
   FOR ALL USING (true);
 
@@ -308,9 +570,9 @@ $$ LANGUAGE plpgsql;
 -- SAMPLE DATA (Optional - Uncomment to add test data)
 -- ============================================================================
 
--- INSERT INTO licenses (license_key, status, notes) VALUES
---   ('TEST-LICENSE-001', 'active', 'Test license key'),
---   ('TEST-LICENSE-002', 'active', 'Another test license');
+-- INSERT INTO licenses (stripe_payment_intent_id, license_key, status, notes) VALUES
+--   ('pi_test_001', 'TEST-LICENSE-001', 'active', 'Test license key'),
+--   ('pi_test_002', 'TEST-LICENSE-002', 'active', 'Another test license');
 
 -- ============================================================================
 -- TEST USER CREATION (Optional - for testing)
@@ -332,7 +594,7 @@ $$ LANGUAGE plpgsql;
 -- ) VALUES (
 --   'amzn1.ask.account.XXXXXXXXXXXXX',  -- Replace with actual Amazon Account ID from simulator
 --   'test@example.com',                  -- Your test email
---   'TEST-LICENSE-KEY',                  -- Any value works since license validation is disabled
+--   'pi_test_001',                       -- Stripe payment intent ID
 --   'secret_XXXXXXXXXXXXXXXXXXXXXXXX',   -- Replace with your Notion integration token
 --   false,                               -- Will be set to true after setup
 --   false,
@@ -358,13 +620,26 @@ $$ LANGUAGE plpgsql;
 --   'oauth_sessions',
 --   'oauth_authorization_codes',
 --   'oauth_access_tokens',
---   'oauth_refresh_tokens'
+--   'oauth_refresh_tokens',
+--   'website_refresh_tokens'
 -- );
 
--- Check users table columns
+-- Check users table columns (should NOT have auth_user_id after migration 002)
 -- SELECT column_name, data_type, is_nullable, column_default
 -- FROM information_schema.columns
 -- WHERE table_name = 'users'
+-- ORDER BY ordinal_position;
+
+-- Check oauth_sessions table columns (should HAVE auth_user_id)
+-- SELECT column_name, data_type, is_nullable
+-- FROM information_schema.columns
+-- WHERE table_name = 'oauth_sessions'
+-- ORDER BY ordinal_position;
+
+-- Check licenses table structure
+-- SELECT column_name, data_type, is_nullable, column_default
+-- FROM information_schema.columns
+-- WHERE table_name = 'licenses'
 -- ORDER BY ordinal_position;
 
 -- Check indexes
@@ -377,6 +652,6 @@ $$ LANGUAGE plpgsql;
 --   'oauth_sessions',
 --   'oauth_authorization_codes',
 --   'oauth_access_tokens',
---   'oauth_refresh_tokens'
+--   'oauth_refresh_tokens',
+--   'website_refresh_tokens'
 -- );
-

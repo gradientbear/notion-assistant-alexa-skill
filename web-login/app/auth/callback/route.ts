@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
         const { data: existingUser, error: checkError } = await serverSupabase
           .from('users')
           .select('*')
-          .eq('auth_user_id', data.user.id)
+          .eq('id', data.user.id)
           .maybeSingle()
 
         if (checkError && checkError.code !== 'PGRST116') {
@@ -81,16 +81,16 @@ export async function GET(request: NextRequest) {
 
         if (!existingUser) {
           console.log('[Auth Callback] Creating new user in database', {
-            auth_user_id: data.user.id,
+            id: data.user.id,
             email: data.user.email,
             provider: data.user.app_metadata?.provider || 'email',
           })
           
-          // Create new user
+          // Create new user with id matching Supabase Auth user id
           const { data: newUser, error: insertError } = await serverSupabase
             .from('users')
             .insert({
-              auth_user_id: data.user.id,
+              id: data.user.id,
               email: data.user.email || '',
               provider: data.user.app_metadata?.provider || 'email',
               email_verified: data.user.email_confirmed_at ? true : (data.user.app_metadata?.provider !== 'email'),
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
               const { data: fetchedUser, error: fetchError } = await serverSupabase
                 .from('users')
                 .select('*')
-                .eq('auth_user_id', data.user.id)
+                .eq('id', data.user.id)
                 .single()
               
               if (fetchedUser && !fetchError) {
@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
             const { data: verifyUser, error: verifyError } = await serverSupabase
               .from('users')
               .select('id')
-              .eq('auth_user_id', data.user.id)
+              .eq('id', data.user.id)
               .single()
             
             if (verifyUser && !verifyError) {
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
       const { data: existingUser, error: checkError } = await serverSupabase
         .from('users')
         .select('*')
-        .eq('auth_user_id', user.id)
+        .eq('id', user.id)
         .maybeSingle()
 
       if (checkError && checkError.code !== 'PGRST116') {
@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
         const { data: newUser, error: insertError } = await serverSupabase
           .from('users')
           .insert({
-            auth_user_id: user.id,
+            id: user.id,
             email: user.email || '',
             provider: user.app_metadata?.provider || 'email',
             email_verified: user.email_confirmed_at ? true : (user.app_metadata?.provider !== 'email'),
@@ -238,7 +238,7 @@ export async function GET(request: NextRequest) {
             const { data: fetchedUser } = await serverSupabase
               .from('users')
               .select('*')
-              .eq('auth_user_id', user.id)
+              .eq('id', user.id)
               .single()
             
             if (fetchedUser) {
@@ -258,15 +258,14 @@ export async function GET(request: NextRequest) {
           // Get user record to get the UUID
           const { data: userRecord } = await serverSupabase
             .from('users')
-            .select('id, auth_user_id, email')
-            .eq('auth_user_id', data.user.id)
+            .select('id, email')
+            .eq('id', user.id)
             .single();
 
           if (userRecord) {
             const tokens = await issueWebsiteTokens(
               userRecord.id,
-              data.user.id,
-              data.user.email || ''
+              userRecord.email || ''
             );
 
             // Redirect to dashboard with tokens in URL fragment (client will extract and store)
@@ -361,7 +360,7 @@ export async function GET(request: NextRequest) {
         const { data: existingUser, error: checkError } = await serverSupabase
           .from('users')
           .select('*')
-          .eq('auth_user_id', user.id)
+          .eq('id', user.id)
           .maybeSingle()
 
         if (checkError && checkError.code !== 'PGRST116') {
@@ -373,7 +372,7 @@ export async function GET(request: NextRequest) {
           const { data: newUser, error: insertError } = await serverSupabase
             .from('users')
             .insert({
-              auth_user_id: user.id,
+              id: user.id,
               email: user.email || '',
               provider: user.app_metadata?.provider || 'email',
               email_verified: user.email_confirmed_at ? true : (user.app_metadata?.provider !== 'email'),
@@ -406,7 +405,6 @@ export async function GET(request: NextRequest) {
         try {
           const tokens = await issueWebsiteTokens(
             existingUser?.id || user.id,
-            user.id,
             user.email || ''
           );
 

@@ -41,7 +41,12 @@ To fix:
   throw new Error(errorMsg)
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Client-side Supabase client (no custom fetch override to avoid breaking Supabase's internal logic)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: {
+    schema: 'public',
+  },
+})
 
 // Server-side client for admin operations
 export function createServerClient() {
@@ -52,6 +57,12 @@ export function createServerClient() {
     throw new Error('Missing SUPABASE_SERVICE_KEY or NEXT_PUBLIC_SUPABASE_URL')
   }
   
-  return createClient(url, serviceKey)
+  // Server-side client (no custom fetch override to avoid breaking Supabase's internal logic)
+  // Cache control is handled at the API route level via response headers
+  return createClient(url, serviceKey, {
+    db: {
+      schema: 'public',
+    },
+  })
 }
 

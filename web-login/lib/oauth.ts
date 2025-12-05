@@ -38,6 +38,22 @@ export async function storeAuthCode(
   const supabase = createServerClient();
   const expiresAt = new Date(Date.now() + AUTH_CODE_EXPIRES_IN * 1000);
 
+  // Verify user exists before inserting (prevent foreign key constraint violations)
+  const { data: userCheck, error: userCheckError } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', userId)
+    .single();
+
+  if (userCheckError || !userCheck) {
+    console.error('[OAuth] User does not exist when storing auth code:', {
+      user_id: userId,
+      error: userCheckError,
+      user_found: !!userCheck,
+    });
+    throw new Error(`User ${userId} does not exist in database`);
+  }
+
   const { error } = await supabase.from('oauth_authorization_codes').insert({
     code,
     user_id: userId,
@@ -50,8 +66,15 @@ export async function storeAuthCode(
   });
 
   if (error) {
-    console.error('[OAuth] Error storing auth code:', error);
-    throw new Error('Failed to store authorization code');
+    console.error('[OAuth] Error storing auth code:', {
+      error_code: error.code,
+      error_message: error.message,
+      error_details: error.details,
+      error_hint: error.hint,
+      user_id: userId,
+      user_exists: !!userCheck,
+    });
+    throw new Error(`Failed to store authorization code: ${error.message}`);
   }
 }
 
@@ -69,55 +92,86 @@ export async function validateAuthCode(
 } | null> {
   const supabase = createServerClient();
 
-  // Fetch the code
-  const { data: authCode, error: fetchError } = await supabase
-    .from('oauth_authorization_codes')
-    .select('*')
-    .eq('code', code)
-    .eq('client_id', clientId)
-    .eq('redirect_uri', redirectUri)
-    .single();
+  try {
+    // Fetch the code
+    const { data: authCode, error: fetchError } = await supabase
+      .from('oauth_authorization_codes')
+      .select('*')
+      .eq('code', code)
+      .eq('client_id', clientId)
+      .eq('redirect_uri', redirectUri)
+      .single();
 
-  if (fetchError || !authCode) {
-    console.warn('[OAuth] Invalid authorization code:', code);
-    return null;
-  }
-
-  // Check expiration
-  const expiresAt = new Date(authCode.expires_at);
-  if (expiresAt < new Date()) {
-    console.warn('[OAuth] Authorization code expired');
-    return null;
-  }
-
-  // Check if already used
-  if (authCode.used) {
-    console.warn('[OAuth] Authorization code already used');
-    return null;
-  }
-
-  // Validate PKCE if present
-  if (authCode.code_challenge && codeVerifier) {
-    const hash = crypto
-      .createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url');
-    if (hash !== authCode.code_challenge) {
-      console.warn('[OAuth] PKCE code verifier mismatch');
+    if (fetchError || !authCode) {
+      console.warn('[OAuth] Invalid authorization code:', {
+        code_preview: code ? code.substring(0, 10) + '...' : 'missing',
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        error: fetchError,
+        error_code: fetchError?.code,
+        error_message: fetchError?.message,
+      });
       return null;
     }
+
+    // Check expiration
+    const expiresAt = new Date(authCode.expires_at);
+    if (expiresAt < new Date()) {
+      console.warn('[OAuth] Authorization code expired:', {
+        expires_at: authCode.expires_at,
+        now: new Date().toISOString(),
+      });
+      return null;
+    }
+
+    // Check if already used
+    if (authCode.used) {
+      console.warn('[OAuth] Authorization code already used:', {
+        code_preview: code.substring(0, 10) + '...',
+        used_at: authCode.used_at,
+      });
+      return null;
+    }
+
+    // Validate PKCE if present
+    if (authCode.code_challenge && codeVerifier) {
+      const hash = crypto
+        .createHash('sha256')
+        .update(codeVerifier)
+        .digest('base64url');
+      if (hash !== authCode.code_challenge) {
+        console.warn('[OAuth] PKCE code verifier mismatch');
+        return null;
+      }
+    }
+
+    // Mark as used
+    const { error: updateError } = await supabase
+      .from('oauth_authorization_codes')
+      .update({ used: true, used_at: new Date().toISOString() })
+      .eq('code', code);
+
+    if (updateError) {
+      console.error('[OAuth] Failed to mark authorization code as used:', {
+        error: updateError,
+        error_code: updateError.code,
+        error_message: updateError.message,
+      });
+      // Don't fail - code is still valid, just couldn't mark as used
+    }
+
+    return {
+      userId: authCode.user_id,
+      scope: authCode.scope,
+    };
+  } catch (error: any) {
+    console.error('[OAuth] Error validating authorization code:', {
+      error: error,
+      error_message: error?.message,
+      error_stack: error?.stack,
+    });
+    return null;
   }
-
-  // Mark as used
-  await supabase
-    .from('oauth_authorization_codes')
-    .update({ used: true, used_at: new Date().toISOString() })
-    .eq('code', code);
-
-  return {
-    userId: authCode.user_id,
-    scope: authCode.scope,
-  };
 }
 
 /**
@@ -139,7 +193,7 @@ export async function issueAccessToken(
   // Get user info
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('email, auth_user_id')
+    .select('email')
     .eq('id', userId)
     .single();
 

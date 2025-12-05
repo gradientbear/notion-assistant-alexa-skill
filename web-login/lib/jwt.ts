@@ -17,7 +17,7 @@ function requireJwtSecret(): string {
 
 export interface JWTPayload {
   iss: string; // Issuer
-  sub: string; // Subject (user ID - Supabase auth_user_id)
+  sub: string; // Subject (user ID - users.id which matches Supabase Auth user id)
   email: string;
   iat: number; // Issued at
   exp: number; // Expiration
@@ -29,7 +29,7 @@ export interface JWTPayload {
 
 export interface WebsiteJWTPayload {
   iss: string; // Issuer
-  sub: string; // Subject (user ID - Supabase auth_user_id)
+  sub: string; // Subject (user ID - users.id which matches Supabase Auth user id)
   email: string;
   iat: number; // Issued at
   exp: number; // Expiration (1 hour)
@@ -48,7 +48,7 @@ export interface TokenResponse {
  * Sign a JWT access token
  */
 export function signAccessToken(payload: {
-  userId: string; // Supabase auth_user_id
+  userId: string; // users.id (which matches Supabase Auth user id)
   email: string;
   scope?: string;
   notionDbId?: string;
@@ -132,7 +132,7 @@ export function parseLegacyToken(token: string): {
  * 1 hour expiration, stateless
  */
 export function signWebsiteToken(payload: {
-  userId: string; // Supabase auth_user_id
+  userId: string; // users.id (which matches Supabase Auth user id)
   email: string;
 }): string {
   const now = Math.floor(Date.now() / 1000);
@@ -184,8 +184,7 @@ export function verifyWebsiteToken(token: string): WebsiteJWTPayload | null {
  * Note: This function must be called from a server context (API route)
  */
 export async function issueWebsiteTokens(
-  userId: string, // users.id (UUID)
-  authUserId: string, // Supabase auth_user_id
+  userId: string, // users.id (UUID, which matches Supabase Auth user id)
   email: string
 ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
   // Dynamic import to avoid circular dependencies
@@ -194,7 +193,7 @@ export async function issueWebsiteTokens(
   
   // Generate access token (1 hour)
   const accessToken = signWebsiteToken({
-    userId: authUserId,
+    userId: userId, // users.id matches Supabase Auth user id
     email,
   });
 

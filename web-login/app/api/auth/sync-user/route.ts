@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient()
 
-    // Check if user already exists by auth_user_id
+    // Check if user already exists by id (which matches auth_user_id)
     const { data: existingUser, error: existingError } = await supabase
       .from('users')
       .select('*')
-      .eq('auth_user_id', auth_user_id)
+      .eq('id', auth_user_id)
       .maybeSingle()
 
     if (existingUser) {
@@ -42,11 +42,21 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (emailUser) {
-      // Link auth_user_id to existing user
+      // If user found by email but id doesn't match, this is a data integrity issue
+      // We can't update the primary key, so just update other fields
+      if (emailUser.id !== auth_user_id) {
+        console.warn('[Sync User] User found by email but id mismatch:', {
+          found_id: emailUser.id,
+          expected_id: auth_user_id,
+          email: emailUser.email,
+        });
+        // Update other fields but keep existing id
+        // Note: This indicates a data integrity issue that should be fixed via migration
+      }
+      
       const { data: updatedUser, error: updateError } = await supabase
         .from('users')
         .update({
-          auth_user_id,
           provider: provider || 'email',
           email_verified: provider !== 'email', // Social logins are pre-verified
           updated_at: new Date().toISOString(),
@@ -62,11 +72,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, user: updatedUser })
     }
 
-    // Create new user
+    // Create new user with id matching Supabase Auth user id
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert({
-        auth_user_id,
+        id: auth_user_id,
         email,
         provider: provider || 'email',
         email_verified: provider !== 'email', // Social logins are pre-verified
@@ -83,7 +93,7 @@ export async function POST(request: NextRequest) {
         const { data: fetchedUser } = await supabase
           .from('users')
           .select('*')
-          .eq('auth_user_id', auth_user_id)
+          .eq('id', auth_user_id)
           .single()
         
         if (fetchedUser) {

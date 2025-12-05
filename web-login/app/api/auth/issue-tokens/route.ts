@@ -50,52 +50,20 @@ export async function POST(request: NextRequest) {
     const serverClient = createServerClient();
     const { data: user, error: userError } = await serverClient
       .from('users')
-      .select('id, auth_user_id, email')
-      .eq('auth_user_id', authUser.id)
+      .select('id, email')
+      .eq('id', authUser.id)
       .maybeSingle();
 
     if (userError || !user) {
-      // User might not exist yet - create them
-      const { data: newUser, error: createError } = await serverClient
-        .from('users')
-        .insert({
-          auth_user_id: authUser.id,
-          email: authUser.email || '',
-          provider: authUser.app_metadata?.provider || 'email',
-          email_verified: authUser.email_confirmed_at ? true : (authUser.app_metadata?.provider !== 'email'),
-          license_key: '',
-          notion_setup_complete: false,
-          onboarding_complete: false,
-        })
-        .select('id, auth_user_id, email')
-        .single();
-
-      if (createError || !newUser) {
-        return NextResponse.json(
-          { error: 'server_error', error_description: 'Failed to create user' },
-          { status: 500 }
-        );
-      }
-
-      // Issue tokens for newly created user
-      const tokens = await issueWebsiteTokens(
-        newUser.id,
-        authUser.id,
-        authUser.email || ''
+      return NextResponse.json(
+        { error: 'user_not_found', error_description: 'User account does not exist. Please sign in first.' },
+        { status: 404 }
       );
-
-      return NextResponse.json({
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-        token_type: 'Bearer',
-        expires_in: tokens.expiresIn,
-      });
     }
 
     // Issue tokens for existing user
     const tokens = await issueWebsiteTokens(
       user.id,
-      authUser.id,
       user.email
     );
 

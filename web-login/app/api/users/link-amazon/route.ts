@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
       .eq('amazon_account_id', amazon_account_id)
       .single()
 
-    if (existingUser && existingUser.auth_user_id !== authUser.id) {
+    if (existingUser && existingUser.id !== authUser.id) {
       return NextResponse.json(
         { error: 'This Amazon account is already linked to another user' },
         { status: 409 }
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         amazon_account_id,
         updated_at: new Date().toISOString(),
       })
-      .eq('auth_user_id', authUser.id)
+      .eq('id', authUser.id)
       .select()
       .single()
 

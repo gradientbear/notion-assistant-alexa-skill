@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         onboarding_complete: true,
         updated_at: new Date().toISOString(),
       })
-      .eq('auth_user_id', authUser.id)
+      .eq('id', authUser.id)
       .select()
       .single()
 

@@ -78,7 +78,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         active: true,
         user_id: user.id,
-        auth_user_id: user.auth_user_id,
         email: user.email,
         license_active: licenseActive,
         notion_db_id: user.tasks_db_id,
@@ -120,7 +119,7 @@ export async function POST(request: NextRequest) {
       const { data: user, error: userError } = await supabase
         .from('users')
         .select('*')
-        .eq('auth_user_id', payload.sub)
+        .eq('id', payload.sub)
         .single();
 
       if (userError || !user) {
@@ -145,7 +144,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         active: true,
         user_id: user.id,
-        auth_user_id: payload.sub,
         email: payload.email,
         license_active: licenseActive,
         notion_db_id: payload.notion_db_id || user.tasks_db_id,
@@ -202,7 +200,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       active: true,
       user_id: user.id,
-      auth_user_id: user.auth_user_id,
       email: user.email,
       license_active: licenseActive,
       notion_db_id: user.tasks_db_id,

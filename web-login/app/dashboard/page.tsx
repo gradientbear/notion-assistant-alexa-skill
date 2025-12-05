@@ -29,8 +29,8 @@ export default function DashboardPage() {
   // Check if license check should be skipped (for testing)
   const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
                            process.env.NODE_ENV === 'development';
+  // License status is determined by has_jwt_token from API (checks opaque tokens)
   const [licenseActive, setLicenseActive] = useState(skipLicenseCheck); // Default to true if skipping
-  const [checkingLicense, setCheckingLicense] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,25 +59,31 @@ export default function DashboardPage() {
     }
     
     if (notionConnected || tokenGenerated || accessToken) {
-      console.log('[Dashboard] Detected state change, refreshing user data...', {
+      console.log('[Dashboard] 🔄 Detected state change, refreshing user data...', {
         notionConnected,
         tokenGenerated,
         hasAccessToken: !!accessToken,
+        timestamp: new Date().toISOString(),
       });
       // Remove the query parameters first
       window.history.replaceState({}, '', '/dashboard');
       
       // Refresh user data to show updated status
-      // For token generation, add a longer delay to ensure token is queryable
-      // Database writes might take a moment to be visible in queries
-      const delay = tokenGenerated ? 2000 : 500;
+      // Increased delays to handle Supabase replication lag
+      // For Notion connection: OAuth callback already waited 2 seconds, so wait 3 more seconds here (total 5 seconds)
+      // For token generation: wait 4 seconds total
+      const delay = notionConnected ? 3000 : (tokenGenerated ? 4000 : 500);
+      console.log('[Dashboard] ⏳ Waiting', delay, 'ms before refreshing user data (handling replication lag)...');
+      
       setTimeout(() => {
+        console.log('[Dashboard] 🔄 First refresh attempt...');
         fetchUserData();
         // Also refresh again after another delay to ensure data is updated
-        if (tokenGenerated) {
+        if (notionConnected || tokenGenerated) {
           setTimeout(() => {
+            console.log('[Dashboard] 🔄 Second refresh attempt...');
             fetchUserData();
-          }, 2000);
+          }, 3000); // Increased from 2000ms to 3000ms
         }
       }, delay);
     }
@@ -103,7 +109,7 @@ export default function DashboardPage() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            auth_user_id: authUser.id,
+            auth_user_id: authUser.id, // Parameter name is auth_user_id but API uses it as id
             email: authUser.email,
             provider: authUser.app_metadata?.provider || 'email',
           }),
@@ -156,9 +162,14 @@ export default function DashboardPage() {
       
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          response = await fetch('/api/users/me', {
+          // Add cache-busting timestamp and disable all caching
+          const timestamp = Date.now();
+          response = await fetch(`/api/users/me?_t=${timestamp}`, {
+            cache: 'no-store', // Disable Next.js fetch caching
             headers: {
               'Authorization': `Bearer ${authToken}`,
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
             },
           });
 
@@ -228,29 +239,21 @@ export default function DashboardPage() {
       setUser(userData);
       setLoading(false); // User data loaded successfully, stop loading
 
-      // Check if license check should be skipped (re-evaluate in case env var changed)
+      // License status is determined by has_jwt_token (which checks for opaque tokens in oauth_access_tokens table)
+      // This is set by /api/users/me endpoint which checks for active opaque tokens
       const shouldSkipLicense = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
                                  process.env.NODE_ENV === 'development';
       
-      console.log('[Dashboard] License check status:', {
+      // Set license active based on has_jwt_token (opaque token exists) or test mode
+      const isLicenseActive = !!(userData as any).has_jwt_token || shouldSkipLicense;
+      setLicenseActive(isLicenseActive);
+      
+      console.log('[Dashboard] License status:', {
+        has_jwt_token: !!(userData as any).has_jwt_token,
         shouldSkipLicense,
-        hasEnvVar: !!process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK,
-        envVarValue: process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK,
-        nodeEnv: process.env.NODE_ENV,
-        hasLicenseKey: !!userData.license_key,
+        isLicenseActive,
+        note: 'has_jwt_token checks for active opaque tokens in oauth_access_tokens table',
       });
-
-      // Check license status if license_key exists and we're not skipping the check
-      if (!shouldSkipLicense && userData.license_key) {
-        await checkLicenseStatus(userData.license_key);
-      } else if (shouldSkipLicense) {
-        // If skipping license check, set it to active
-        setLicenseActive(true);
-        console.log('[Dashboard] License check skipped (development/test mode) - licenseActive set to true');
-      } else if (!userData.license_key) {
-        // No license key and not skipping - keep licenseActive as false
-        console.log('[Dashboard] No license key and not skipping check - licenseActive remains false');
-      }
     } catch (error) {
       console.error('Error fetching user data:', error);
       // If it's a 404 and we're coming from OAuth, show a helpful message and retry
@@ -274,33 +277,9 @@ export default function DashboardPage() {
     }
   };
 
-  const checkLicenseStatus = async (licenseKey: string) => {
-    try {
-      setCheckingLicense(true);
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-      
-      if (!supabaseUrl || !supabaseAnonKey) {
-        return;
-      }
-
-      const { createClient } = await import('@supabase/supabase-js');
-      const client = createClient(supabaseUrl, supabaseAnonKey);
-      
-      // license_key now contains stripe_payment_intent_id
-      const { data: license } = await client
-        .from('licenses')
-        .select('status')
-        .eq('stripe_payment_intent_id', licenseKey)
-        .maybeSingle();
-
-      setLicenseActive(license?.status === 'active');
-    } catch (error) {
-      console.error('Error checking license:', error);
-    } finally {
-      setCheckingLicense(false);
-    }
-  };
+  // Note: License status is now determined by has_jwt_token from /api/users/me
+  // which checks for active opaque tokens in oauth_access_tokens table
+  // This function is no longer needed - license status comes from API response
 
   const handleConnectNotion = () => {
     router.push('/notion/connect');
@@ -310,19 +289,6 @@ export default function DashboardPage() {
     router.push('/billing');
   };
 
-  const handleRefreshData = async () => {
-    console.log('[Dashboard] Manual refresh triggered');
-    setLoading(true);
-    try {
-      await fetchUserData();
-      console.log('[Dashboard] Manual refresh completed');
-    } catch (error) {
-      console.error('[Dashboard] Manual refresh failed:', error);
-      setError('Failed to refresh data. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLinkAlexa = () => {
     // Redirect to instructions page
@@ -379,18 +345,9 @@ export default function DashboardPage() {
       <Header />
       
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Voice Planner</h1>
-            <p className="text-gray-600">Complete the steps below to get started</p>
-          </div>
-          <Button 
-            onClick={handleRefreshData}
-            variant="outline"
-            className="text-sm"
-          >
-            Refresh
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome to Voice Planner</h1>
+          <p className="text-gray-600">Complete the steps below to get started</p>
         </div>
 
         <Card className="p-8">
@@ -444,19 +401,9 @@ export default function DashboardPage() {
                 // JWT token is created when license is purchased, so its existence = purchase completed
                 if (!user.has_jwt_token) {
                   return (
-                    <div className="space-y-2">
-                      <Button onClick={handleBuyLicense}>
-                        Buy License
-                      </Button>
-                      <Button 
-                        onClick={handleRefreshData}
-                        variant="outline"
-                        className="text-sm w-full"
-                        title="Refresh data if you just purchased license"
-                      >
-                        ↻ Refresh Status
-                      </Button>
-                    </div>
+                    <Button onClick={handleBuyLicense}>
+                      Buy License
+                    </Button>
                   );
                 }
                 
@@ -545,23 +492,13 @@ export default function DashboardPage() {
                       <p className="text-sm text-gray-500">
                         Complete license purchase to enable Alexa linking
                       </p>
-                      <div className="flex gap-2">
-                        <Button 
-                          onClick={handleBuyLicense}
-                          variant="outline"
-                          className="text-sm flex-1"
-                        >
-                          Buy License
-                        </Button>
-                        <Button 
-                          onClick={handleRefreshData}
-                          variant="outline"
-                          className="text-sm"
-                          title="Refresh data if you just purchased license"
-                        >
-                          ↻ Refresh
-                        </Button>
-                      </div>
+                      <Button 
+                        onClick={handleBuyLicense}
+                        variant="outline"
+                        className="text-sm"
+                      >
+                        Buy License
+                      </Button>
                     </div>
                   );
                 }

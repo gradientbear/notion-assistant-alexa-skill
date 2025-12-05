@@ -41,12 +41,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log('[OAuth Callback] Retrieving OAuth session for state:', state.substring(0, 16) + '...');
     const session = await getOAuthSession(state);
+    
     if (!session) {
+      console.error('[OAuth Callback] ❌ OAuth session not found or expired:', {
+        state: state.substring(0, 16) + '...',
+        timestamp: new Date().toISOString(),
+      });
       return NextResponse.redirect(
-        new URL('/error?message=Invalid or expired session', request.url)
+        new URL('/error?message=Invalid or expired session. Please try connecting Notion again.', request.url)
       );
     }
+    
+    console.log('[OAuth Callback] ✅ OAuth session retrieved:', {
+      session_id: session.id,
+      email: session.email,
+      has_auth_user_id: !!session.auth_user_id,
+      auth_user_id: session.auth_user_id,
+      has_amazon_account_id: !!session.amazon_account_id,
+      expires_at: session.expires_at,
+    });
 
     // Handle user denial or errors
     if (error) {
@@ -161,6 +176,12 @@ export async function GET(request: NextRequest) {
 
     const { access_token } = await tokenResponse.json();
 
+    console.log('🔍 Token exchange result:', {
+      has_access_token: !!access_token,
+      access_token_length: access_token?.length || 0,
+      access_token_preview: access_token ? access_token.substring(0, 20) + '...' : 'null',
+    });
+
     // Setup Notion workspace (create Privacy page and databases)
     console.log('Starting Notion workspace setup...');
     const setupResult = await setupNotionWorkspace(access_token);
@@ -171,21 +192,94 @@ export async function GET(request: NextRequest) {
       // Continue anyway - user can retry later
     }
     
-    // Get auth user from session if available (for web flow)
-    let authUserId = session.auth_user_id || null;
+    // Get Supabase Auth user ID from OAuth session (MOST RELIABLE - stored during initiation)
+    let authUserId: string | null = session.auth_user_id || null;
     
-    // If not in session, try to get from Supabase Auth (this won't work in server context, but keep for reference)
-    if (!authUserId) {
-      console.log('No auth_user_id in session, will use email for lookup');
+    console.log('[OAuth Callback] 🔍 User ID resolution:', {
+      session_auth_user_id: session.auth_user_id,
+      session_email: session.email,
+      session_amazon_account_id: session.amazon_account_id,
+      resolved_auth_user_id: authUserId,
+    });
+    
+    if (authUserId) {
+      console.log('[OAuth Callback] ✅ Got auth user ID from OAuth session:', authUserId);
+    } else {
+      // Fallback: Try to get from Supabase session token (for backward compatibility)
+      const supabaseAuthUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (supabaseAuthUrl && supabaseAnonKey) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseAuth = createClient(supabaseAuthUrl, supabaseAnonKey);
+        
+        // Try to get session token from cookies
+        const projectRef = supabaseAuthUrl.split('//')[1]?.split('.')[0] || 'default';
+        const cookieNames = [
+          'sb-access-token',
+          `sb-${projectRef}-auth-token`,
+          `sb-${projectRef}-auth-token-code-verifier`,
+        ];
+        
+        let sessionToken: string | null = null;
+        for (const cookieName of cookieNames) {
+          const cookieValue = request.cookies.get(cookieName)?.value;
+          if (cookieValue) {
+            sessionToken = cookieValue;
+            break;
+          }
+        }
+        
+        // Try Authorization header
+        if (!sessionToken) {
+          const authHeader = request.headers.get('authorization');
+          sessionToken = authHeader?.replace('Bearer ', '') || null;
+        }
+        
+        if (sessionToken) {
+          try {
+            const { data: { user: authUser }, error: authError } = await supabaseAuth.auth.getUser(sessionToken);
+            if (!authError && authUser) {
+              authUserId = authUser.id;
+              console.log('✅ Got auth user ID from Supabase session token:', authUserId);
+            }
+          } catch (err) {
+            console.log('Error getting user from session token:', err);
+          }
+        }
+      }
+      
+      // LAST RESORT: Email lookup (ONLY for Alexa flow, NOT web flow)
+      if (!authUserId && session.amazon_account_id && session.email) {
+        console.log('⚠️ Alexa flow: Looking up user by email as fallback:', session.email);
+        const { data: userByEmail, error: emailError } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', session.email)
+          .maybeSingle();
+        
+        if (!emailError && userByEmail) {
+          authUserId = userByEmail.id;
+          console.log('✅ Got user ID from email lookup (Alexa flow):', authUserId);
+        }
+      }
+    }
+    
+    // For web flow, REQUIRE authUserId
+    if (!authUserId && !session.amazon_account_id) {
+      console.error('❌ CRITICAL: No auth user ID found for web flow!');
+      return NextResponse.redirect(
+        new URL('/error?message=Authentication required. Please sign in and try again.', request.url)
+      );
     }
     
     // Create or update user with Notion token and setup data
     console.log('=== Starting User Database Update ===');
     console.log('Session data:', {
       amazon_account_id: session.amazon_account_id,
-      auth_user_id: session.auth_user_id,
       email: session.email,
-      has_license_key: !!session.license_key
+      has_license_key: !!session.license_key,
+      auth_user_id_from_session: authUserId,
     });
     console.log('Setup result:', {
       success: setupResult.success,
@@ -215,13 +309,13 @@ export async function GET(request: NextRequest) {
         console.log('Found existing user:', existingUser.id);
         
         // Prepare update data - only include database IDs that were actually created
-        // notion_setup_complete should be true if we have a token AND critical setup succeeded
-        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        // notion_setup_complete should be true if we have a token (connection successful)
+        const hasToken = !!access_token;
         const updateData: any = {
           email: session.email,
           license_key: session.license_key,
           notion_token: access_token,
-          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+          notion_setup_complete: hasToken, // True if we have a token (connection successful)
           updated_at: new Date().toISOString(),
         };
         
@@ -278,14 +372,14 @@ export async function GET(request: NextRequest) {
         console.log('User not found, creating new user (Alexa flow)');
         
         // Only include database IDs that were actually created (not null)
-        // notion_setup_complete should be true if we have a token AND critical setup succeeded
-        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        // notion_setup_complete should be true if we have a token (connection successful)
+        const hasToken = !!access_token;
         const insertDataObj: any = {
           amazon_account_id: session.amazon_account_id,
           email: session.email,
           license_key: session.license_key,
           notion_token: access_token,
-          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+          notion_setup_complete: hasToken, // True if we have a token (connection successful)
         };
         
         // Only add database IDs if they were successfully created
@@ -338,151 +432,105 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Web flow - update user by auth_user_id or email
-      console.log('Web flow: Looking up user by auth_user_id or email');
+      // Web flow - update user by id (which matches Supabase Auth user id) or email
+      console.log('Web flow: Looking up user by id or email');
       let existingUser = null;
-      let lookupMethod = '';
+      let verifyUser: any = null; // Declare at web flow scope for final verification
       
       if (authUserId) {
-        console.log('Trying to find user by auth_user_id:', authUserId);
-        // Use .select() instead of .maybeSingle() to handle duplicate auth_user_id cases
-        // Same logic as /api/users/me to ensure consistency
-        const { data: usersByAuthId, error: lookupError } = await supabase
+        console.log('[OAuth Callback] 🔍 Looking up user by id (users.id = auth.users.id):', authUserId);
+        const { data: user, error: lookupError } = await supabase
           .from('users')
           .select('*')
-          .eq('auth_user_id', authUserId);
+          .eq('id', authUserId)
+          .single();
         
         if (lookupError) {
-          console.error('Error looking up by auth_user_id:', lookupError);
-        } else if (usersByAuthId && usersByAuthId.length > 0) {
-          // If multiple users found, prefer:
-          // 1. User with Notion token (most complete) - same as /api/users/me
-          // 2. Most recently updated
-          const userWithToken = usersByAuthId.find(u => !!(u as any).notion_token);
-          if (userWithToken) {
-            existingUser = userWithToken;
-            console.log('✅ Found user by auth_user_id with Notion token:', {
-              user_id: existingUser.id,
-              has_notion_token: true,
-            });
-          } else {
-            existingUser = usersByAuthId.sort((a, b) => 
-              new Date(b.updated_at || b.created_at).getTime() - 
-              new Date(a.updated_at || a.created_at).getTime()
-            )[0];
-            console.log('✅ Found user by auth_user_id (most recent):', {
-              user_id: existingUser.id,
-              updated_at: existingUser.updated_at,
-            });
-          }
-          
-          if (usersByAuthId.length > 1) {
-            console.warn('⚠️ Multiple users found with same auth_user_id!', {
-              total_users: usersByAuthId.length,
-              selected_user_id: existingUser.id,
-              all_user_ids: usersByAuthId.map(u => ({
-                id: u.id,
-                has_notion_token: !!(u as any).notion_token,
-                updated_at: u.updated_at,
-              })),
-              auth_user_id: authUserId,
-            });
-          }
-          
-          lookupMethod = 'auth_user_id';
+          console.error('[OAuth Callback] ❌ Error looking up user by id:', {
+            error_code: lookupError.code,
+            error_message: lookupError.message,
+            error_details: lookupError.details,
+            auth_user_id: authUserId,
+          });
+        } else if (user) {
+          existingUser = user;
+          console.log('[OAuth Callback] ✅ Found user by id:', {
+            user_id: existingUser.id,
+            email: existingUser.email,
+            has_notion_token: !!(existingUser as any).notion_token,
+            notion_setup_complete: (existingUser as any).notion_setup_complete,
+            ids_match: existingUser.id === authUserId,
+          });
+        } else {
+          console.warn('[OAuth Callback] ⚠️ User not found by id:', authUserId);
         }
       }
       
-      if (!existingUser && session.email) {
-        console.log('Trying to find user by email:', session.email);
-        // Use .select() instead of .maybeSingle() to handle multiple users
-        const { data: usersByEmail, error: lookupError } = await supabase
+      // For web flow, ONLY lookup by authUserId (never by email to avoid wrong user)
+      if (!existingUser && authUserId && !session.amazon_account_id) {
+        console.error('❌ User not found for Notion connection:', {
+              auth_user_id: authUserId,
+          email: session.email,
+        });
+        
+        // User must be created via /auth/callback first
+        return NextResponse.redirect(
+          new URL(
+            `/error?message=${encodeURIComponent('User account not found. Please sign in first.')}`,
+            request.url
+          )
+        );
+      }
+      
+      // For Alexa flow, allow email lookup as fallback
+      if (!existingUser && session.amazon_account_id && session.email) {
+        console.log('Trying to find user by email (Alexa flow):', session.email);
+        const { data: userByEmail, error: lookupError } = await supabase
           .from('users')
           .select('*')
-          .eq('email', session.email);
+          .eq('email', session.email)
+          .maybeSingle();
         
         if (lookupError) {
           console.error('Error looking up by email:', lookupError);
-        } else if (usersByEmail && usersByEmail.length > 0) {
-          // If multiple users found, prioritize:
-          // 1. User with matching auth_user_id (if we have it)
-          // 2. User with notion_token (already connected)
-          // 3. Most recently updated user
-          let selectedUser = usersByEmail[0];
-          
-          // CRITICAL: If we have auth_user_id, prioritize user with matching auth_user_id
-          // This ensures we update the correct user record
-          if (authUserId) {
-            const userWithAuthId = usersByEmail.find(u => u.auth_user_id === authUserId);
-            if (userWithAuthId) {
-              selectedUser = userWithAuthId;
-              console.log('✅ Found user by email + auth_user_id match:', {
-                user_id: selectedUser.id,
-                auth_user_id: selectedUser.auth_user_id,
-                matches: selectedUser.auth_user_id === authUserId,
-              });
-            } else {
-              console.warn('⚠️ No user found with matching auth_user_id:', {
-                auth_user_id: authUserId,
-                available_auth_user_ids: usersByEmail.map(u => u.auth_user_id),
-                user_ids: usersByEmail.map(u => u.id),
-              });
-            }
-          }
-          
-          // Only fall back to user with token if we don't have auth_user_id match
-          if (!authUserId && !selectedUser.notion_token) {
-            const userWithToken = usersByEmail.find(u => !!(u as any).notion_token);
-            if (userWithToken) {
-              selectedUser = userWithToken;
-              console.log('✅ Found user by email with existing Notion token:', selectedUser.id);
-            }
-          }
-          
-          existingUser = selectedUser;
-          lookupMethod = 'email';
-          console.log('✅ Selected user by email:', existingUser.id);
-          
-          // If auth_user_id is missing but we have it, update it
-          if (!existingUser.auth_user_id && authUserId) {
-            console.log('Updating missing auth_user_id for user found by email');
-            await supabase
-              .from('users')
-              .update({ auth_user_id: authUserId })
-              .eq('id', existingUser.id);
-          }
+        } else if (userByEmail) {
+          existingUser = userByEmail;
+          console.log('✅ Found user by email (Alexa flow):', existingUser.id);
         }
       }
 
+      console.log('🔍 Checking if existingUser is set:', {
+        has_existing_user: !!existingUser,
+        existing_user_id: existingUser?.id,
+        existing_user_email: existingUser?.email,
+      });
+
       if (existingUser) {
-        console.log(`Updating existing user (found by ${lookupMethod}):`, {
+        console.log('✅ Updating existing user:', {
           user_id: existingUser.id,
-          auth_user_id: existingUser.auth_user_id,
-          session_auth_user_id: authUserId,
           email: existingUser.email,
           session_email: session.email,
-          matches_auth_user_id: existingUser.auth_user_id === authUserId,
+          auth_user_id_from_session: authUserId,
+          id_matches: authUserId ? existingUser.id === authUserId : 'no_auth_id',
         });
         
-        // CRITICAL: If auth_user_id doesn't match and we have it, this might be the wrong user
+        // CRITICAL: If id doesn't match and we have authUserId, this might be the wrong user
         // In this case, we should still update but also log a warning
-        if (authUserId && existingUser.auth_user_id && existingUser.auth_user_id !== authUserId) {
-          console.warn('⚠️ WARNING: User found but auth_user_id mismatch!', {
+        if (authUserId && existingUser.id !== authUserId) {
+          console.warn('⚠️ WARNING: User found but id mismatch!', {
             found_user_id: existingUser.id,
-            found_auth_user_id: existingUser.auth_user_id,
-            session_auth_user_id: authUserId,
-            lookup_method: lookupMethod,
+            expected_id: authUserId,
+            email: existingUser.email,
           });
           console.warn('⚠️ This might indicate duplicate user records. Updating anyway, but verify data integrity.');
         }
         
         // Prepare update data - only include database IDs that were actually created
-        // notion_setup_complete should be true if we have a token AND critical setup succeeded
-        // Critical setup = Voice Planner page + Tasks database
-        const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+        // notion_setup_complete should be true if we have a token (connection successful)
+        const hasToken = !!access_token;
         const updateData: any = {
           notion_token: access_token,
-          notion_setup_complete: criticalSetupSuccess, // True if critical components created
+          notion_setup_complete: hasToken, // True if we have a token (connection successful)
           updated_at: new Date().toISOString(),
         };
         
@@ -509,16 +557,14 @@ export async function GET(request: NextRequest) {
           updateData.energy_logs_db_id = setupResult.energyLogsDbId;
         }
         
-        // CRITICAL: Always ensure auth_user_id is set correctly
-        // If auth_user_id is missing or doesn't match, update it
-        if (authUserId) {
-          if (!existingUser.auth_user_id || existingUser.auth_user_id !== authUserId) {
-            updateData.auth_user_id = authUserId;
-            console.log('Updating auth_user_id to match session:', {
-              old_auth_user_id: existingUser.auth_user_id,
-              new_auth_user_id: authUserId,
-            });
-          }
+        // Note: users.id should already match Supabase Auth user id (authUserId)
+        // If there's a mismatch, it indicates a data integrity issue that should be fixed separately
+        if (authUserId && existingUser.id !== authUserId) {
+          console.warn('⚠️ WARNING: User id mismatch detected:', {
+            user_id: existingUser.id,
+            auth_user_id: authUserId,
+            message: 'This may indicate a data integrity issue. User will be updated anyway.',
+          });
         }
         
         console.log('Update data prepared:', {
@@ -535,11 +581,45 @@ export async function GET(request: NextRequest) {
           }
         });
         
+        console.log('🔍 CRITICAL: About to update user:', {
+          existing_user_id: existingUser.id,
+          auth_user_id: authUserId,
+          ids_match: existingUser.id === authUserId,
+          existing_user_updated_at: existingUser.updated_at,
+          update_data_keys: Object.keys(updateData),
+          notion_token_present: !!updateData.notion_token,
+          notion_token_length: updateData.notion_token?.length || 0,
+        });
+        
+        // CRITICAL: Ensure we're updating the correct user
+        console.log('🔍 CRITICAL: Pre-update check:', {
+          existing_user_id: existingUser.id,
+          auth_user_id: authUserId,
+          ids_match: existingUser.id === authUserId,
+          existing_user_email: existingUser.email,
+          update_data_notion_token_length: updateData.notion_token?.length || 0,
+          update_data_notion_setup_complete: updateData.notion_setup_complete,
+        });
+        
         const { data: updateResult, error: updateError } = await supabase
           .from('users')
           .update(updateData)
           .eq('id', existingUser.id)
           .select();
+        
+        console.log('🔍 Update query executed:', {
+          has_result: !!updateResult,
+          result_count: updateResult?.length || 0,
+          has_error: !!updateError,
+          error_message: updateError?.message,
+          error_code: updateError?.code,
+          update_result_first: updateResult?.[0] ? {
+            id: updateResult[0].id,
+            has_notion_token: !!updateResult[0].notion_token,
+            notion_setup_complete: updateResult[0].notion_setup_complete,
+            updated_at: updateResult[0].updated_at,
+          } : null,
+        });
         
         if (updateError) {
           console.error('❌ Error updating user (Web flow):', updateError);
@@ -549,77 +629,134 @@ export async function GET(request: NextRequest) {
             notion_token_length: access_token?.length,
             setup_success: setupResult.success,
             critical_setup_success: !!(setupResult.privacyPageId && setupResult.tasksDbId),
+            update_data: updateData,
           });
-        } else {
-          console.log('✅ Successfully updated user (Web flow):', {
-            user_id: updateResult?.[0]?.id,
-            notion_token_set: !!updateResult?.[0]?.notion_token,
-            notion_setup_complete: updateResult?.[0]?.notion_setup_complete,
-            update_data_sent: updateData,
+          // Don't continue if update failed
+          return NextResponse.redirect(
+            new URL('/error?message=Failed to save Notion connection. Please try again.', request.url)
+          );
+        }
+        
+        // CRITICAL: Check if update actually returned data
+        if (!updateResult || updateResult.length === 0) {
+          console.error('❌ CRITICAL: Update query returned no data! This means no rows were updated!', {
+            user_id: existingUser.id,
+            update_data: updateData,
+            possible_causes: [
+              'User ID does not exist in database',
+              'RLS policy blocking update (unlikely with service key)',
+              'Database connection issue',
+            ],
           });
-          
-          // Verify the update by querying the user back immediately
-          const { data: verifyUser, error: verifyError } = await supabase
+          return NextResponse.redirect(
+            new URL('/error?message=Failed to save Notion connection. Please try again.', request.url)
+          );
+        }
+        
+        // CRITICAL: Verify the update result matches what we sent
+        if (updateResult[0].id !== existingUser.id) {
+          console.error('❌ CRITICAL: Update returned wrong user!', {
+            expected_id: existingUser.id,
+            returned_id: updateResult[0].id,
+          });
+          return NextResponse.redirect(
+            new URL('/error?message=Failed to save Notion connection. Please try again.', request.url)
+          );
+        }
+        
+        console.log('✅ Successfully updated user (Web flow):', {
+          user_id: updateResult[0]?.id,
+          notion_token_set: !!updateResult[0]?.notion_token,
+          notion_setup_complete: updateResult[0]?.notion_setup_complete,
+          updated_at: updateResult[0]?.updated_at,
+          update_data_sent: updateData,
+          update_result_full: updateResult[0],
+        });
+        
+        // Use the update result directly as primary verification (most reliable)
+        verifyUser = updateResult[0];
+        
+        console.log('✅ User update verified (from update result):', {
+          user_id: verifyUser.id,
+          auth_user_id: authUserId,
+          ids_match: verifyUser.id === authUserId,
+          has_notion_token: !!verifyUser.notion_token,
+          notion_token_length: verifyUser.notion_token?.length || 0,
+          notion_setup_complete: verifyUser.notion_setup_complete,
+          has_tasks_db: !!verifyUser.tasks_db_id,
+          has_privacy_page: !!verifyUser.privacy_page_id,
+          updated_at: verifyUser.updated_at,
+        });
+        
+        // Additional verification: Query back after delay to ensure write is visible
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        const { data: verifyUserData, error: verifyError } = await supabase
             .from('users')
-            .select('id, auth_user_id, notion_token, notion_setup_complete, tasks_db_id, privacy_page_id')
+          .select('id, notion_token, notion_setup_complete, tasks_db_id, privacy_page_id, updated_at')
             .eq('id', existingUser.id)
             .single();
+        
+        if (!verifyError && verifyUserData) {
+          console.log('🔍 CRITICAL: After update verification query:', {
+            verified_user_id: verifyUserData.id,
+            verified_updated_at: verifyUserData.updated_at,
+            previous_updated_at: existingUser.updated_at,
+            timestamp_changed: verifyUserData.updated_at !== existingUser.updated_at,
+            has_notion_token: !!verifyUserData.notion_token,
+            notion_setup_complete: verifyUserData.notion_setup_complete,
+          });
           
-          if (verifyError) {
-            console.error('❌ Error verifying user update:', verifyError);
-          } else {
-            console.log('✅ User update verified:', {
-              user_id: verifyUser.id,
-              auth_user_id: verifyUser.auth_user_id,
-              has_notion_token: !!verifyUser.notion_token,
-              notion_token_length: verifyUser.notion_token?.length || 0,
-              notion_setup_complete: verifyUser.notion_setup_complete,
-              has_tasks_db: !!verifyUser.tasks_db_id,
-              has_privacy_page: !!verifyUser.privacy_page_id,
+          // If verification query shows different data, log warning
+          if (verifyUserData.updated_at === existingUser.updated_at) {
+            console.error('❌ CRITICAL WARNING: updated_at timestamp did not change in verification query!', {
+              verified_user_id: verifyUserData.id,
+              verified_updated_at: verifyUserData.updated_at,
+              previous_updated_at: existingUser.updated_at,
             });
-            
-            // If verification shows update didn't work, log critical error
-            if (!verifyUser.notion_token) {
-              console.error('❌ CRITICAL: notion_token is NULL after update!', {
-                user_id: verifyUser.id,
-                update_data_sent: {
-                  notion_token_length: access_token?.length,
-                  notion_setup_complete: criticalSetupSuccess,
-                },
-                actual_values: {
-                  notion_token: verifyUser.notion_token,
-                  notion_setup_complete: verifyUser.notion_setup_complete,
-                },
-              });
-            } else if (verifyUser.notion_setup_complete !== criticalSetupSuccess) {
-              console.warn('⚠️ notion_setup_complete mismatch:', {
-                expected: criticalSetupSuccess,
-                actual: verifyUser.notion_setup_complete,
-                has_privacy_page: !!verifyUser.privacy_page_id,
-                has_tasks_db: !!verifyUser.tasks_db_id,
-              });
-            }
           }
+          
+          if (!verifyUserData.notion_token) {
+            console.error('❌ CRITICAL: notion_token is NULL in verification query!', {
+              user_id: verifyUserData.id,
+              update_result_notion_token: !!verifyUser.notion_token,
+              verification_query_notion_token: !!verifyUserData.notion_token,
+            });
+          }
+        } else if (verifyError) {
+          console.error('❌ Error in verification query (non-critical):', verifyError);
         }
       } else {
-        console.warn('⚠️ User not found for Notion connection');
-        console.warn('Lookup attempted with:', {
-          auth_user_id: authUserId,
+        console.error('❌ User not found for Notion connection');
+        console.error('Lookup attempted with:', {
+          id: authUserId,
           email: session.email
         });
         
-        // Try to create user if we have enough info
-        if (authUserId || session.email) {
-          console.log('Attempting to create new user...');
+        // User must be created via /auth/callback first
+        if (!authUserId) {
+          console.error('❌ Cannot update user: no auth user ID available. User must sign in first.');
+          return NextResponse.redirect(
+            new URL(
+              `/error?message=${encodeURIComponent('User account not found. Please sign in first.')}`,
+              request.url
+            )
+          );
+        }
+        
+        // Try to create user if we have authUserId (user should exist, but handle edge case)
+        console.log('Attempting to create new user with Notion connection...');
           
           // Only include database IDs that were actually created (not null)
-          // notion_setup_complete should be true if we have a token AND critical setup succeeded
-          const criticalSetupSuccess = !!(setupResult.privacyPageId && setupResult.tasksDbId);
+          // notion_setup_complete should be true if we have a token (connection successful)
+          const hasToken = !!access_token;
           const insertDataObj: any = {
-            auth_user_id: authUserId,
+          id: authUserId, // Use id directly (matches Supabase Auth user id)
             email: session.email,
+          provider: 'email', // Default, will be updated on next auth
+          email_verified: false,
             notion_token: access_token,
-            notion_setup_complete: criticalSetupSuccess, // True if critical components created
+            notion_setup_complete: hasToken, // True if we have a token (connection successful)
             license_key: session.license_key || '',
             onboarding_complete: false,
           };
@@ -670,7 +807,7 @@ export async function GET(request: NextRequest) {
             console.error('❌ Error creating user (Web flow):', insertError);
             console.error('Insert error details:', JSON.stringify(insertError, null, 2));
             console.error('Insert data attempted:', {
-              auth_user_id: authUserId,
+              id: authUserId,
               email: session.email,
               has_notion_token: !!access_token,
               has_license_key: !!session.license_key
@@ -678,11 +815,9 @@ export async function GET(request: NextRequest) {
           } else {
             console.log('✅ Successfully created user (Web flow):', insertData);
           }
-        } else {
-          console.error('❌ Cannot create user: missing both auth_user_id and email');
         }
       }
-    }
+    
     console.log('=== User Database Update Complete ===');
 
     // Clean up session
@@ -716,17 +851,56 @@ export async function GET(request: NextRequest) {
     // The dashboard will check notion_setup_complete to determine if setup was successful
     if (access_token) {
       redirectUrl.searchParams.set('notion_connected', 'true');
-      console.log('✅ Redirecting to dashboard with notion_connected=true (token obtained)');
+      redirectUrl.searchParams.set('timestamp', Date.now().toString()); // Cache busting
+      console.log('[OAuth Callback] ✅ Redirecting to dashboard with notion_connected=true (token obtained)');
       if (!criticalSetupSuccess) {
-        console.warn('⚠️ Warning: Notion token obtained but critical setup failed:', {
+        console.warn('[OAuth Callback] ⚠️ Warning: Notion token obtained but critical setup failed:', {
           privacyPageId: setupResult.privacyPageId,
           tasksDbId: setupResult.tasksDbId,
         });
       }
+      
+      // Add a delay to allow database replication to catch up
+      // This helps with read-after-write consistency in distributed systems
+      // Increased to 2000ms (2 seconds) to handle Supabase replication lag
+      console.log('[OAuth Callback] ⏳ Waiting 2000ms before redirect to ensure database write is visible...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Final verification: Query the user one more time to ensure update is visible
+      if (authUserId) {
+        const { data: finalVerifyUser, error: finalVerifyError } = await supabase
+          .from('users')
+          .select('id, notion_token, notion_setup_complete, updated_at')
+          .eq('id', authUserId)
+          .single();
+        
+        if (finalVerifyError) {
+          console.error('[OAuth Callback] ❌ Final verification failed:', {
+            error_code: finalVerifyError.code,
+            error_message: finalVerifyError.message,
+            auth_user_id: authUserId,
+          });
+        } else {
+          console.log('[OAuth Callback] 🔍 Final verification before redirect:', {
+            user_id: finalVerifyUser.id,
+            has_notion_token: !!finalVerifyUser.notion_token,
+            notion_setup_complete: finalVerifyUser.notion_setup_complete,
+            updated_at: finalVerifyUser.updated_at,
+            ids_match: finalVerifyUser.id === authUserId,
+          });
+          
+          if (!finalVerifyUser.notion_token) {
+            console.error('[OAuth Callback] ❌ CRITICAL: notion_token is NULL in final verification! Update may not have persisted!');
+          } else {
+            console.log('[OAuth Callback] ✅ Final verification passed - notion_token exists');
+          }
+        }
+      }
     } else {
-      console.error('❌ No access token obtained, redirecting without notion_connected flag');
+      console.error('[OAuth Callback] ❌ No access token obtained, redirecting without notion_connected flag');
     }
     
+    console.log('[OAuth Callback] 🔄 Redirecting to:', redirectUrl.toString());
     return NextResponse.redirect(redirectUrl);
   } catch (error: any) {
     console.error('OAuth callback error:', error);

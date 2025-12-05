@@ -66,11 +66,11 @@ export async function POST(request: NextRequest) {
     // Get user info
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('auth_user_id, email')
+      .select('id, email')
       .eq('id', refreshTokenData.user_id)
       .single();
 
-    if (userError || !user || !user.auth_user_id) {
+    if (userError || !user) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'User not found' },
         { status: 500 }
@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     // Generate new access token (1 hour)
     const accessToken = signWebsiteToken({
-      userId: user.auth_user_id,
+      userId: user.id,
       email: user.email,
     });
 

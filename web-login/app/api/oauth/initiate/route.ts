@@ -114,7 +114,29 @@ export async function POST(request: NextRequest) {
     const state = crypto.randomBytes(32).toString('hex');
 
     // Store session in database (licenseKey is optional for web flow)
-    await createOAuthSession(state, email, licenseKey || '', amazon_account_id || null, codeVerifier, auth_user_id || null);
+    console.log('[OAuth Initiate] Creating OAuth session:', {
+      state: state.substring(0, 16) + '...',
+      email,
+      has_license_key: !!licenseKey,
+      has_amazon_account_id: !!amazon_account_id,
+      auth_user_id: auth_user_id || null,
+    });
+    
+    try {
+      const oauthSession = await createOAuthSession(state, email, licenseKey || '', amazon_account_id || null, codeVerifier, auth_user_id || null);
+      console.log('[OAuth Initiate] ✅ OAuth session created:', {
+        session_id: oauthSession.id,
+        state: oauthSession.state.substring(0, 16) + '...',
+        auth_user_id: oauthSession.auth_user_id,
+        expires_at: oauthSession.expires_at,
+      });
+    } catch (sessionError: any) {
+      console.error('[OAuth Initiate] ❌ Failed to create OAuth session:', sessionError);
+      return NextResponse.json(
+        { error: `Failed to create OAuth session: ${sessionError.message}` },
+        { status: 500 }
+      );
+    }
 
     // Build Notion OAuth URL
     const authUrl = new URL('https://api.notion.com/v1/oauth/authorize');
