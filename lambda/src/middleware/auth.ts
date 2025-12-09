@@ -111,9 +111,11 @@ export class AuthInterceptor implements RequestInterceptor {
         const introspectResponse = await fetch(INTROSPECT_URL, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            token: accessToken,
+          }),
         });
 
         console.log('[AuthInterceptor] Introspection response status:', introspectResponse.status);

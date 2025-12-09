@@ -77,7 +77,6 @@ export class AddTaskHandler implements RequestHandler {
           parsed.dueDateTime || null,
           parsed.status || 'TO DO'
         );
-        });
       } catch (notionError: any) {
         console.error('[AddTaskHandler] Notion API error:', {
           message: notionError?.message,

@@ -63,6 +63,8 @@ export default function BillingPage() {
         }),
       });
 
+      console.log('[Response]', response);
+
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error_description || errorData.error || 'Failed to create checkout session');

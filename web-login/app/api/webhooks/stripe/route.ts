@@ -19,20 +19,40 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
+    console.log('[Stripe Webhook] Webhook received');
     const body = await request.text();
     const signature = request.headers.get('stripe-signature');
 
+    console.log('[Stripe Webhook] Headers:', {
+      hasSignature: !!signature,
+      signatureLength: signature?.length || 0,
+      bodyLength: body.length,
+      hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
+      webhookSecretPrefix: process.env.STRIPE_WEBHOOK_SECRET?.substring(0, 10) || 'NOT SET',
+    });
+
     if (!signature) {
+      console.error('[Stripe Webhook] Missing stripe-signature header');
       return NextResponse.json(
         { error: 'Missing stripe-signature header' },
         { status: 400 }
       );
     }
 
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      console.error('[Stripe Webhook] STRIPE_WEBHOOK_SECRET environment variable is not set');
+      return NextResponse.json(
+        { error: 'Webhook secret not configured' },
+        { status: 500 }
+      );
+    }
+
     // Verify webhook signature
+    console.log('[Stripe Webhook] Verifying signature...');
     const event = verifyWebhookSignature(body, signature);
 
     if (!event) {
+      console.error('[Stripe Webhook] Invalid signature');
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 400 }

@@ -17,23 +17,40 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Get token from Authorization header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'unauthorized', error_description: 'Missing or invalid Authorization header' },
-        { status: 401 }
-      );
-    }
+    // Try Authorization header first, then fall back to body
+    let authHeader = request.headers.get('authorization');
+    let token: string | null = null;
 
-    const token = authHeader.replace('Bearer ', '').trim();
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.replace('Bearer ', '').trim();
+    } else {
+      // Fallback: try getting token from request body
+      try {
+        const body = await request.json();
+        token = body.token || null;
+      } catch (e) {
+        // Body parsing failed, continue with null token
+      }
+    }
 
     if (!token) {
+      console.error('[Introspect] Missing token in header or body:', {
+        hasAuthHeader: !!authHeader,
+        headerKeys: Array.from(request.headers.keys()),
+      });
       return NextResponse.json(
-        { error: 'unauthorized', error_description: 'Token is required' },
+        { error: 'unauthorized', error_description: 'Missing or invalid token' },
         { status: 401 }
       );
     }
+
+    // Debug: Log all headers
+    const allHeaders = Object.fromEntries(request.headers.entries());
+    console.log('[Introspect] Request headers:', {
+      hasAuthorization: request.headers.has('authorization'),
+      authorizationHeader: request.headers.get('authorization')?.substring(0, 30) + '...',
+      allHeaderKeys: Object.keys(allHeaders),
+    });
 
     const supabase = createServerClient();
 
