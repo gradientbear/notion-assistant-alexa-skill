@@ -67,11 +67,11 @@ export default function DashboardPage() {
       const delay = notionConnected ? 3000 : (tokenGenerated ? 4000 : 500);
       
       setTimeout(() => {
-        fetchUserData().then((res) => { console.log('[Timeout1 Result]', res)});
+        fetchUserData();
         // Also refresh again after another delay to ensure data is updated
         if (notionConnected || tokenGenerated) {
           setTimeout(() => {
-            fetchUserData().then((res) => { console.log('[Timeout2 Result]', res)});
+            fetchUserData();
           }, 3000); // Increased from 2000ms to 3000ms
         }
       }, delay);
