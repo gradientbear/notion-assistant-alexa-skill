@@ -2,7 +2,7 @@ import * as chrono from 'chrono-node';
 // Note: chrono-node handles Italian dates through its default parser
 // We use locale-specific keyword matching for better accuracy
 
-export type Locale = 'en-US' | 'it-IT';
+export type Locale = 'en-US' | 'it-IT' | 'fr-FR' | 'es-ES' | 'es-MX';
 
 export interface ParsedTask {
   taskName: string;
@@ -27,7 +27,7 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
   
   let text = raw.trim();
   
-  // Remove common command prefixes (English and Italian)
+  // Remove common command prefixes (English, Italian, French, Spanish)
   const prefixPatterns = [
     /^add\s+/i,
     /^create\s+/i,
@@ -36,6 +36,11 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     /^update\s+/i,
     /^change\s+/i,
     /^modify\s+/i,
+    // Remove "the task:" / "the tasks:" prefixes (common in test sentences)
+    /^the\s+task:\s+/i,
+    /^the\s+tasks:\s+/i,
+    /^task:\s+/i,
+    /^tasks:\s+/i,
     // Italian prefixes
     /^aggiungi\s+/i,
     /^crea\s+/i,
@@ -44,13 +49,31 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     /^aggiorna\s+/i,
     /^modifica\s+/i,
     /^cambia\s+/i,
+    // French prefixes
+    /^ajouter\s+/i,
+    /^créer\s+/i,
+    /^rappelle-moi de\s+/i,
+    /^rappelle-moi\s+/i,
+    /^définir\s+/i,
+    /^mettre à jour\s+/i,
+    /^modifier\s+/i,
+    /^changer\s+/i,
+    // Spanish prefixes
+    /^agregar\s+/i,
+    /^añadir\s+/i,
+    /^crear\s+/i,
+    /^recuérdame\s+/i,
+    /^establecer\s+/i,
+    /^actualizar\s+/i,
+    /^modificar\s+/i,
+    /^cambiar\s+/i,
   ];
   
   for (const pattern of prefixPatterns) {
     text = text.replace(pattern, '');
   }
   
-  // Remove common suffixes (English and Italian)
+  // Remove common suffixes (English, Italian, French, Spanish)
   const suffixPatterns = [
     /\s+to my tasks?$/i,
     /\s+to my to-do list$/i,
@@ -62,6 +85,18 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     /\s+a fatto$/i,
     /\s+fatto$/i,
     /\s+completato$/i,
+    // French suffixes
+    /\s+à mes tâches?$/i,
+    /\s+comme terminé$/i,
+    /\s+comme complété$/i,
+    /\s+terminé$/i,
+    /\s+complété$/i,
+    // Spanish suffixes
+    /\s+a mis tareas?$/i,
+    /\s+como hecho$/i,
+    /\s+como completado$/i,
+    /\s+hecho$/i,
+    /\s+completado$/i,
   ];
   
   for (const pattern of suffixPatterns) {
@@ -72,7 +107,7 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
 }
 
 /**
- * Extract status from natural language (English and Italian)
+ * Extract status from natural language (English, Italian, French, Spanish)
  */
 function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PROCESS' | 'DONE' | undefined {
   const lower = text.toLowerCase();
@@ -99,11 +134,33 @@ function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PR
     return 'TO DO';
   }
   
+  // French keywords
+  if (lower.includes('terminé') || lower.includes('complété') || lower.includes('fini') || lower.includes('achevé')) {
+    return 'DONE';
+  }
+  if (lower.includes('en cours') || lower.includes('en train') || lower.includes('en progression')) {
+    return 'IN_PROCESS';
+  }
+  if (lower.includes('à faire') || lower.includes('todo') || lower.includes('en attente')) {
+    return 'TO DO';
+  }
+  
+  // Spanish keywords
+  if (lower.includes('hecho') || lower.includes('completado') || lower.includes('terminado') || lower.includes('finalizado')) {
+    return 'DONE';
+  }
+  if (lower.includes('en progreso') || lower.includes('en curso') || lower.includes('trabajando')) {
+    return 'IN_PROCESS';
+  }
+  if (lower.includes('por hacer') || lower.includes('a hacer') || lower.includes('pendiente')) {
+    return 'TO DO';
+  }
+  
   return undefined;
 }
 
 /**
- * Extract category from natural language (English and Italian)
+ * Extract category from natural language (English, Italian, French, Spanish)
  */
 function extractCategory(text: string, locale: Locale = 'en-US'): 'PERSONAL' | 'WORK' | undefined {
   const lower = text.toLowerCase();
@@ -124,11 +181,27 @@ function extractCategory(text: string, locale: Locale = 'en-US'): 'PERSONAL' | '
     return 'PERSONAL';
   }
   
+  // French keywords
+  if (lower.includes('travail') || lower.includes('bureau') || lower.includes('professionnel')) {
+    return 'WORK';
+  }
+  if (lower.includes('personnel') || lower.includes('maison') || lower.includes('privé')) {
+    return 'PERSONAL';
+  }
+  
+  // Spanish keywords
+  if (lower.includes('trabajo') || lower.includes('oficina') || lower.includes('negocio')) {
+    return 'WORK';
+  }
+  if (lower.includes('personal') || lower.includes('casa') || lower.includes('privado')) {
+    return 'PERSONAL';
+  }
+  
   return undefined;
 }
 
 /**
- * Extract priority from natural language (English and Italian)
+ * Extract priority from natural language (English, Italian, French, Spanish)
  */
 function extractPriority(text: string, locale: Locale = 'en-US'): 'LOW' | 'NORMAL' | 'HIGH' | undefined {
   const lower = text.toLowerCase();
@@ -152,6 +225,28 @@ function extractPriority(text: string, locale: Locale = 'en-US'): 'LOW' | 'NORMA
     return 'LOW';
   }
   if (lower.includes('priorità normale') || lower.includes('media priorità') || lower.includes('normale')) {
+    return 'NORMAL';
+  }
+  
+  // French keywords
+  if (lower.includes('haute priorité') || lower.includes('priorité haute') || lower.includes('urgent') || lower.includes('important')) {
+    return 'HIGH';
+  }
+  if (lower.includes('basse priorité') || lower.includes('priorité basse') || lower.includes('basse')) {
+    return 'LOW';
+  }
+  if (lower.includes('priorité normale') || lower.includes('moyenne priorité') || lower.includes('normale')) {
+    return 'NORMAL';
+  }
+  
+  // Spanish keywords
+  if (lower.includes('alta prioridad') || lower.includes('prioridad alta') || lower.includes('urgente') || lower.includes('importante')) {
+    return 'HIGH';
+  }
+  if (lower.includes('baja prioridad') || lower.includes('prioridad baja') || lower.includes('baja')) {
+    return 'LOW';
+  }
+  if (lower.includes('prioridad normal') || lower.includes('media prioridad') || lower.includes('normal')) {
     return 'NORMAL';
   }
   
@@ -221,7 +316,12 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     };
   }
   
-  const lower = userRequest.toLowerCase();
+  // Remove common query prefixes like "show my tasks:" or "my tasks:"
+  let cleanedRequest = userRequest.trim();
+  cleanedRequest = cleanedRequest.replace(/^(show\s+)?my\s+tasks?:\s*/i, '');
+  cleanedRequest = cleanedRequest.replace(/^tasks?:\s*/i, '');
+  
+  const lower = cleanedRequest.toLowerCase();
   const filters: any[] = [];
   let queryType: QueryFilter['type'] = 'keyword';
   let keyword: string | undefined;
@@ -229,7 +329,7 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
   // Parse date/time queries using chrono-node
   // Note: chrono-node should handle Italian dates even with default parser
   // but we use locale-specific keyword matching for better accuracy
-  const chronoResults = chrono.parse(userRequest);
+  const chronoResults = chrono.parse(cleanedRequest);
   let dateFilter: any = null;
   
   if (chronoResults.length > 0) {
@@ -237,8 +337,8 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     const parsedDate = result.start.date();
     const now = new Date();
     
-    // Today (English and Italian)
-    if (lower.includes('today') || lower.includes('oggi')) {
+    // Today (English, Italian, French, Spanish)
+    if (lower.includes('today') || lower.includes('oggi') || lower.includes('aujourd\'hui') || lower.includes('hoy')) {
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(now);
@@ -253,8 +353,8 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       };
       queryType = 'time';
     }
-    // Tomorrow (English and Italian)
-    else if (lower.includes('tomorrow') || lower.includes('domani')) {
+    // Tomorrow (English, Italian, French, Spanish)
+    else if (lower.includes('tomorrow') || lower.includes('domani') || lower.includes('demain') || lower.includes('mañana')) {
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStart = new Date(tomorrow);
@@ -271,8 +371,8 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       };
       queryType = 'time';
     }
-    // This week (English and Italian)
-    else if (lower.includes('this week') || lower.includes('questa settimana')) {
+    // This week (English, Italian, French, Spanish)
+    else if (lower.includes('this week') || lower.includes('questa settimana') || lower.includes('cette semaine') || lower.includes('esta semana')) {
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - now.getDay());
       weekStart.setHours(0, 0, 0, 0);
@@ -289,8 +389,8 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       };
       queryType = 'time';
     }
-    // Next week (English and Italian)
-    else if (lower.includes('next week') || lower.includes('prossima settimana')) {
+    // Next week (English, Italian, French, Spanish)
+    else if (lower.includes('next week') || lower.includes('prossima settimana') || lower.includes('semaine prochaine') || lower.includes('próxima semana')) {
       const nextWeekStart = new Date(now);
       nextWeekStart.setDate(now.getDate() - now.getDay() + 7);
       nextWeekStart.setHours(0, 0, 0, 0);
@@ -307,8 +407,8 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       };
       queryType = 'time';
     }
-    // Overdue (English and Italian)
-    else if (lower.includes('overdue') || lower.includes('scaduto') || lower.includes('in ritardo')) {
+    // Overdue (English, Italian, French, Spanish)
+    else if (lower.includes('overdue') || lower.includes('scaduto') || lower.includes('in ritardo') || lower.includes('en retard') || lower.includes('vencido') || lower.includes('atrasado')) {
       dateFilter = {
         and: [
           {
@@ -327,10 +427,10 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       };
       queryType = 'time';
     }
-    // Before/After time (English and Italian)
-    else if (lower.includes('before') || lower.includes('after') || lower.includes('prima') || lower.includes('dopo')) {
-      const isBefore = lower.includes('before') || lower.includes('prima');
-      const timeMatch = userRequest.match(/(\d{1,2})\s*(pm|am|:?\d{2})?/i);
+    // Before/After time (English, Italian, French, Spanish)
+    else if (lower.includes('before') || lower.includes('after') || lower.includes('prima') || lower.includes('dopo') || lower.includes('avant') || lower.includes('après') || lower.includes('antes') || lower.includes('después')) {
+      const isBefore = lower.includes('before') || lower.includes('prima') || lower.includes('avant') || lower.includes('antes');
+      const timeMatch = cleanedRequest.match(/(\d{1,2})\s*(pm|am|:?\d{2})?/i);
       
       if (timeMatch && parsedDate) {
         const timeDate = new Date(parsedDate);
@@ -374,9 +474,11 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     filters.push(dateFilter);
   }
   
-  // Status queries (English and Italian)
+  // Status queries (English, Italian, French, Spanish)
   if (lower.includes('to do') || lower.includes('todo') || lower.includes('not done') || lower.includes('incomplete') ||
-      lower.includes('da fare') || lower.includes('in sospeso')) {
+      lower.includes('da fare') || lower.includes('in sospeso') ||
+      lower.includes('à faire') || lower.includes('en attente') ||
+      lower.includes('por hacer') || lower.includes('pendiente')) {
     filters.push({
       property: 'Status',
       select: {
@@ -385,7 +487,9 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
     if (queryType === 'keyword') queryType = 'status';
   } else if (lower.includes('in progress') || lower.includes('working on') || lower.includes('ongoing') ||
-             lower.includes('in corso') || lower.includes('in lavorazione')) {
+             lower.includes('in corso') || lower.includes('in lavorazione') ||
+             lower.includes('en cours') || lower.includes('en train') ||
+             lower.includes('en progreso') || lower.includes('en curso')) {
     filters.push({
       property: 'Status',
       select: {
@@ -394,7 +498,9 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
     if (queryType === 'keyword') queryType = 'status';
   } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished') ||
-             lower.includes('fatto') || lower.includes('completato') || lower.includes('finito')) {
+             lower.includes('fatto') || lower.includes('completato') || lower.includes('finito') ||
+             lower.includes('terminé') || lower.includes('complété') || lower.includes('fini') ||
+             lower.includes('hecho') || lower.includes('completado') || lower.includes('terminado')) {
     filters.push({
       property: 'Status',
       select: {
@@ -404,8 +510,10 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     if (queryType === 'keyword') queryType = 'status';
   }
   
-  // Category queries (English and Italian)
-  if ((lower.includes('work') && !lower.includes('homework')) || lower.includes('lavoro') || lower.includes('ufficio')) {
+  // Category queries (English, Italian, French, Spanish)
+  if ((lower.includes('work') && !lower.includes('homework')) || lower.includes('lavoro') || lower.includes('ufficio') ||
+      lower.includes('travail') || lower.includes('bureau') ||
+      lower.includes('trabajo') || lower.includes('oficina')) {
     filters.push({
       property: 'Category',
       select: {
@@ -414,7 +522,9 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
     if (queryType === 'keyword') queryType = 'category';
   } else if (lower.includes('personal') || lower.includes('home') || 
-             lower.includes('personale') || lower.includes('casa')) {
+             lower.includes('personale') || lower.includes('casa') ||
+             lower.includes('personnel') || lower.includes('maison') ||
+             lower.includes('personal') || lower.includes('casa')) {
     filters.push({
       property: 'Category',
       select: {
@@ -424,9 +534,11 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     if (queryType === 'keyword') queryType = 'category';
   }
   
-  // Priority queries (English and Italian)
+  // Priority queries (English, Italian, French, Spanish)
   if (lower.includes('high priority') || lower.includes('urgent') || lower.includes('important') ||
-      lower.includes('alta priorità') || lower.includes('priorità alta') || lower.includes('urgente')) {
+      lower.includes('alta priorità') || lower.includes('priorità alta') || lower.includes('urgente') ||
+      lower.includes('haute priorité') || lower.includes('priorité haute') || lower.includes('urgent') ||
+      lower.includes('alta prioridad') || lower.includes('prioridad alta') || lower.includes('urgente')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -435,7 +547,9 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
     if (queryType === 'keyword') queryType = 'priority';
   } else if (lower.includes('low priority') || lower.includes('low') ||
-             lower.includes('bassa priorità') || lower.includes('priorità bassa')) {
+             lower.includes('bassa priorità') || lower.includes('priorità bassa') ||
+             lower.includes('basse priorité') || lower.includes('priorité basse') ||
+             lower.includes('baja prioridad') || lower.includes('prioridad baja')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -444,7 +558,9 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
     if (queryType === 'keyword') queryType = 'priority';
   } else if (lower.includes('normal priority') || lower.includes('medium priority') ||
-             lower.includes('priorità normale') || lower.includes('media priorità')) {
+             lower.includes('priorità normale') || lower.includes('media priorità') ||
+             lower.includes('priorité normale') || lower.includes('moyenne priorité') ||
+             lower.includes('prioridad normal') || lower.includes('media prioridad')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -455,7 +571,7 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
   }
   
   // Keyword search (extract remaining text after removing date/time references)
-  let keywordText = userRequest;
+  let keywordText = cleanedRequest;
   if (chronoResults.length > 0) {
     chronoResults.forEach(result => {
       if (result.text) {
@@ -464,12 +580,16 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     });
   }
   
-  // Remove query words (English and Italian)
+  // Remove query words (English, Italian, French, Spanish)
   const queryWords = [
     // English
     'what', 'are', 'my', 'tasks', 'for', 'show', 'me', 'list', 'tell', 'check', 'read', 'do', 'i', 'have', 'about',
     // Italian
-    'cosa', 'quali', 'mie', 'attività', 'per', 'mostrami', 'dimmi', 'elenca', 'controlla', 'leggi', 'fai', 'ho', 'di'
+    'cosa', 'quali', 'mie', 'attività', 'per', 'mostrami', 'dimmi', 'elenca', 'controlla', 'leggi', 'fai', 'ho', 'di',
+    // French
+    'quelles', 'sont', 'mes', 'tâches', 'pour', 'montre', 'moi', 'liste', 'dis', 'vérifie', 'lis', 'fais', 'j\'ai', 'de',
+    // Spanish
+    'qué', 'cuáles', 'son', 'mis', 'tareas', 'para', 'muestra', 'dime', 'lista', 'revisa', 'lee', 'haz', 'tengo', 'de'
   ];
   const keywordWords = keywordText
     .toLowerCase()
@@ -504,5 +624,245 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
     filters: finalFilter,
     keyword,
   };
+}
+
+/**
+ * Parse deletion condition from userRequest to determine what to delete
+ * Returns deletion type and filter for querying matching tasks
+ */
+export interface DeletionCondition {
+  type: 'all' | 'status' | 'time' | 'category' | 'name';
+  filter?: any; // Notion filter object
+  status?: 'TO DO' | 'IN_PROCESS' | 'DONE';
+  category?: 'PERSONAL' | 'WORK';
+}
+
+export function parseDeletionCondition(userRequest: string, locale: Locale = 'en-US'): DeletionCondition {
+  if (!userRequest) {
+    return { type: 'name' };
+  }
+  
+  const lower = userRequest.toLowerCase();
+  
+  // Remove common prefixes
+  let cleanedRequest = userRequest.trim();
+  cleanedRequest = cleanedRequest.replace(/^the\s+task:\s*/i, '');
+  cleanedRequest = cleanedRequest.replace(/^the\s+tasks:\s*/i, '');
+  cleanedRequest = cleanedRequest.replace(/^task:\s*/i, '');
+  cleanedRequest = cleanedRequest.replace(/^tasks:\s*/i, '');
+  const cleanedLower = cleanedRequest.toLowerCase();
+  
+  // Check for bulk delete all (English, Italian, French, Spanish)
+  if (cleanedLower.includes('everything') || 
+      cleanedLower.includes('all tasks') || 
+      cleanedLower.includes('entire list') ||
+      cleanedLower.includes('whole list') ||
+      cleanedLower.includes('wipe out') ||
+      cleanedLower.includes('clear all') ||
+      cleanedLower === 'all' ||
+      cleanedLower === 'everything' ||
+      cleanedLower.includes('tutto') || cleanedLower.includes('tutte') ||
+      cleanedLower.includes('tout') || cleanedLower.includes('toutes') ||
+      cleanedLower.includes('todo') || cleanedLower.includes('todas')) {
+    return { type: 'all' };
+  }
+  
+  // Check for status-based deletion (English, Italian, French, Spanish)
+  if (cleanedLower.includes('completed') || cleanedLower.includes('done') ||
+      cleanedLower.includes('completate') || cleanedLower.includes('fatto') ||
+      cleanedLower.includes('terminé') || cleanedLower.includes('complété') ||
+      cleanedLower.includes('hecho') || cleanedLower.includes('completado')) {
+    return {
+      type: 'status',
+      status: 'DONE',
+      filter: {
+        property: 'Status',
+        select: { equals: 'DONE' },
+      },
+    };
+  }
+  
+  if (cleanedLower.includes('in process') || cleanedLower.includes('in progress') ||
+      cleanedLower.includes('working on') ||
+      cleanedLower.includes('in corso') || cleanedLower.includes('in lavorazione') ||
+      cleanedLower.includes('en cours') || cleanedLower.includes('en train') ||
+      cleanedLower.includes('en progreso') || cleanedLower.includes('en curso')) {
+    return {
+      type: 'status',
+      status: 'IN_PROCESS',
+      filter: {
+        property: 'Status',
+        select: { equals: 'IN_PROCESS' },
+      },
+    };
+  }
+  
+  if (cleanedLower.includes('to do') || cleanedLower.includes('todo') ||
+      cleanedLower.includes('incomplete') || cleanedLower.includes('not done') ||
+      cleanedLower.includes('da fare') || cleanedLower.includes('in sospeso') ||
+      cleanedLower.includes('à faire') || cleanedLower.includes('en attente') ||
+      cleanedLower.includes('por hacer') || cleanedLower.includes('pendiente')) {
+    return {
+      type: 'status',
+      status: 'TO DO',
+      filter: {
+        property: 'Status',
+        select: { equals: 'TO DO' },
+      },
+    };
+  }
+  
+  // Check for category-based deletion (English, Italian, French, Spanish)
+  if ((cleanedLower.includes('work') && !cleanedLower.includes('homework')) ||
+      cleanedLower.includes('lavoro') || cleanedLower.includes('ufficio') ||
+      cleanedLower.includes('travail') || cleanedLower.includes('bureau') ||
+      cleanedLower.includes('trabajo') || cleanedLower.includes('oficina')) {
+    return {
+      type: 'category',
+      category: 'WORK',
+      filter: {
+        property: 'Category',
+        select: { equals: 'WORK' },
+      },
+    };
+  }
+  
+  if (cleanedLower.includes('personal') || cleanedLower.includes('home') ||
+      cleanedLower.includes('personale') || cleanedLower.includes('casa') ||
+      cleanedLower.includes('personnel') || cleanedLower.includes('maison') ||
+      cleanedLower.includes('personal') || cleanedLower.includes('casa')) {
+    return {
+      type: 'category',
+      category: 'PERSONAL',
+      filter: {
+        property: 'Category',
+        select: { equals: 'PERSONAL' },
+      },
+    };
+  }
+  
+  // Check for time-based deletion using chrono-node
+  const chronoResults = chrono.parse(cleanedRequest);
+  const now = new Date();
+  
+  if (chronoResults.length > 0 || lower.includes('today') || lower.includes('tomorrow') ||
+      lower.includes('overdue') || lower.includes('due') ||
+      lower.includes('oggi') || lower.includes('domani') ||
+      lower.includes('aujourd\'hui') || lower.includes('demain') ||
+      lower.includes('hoy') || lower.includes('mañana') ||
+      lower.includes('scaduto') || lower.includes('en retard') ||
+      lower.includes('vencido') || lower.includes('atrasado')) {
+    let dateFilter: any = null;
+    
+    // Today
+    if (cleanedLower.includes('due today') || cleanedLower.includes('tasks due today')) {
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      dateFilter = {
+        property: 'Due Date Time',
+        date: {
+          on_or_after: todayStart.toISOString(),
+          on_or_before: todayEnd.toISOString(),
+        },
+      };
+    }
+    // Tomorrow
+    else if (cleanedLower.includes('due tomorrow') || cleanedLower.includes('tasks due tomorrow')) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStart = new Date(tomorrow);
+      tomorrowStart.setHours(0, 0, 0, 0);
+      const tomorrowEnd = new Date(tomorrow);
+      tomorrowEnd.setHours(23, 59, 59, 999);
+      
+      dateFilter = {
+        property: 'Due Date Time',
+        date: {
+          on_or_after: tomorrowStart.toISOString(),
+          on_or_before: tomorrowEnd.toISOString(),
+        },
+      };
+    }
+    // Overdue (English, Italian, French, Spanish)
+    else if (cleanedLower.includes('overdue') || cleanedLower.includes('scaduto') ||
+             cleanedLower.includes('in ritardo') ||
+             cleanedLower.includes('en retard') ||
+             cleanedLower.includes('vencido') || cleanedLower.includes('atrasado')) {
+      dateFilter = {
+        and: [
+          {
+            property: 'Due Date Time',
+            date: {
+              before: now.toISOString(),
+            },
+          },
+          {
+            property: 'Status',
+            select: {
+              does_not_equal: 'DONE',
+            },
+          },
+        ],
+      };
+    }
+    // Before/After time (English, Italian, French, Spanish)
+    else if (cleanedLower.includes('before') || cleanedLower.includes('after') ||
+             cleanedLower.includes('prima') || cleanedLower.includes('dopo') ||
+             cleanedLower.includes('avant') || cleanedLower.includes('après') ||
+             cleanedLower.includes('antes') || cleanedLower.includes('después')) {
+      const isBefore = cleanedLower.includes('before') || cleanedLower.includes('prima') ||
+                       cleanedLower.includes('avant') || cleanedLower.includes('antes');
+      const timeMatch = cleanedRequest.match(/(\d{1,2})\s*(pm|am|:?\d{2})?/i);
+      
+      if (timeMatch && chronoResults.length > 0) {
+        const parsedDate = chronoResults[0].start.date();
+        const timeDate = new Date(parsedDate);
+        if (isBefore) {
+          dateFilter = {
+            property: 'Due Date Time',
+            date: {
+              before: timeDate.toISOString(),
+            },
+          };
+        } else {
+          dateFilter = {
+            property: 'Due Date Time',
+            date: {
+              on_or_after: timeDate.toISOString(),
+            },
+          };
+        }
+      }
+    }
+    // Specific date from chrono
+    else if (chronoResults.length > 0) {
+      const parsedDate = chronoResults[0].start.date();
+      const dateStart = new Date(parsedDate);
+      dateStart.setHours(0, 0, 0, 0);
+      const dateEnd = new Date(parsedDate);
+      dateEnd.setHours(23, 59, 59, 999);
+      
+      dateFilter = {
+        property: 'Due Date Time',
+        date: {
+          on_or_after: dateStart.toISOString(),
+          on_or_before: dateEnd.toISOString(),
+        },
+      };
+    }
+    
+    if (dateFilter) {
+      return {
+        type: 'time',
+        filter: dateFilter,
+      };
+    }
+  }
+  
+  // Default: treat as task name
+  return { type: 'name' };
 }
 

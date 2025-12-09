@@ -1,6 +1,6 @@
 import { HandlerInput } from 'ask-sdk-core';
 
-export type Locale = 'en-US' | 'it-IT';
+export type Locale = 'en-US' | 'it-IT' | 'fr-FR' | 'es-ES' | 'es-MX';
 
 /**
  * Get locale from request envelope
@@ -10,6 +10,13 @@ export function getLocale(handlerInput: HandlerInput): Locale {
   // Normalize to supported locales
   if (locale.startsWith('it')) {
     return 'it-IT';
+  }
+  if (locale.startsWith('fr')) {
+    return 'fr-FR';
+  }
+  if (locale.startsWith('es')) {
+    // Spanish: es-ES (Spain) or es-MX (Mexico)
+    return locale === 'es-MX' ? 'es-MX' : 'es-ES';
   }
   return 'en-US';
 }
@@ -72,7 +79,19 @@ const translations: Record<Locale, Record<string, string>> = {
     'delete_task_prompt': 'What task would you like to delete?',
     'delete_task_reprompt': 'Tell me which task to delete.',
     'no_completed_tasks': 'You have no completed tasks to delete.',
+    'no_in_process_tasks': 'You have no in process tasks to delete.',
+    'no_to_do_tasks': 'You have no to do tasks to delete.',
+    'no_work_tasks': 'You have no work tasks to delete.',
+    'no_personal_tasks': 'You have no personal tasks to delete.',
+    'no_tasks_found': 'You have no tasks to delete.',
+    'no_tasks_matching_time': 'You have no tasks matching that time criteria.',
     'deleted_all_completed': 'Deleted all completed tasks.',
+    'deleted_all_in_process': 'Deleted {count} in process task(s).',
+    'deleted_all_to_do': 'Deleted {count} to do task(s).',
+    'deleted_all_tasks': 'Deleted all {count} task(s).',
+    'deleted_all_work_tasks': 'Deleted {count} work task(s).',
+    'deleted_all_personal_tasks': 'Deleted {count} personal task(s).',
+    'deleted_tasks_by_time': 'Deleted {count} task(s) matching that time.',
     'task_deleted': 'Deleted: {taskName} from your list.',
     'delete_task_error': 'I encountered an error deleting your task. Please try again.',
     
@@ -156,7 +175,19 @@ const translations: Record<Locale, Record<string, string>> = {
     'delete_task_prompt': 'Quale attività vorresti eliminare?',
     'delete_task_reprompt': 'Dimmi quale attività eliminare.',
     'no_completed_tasks': 'Non hai attività completate da eliminare.',
+    'no_in_process_tasks': 'Non hai attività in corso da eliminare.',
+    'no_to_do_tasks': 'Non hai attività da fare da eliminare.',
+    'no_work_tasks': 'Non hai attività di lavoro da eliminare.',
+    'no_personal_tasks': 'Non hai attività personali da eliminare.',
+    'no_tasks_found': 'Non hai attività da eliminare.',
+    'no_tasks_matching_time': 'Non hai attività che corrispondono a questi criteri temporali.',
     'deleted_all_completed': 'Eliminate tutte le attività completate.',
+    'deleted_all_in_process': 'Eliminate {count} attività in corso.',
+    'deleted_all_to_do': 'Eliminate {count} attività da fare.',
+    'deleted_all_tasks': 'Eliminate tutte le {count} attività.',
+    'deleted_all_work_tasks': 'Eliminate {count} attività di lavoro.',
+    'deleted_all_personal_tasks': 'Eliminate {count} attività personali.',
+    'deleted_tasks_by_time': 'Eliminate {count} attività che corrispondono a quel tempo.',
     'task_deleted': 'Eliminata: {taskName} dalla tua lista.',
     'delete_task_error': 'Ho riscontrato un errore nell\'eliminazione della tua attività. Riprova.',
     
@@ -185,6 +216,294 @@ const translations: Record<Locale, Record<string, string>> = {
     // Common
     'what_else': 'Cos\'altro vorresti fare?',
     'what_would_you_like': 'Cosa vorresti fare?',
+  },
+  'fr-FR': {
+    // Launch & Welcome
+    'welcome': 'Bienvenue dans Voice Planner ! Je peux vous aider à gérer vos tâches. Vous pouvez ajouter des tâches, lister vos tâches, les marquer comme terminées, mettre à jour leur statut ou les supprimer. Vous pouvez également vérifier le statut de votre connexion. Que souhaitez-vous faire ?',
+    'welcome_reprompt': 'Que souhaitez-vous faire ?',
+    'welcome_error': 'Bienvenue dans Voice Planner ! J\'ai rencontré un problème de connexion à votre compte. Veuillez réessayer plus tard.',
+    'welcome_error_simple': 'Bienvenue dans Voice Planner. Veuillez réessayer plus tard.',
+    
+    // Notion Connection
+    'notion_required': 'Pour utiliser Voice Planner, vous devez connecter votre compte Notion. Ouvrez l\'application Alexa, allez dans Compétences, trouvez Voice Planner et cliquez sur Lier le compte. Une fois connecté, je peux vous aider à gérer vos tâches dans Notion. Souhaitez-vous de l\'aide pour connecter votre compte ?',
+    'notion_required_reprompt': 'Souhaitez-vous de l\'aide pour connecter votre compte ?',
+    'notion_required_simple': 'Veuillez connecter votre compte Notion dans l\'application Alexa.',
+    'notion_required_add': 'Pour ajouter des tâches, vous devez connecter votre compte Notion. Ouvrez l\'application Alexa, allez dans Compétences, trouvez Voice Planner et cliquez sur Lier le compte. Une fois connecté, vous pouvez ajouter des tâches à votre espace de travail Notion.',
+    'notion_required_update': 'Pour mettre à jour les tâches, vous devez connecter votre compte Notion. Ouvrez l\'application Alexa, allez dans Compétences, trouvez Voice Planner et cliquez sur Lier le compte. Une fois connecté, vous pouvez mettre à jour vos tâches.',
+    'notion_required_delete': 'Pour supprimer des tâches, vous devez connecter votre compte Notion. Ouvrez l\'application Alexa, allez dans Compétences, trouvez Voice Planner et cliquez sur Lier le compte. Une fois connecté, vous pouvez supprimer des tâches de votre espace de travail Notion.',
+    'notion_required_query': 'Pour voir vos tâches, vous devez connecter votre compte Notion. Ouvrez l\'application Alexa, allez dans Compétences, trouvez Voice Planner et cliquez sur Lier le compte. Une fois connecté, je peux vous montrer vos tâches depuis Notion.',
+    'notion_db_not_found': 'Je n\'ai pas pu trouver votre base de données Tâches dans Notion. Veuillez vous assurer que la base de données existe et s\'appelle exactement "Tasks". Vous pouvez reconnecter votre compte Notion dans l\'application pour la configurer à nouveau.',
+    'notion_db_not_found_simple': 'Je n\'ai pas pu trouver votre base de données Tâches dans Notion. Veuillez vous assurer qu\'elle existe et réessayez.',
+    'link_account': 'Veuillez lier votre compte Notion dans l\'application Alexa pour continuer.',
+    
+    // Add Task
+    'add_task_prompt': 'Quelle tâche souhaitez-vous ajouter ?',
+    'add_task_reprompt': 'Dites-moi la tâche que vous voulez ajouter.',
+    'task_added': 'Ajoutée : {taskName}',
+    'task_added_high': 'Tâche haute priorité ajoutée : {taskName}',
+    'task_added_low': 'Tâche basse priorité ajoutée : {taskName}',
+    'task_added_due_today': ', due aujourd\'hui',
+    'task_added_due_tomorrow': ', due demain',
+    'task_added_due_date': ', due {date}',
+    'task_added_due_time': ' à {time}',
+    'task_added_work': ' (travail)',
+    'add_task_error': 'J\'ai rencontré une erreur lors de l\'ajout de votre tâche. Veuillez réessayer.',
+    
+    // Update Task
+    'update_task_prompt': 'Quelle tâche souhaitez-vous mettre à jour ?',
+    'update_task_reprompt': 'Dites-moi quelle tâche mettre à jour et quoi changer.',
+    'task_not_found': 'Je n\'ai pas pu trouver "{taskName}" dans vos tâches. Veuillez essayer de dire le nom complet de la tâche.',
+    'update_unsure': 'J\'ai trouvé "{taskName}", mais je ne suis pas sûr de ce que vous souhaitez mettre à jour. Vous pouvez mettre à jour le statut, la priorité ou la date d\'échéance. Par exemple, dites "marquer comme terminé" ou "définir la priorité à élevée".',
+    'task_updated': 'Mise à jour "{taskName}" : {updates}.',
+    'status_done': 'terminé',
+    'status_in_progress': 'en cours',
+    'status_to_do': 'à faire',
+    'priority_high': 'élevée',
+    'priority_low': 'basse',
+    'priority_normal': 'normale',
+    'due_date_to': 'date d\'échéance au {date}',
+    'due_date_to_time': 'date d\'échéance au {date} à {time}',
+    'status_to': 'statut à {status}',
+    'priority_to': 'priorité à {priority}',
+    'update_task_error': 'J\'ai rencontré une erreur lors de la mise à jour de votre tâche. Veuillez réessayer.',
+    
+    // Delete Task
+    'delete_task_prompt': 'Quelle tâche souhaitez-vous supprimer ?',
+    'delete_task_reprompt': 'Dites-moi quelle tâche supprimer.',
+    'no_completed_tasks': 'Vous n\'avez pas de tâches terminées à supprimer.',
+    'no_in_process_tasks': 'Vous n\'avez pas de tâches en cours à supprimer.',
+    'no_to_do_tasks': 'Vous n\'avez pas de tâches à faire à supprimer.',
+    'no_work_tasks': 'Vous n\'avez pas de tâches de travail à supprimer.',
+    'no_personal_tasks': 'Vous n\'avez pas de tâches personnelles à supprimer.',
+    'no_tasks_found': 'Vous n\'avez pas de tâches à supprimer.',
+    'no_tasks_matching_time': 'Vous n\'avez pas de tâches correspondant à ces critères temporels.',
+    'deleted_all_completed': 'Toutes les tâches terminées ont été supprimées.',
+    'deleted_all_in_process': '{count} tâche(s) en cours supprimée(s).',
+    'deleted_all_to_do': '{count} tâche(s) à faire supprimée(s).',
+    'deleted_all_tasks': 'Toutes les {count} tâche(s) supprimée(s).',
+    'deleted_all_work_tasks': '{count} tâche(s) de travail supprimée(s).',
+    'deleted_all_personal_tasks': '{count} tâche(s) personnelle(s) supprimée(s).',
+    'deleted_tasks_by_time': '{count} tâche(s) correspondant à ce temps supprimée(s).',
+    'task_deleted': 'Supprimée : {taskName} de votre liste.',
+    'delete_task_error': 'J\'ai rencontré une erreur lors de la suppression de votre tâche. Veuillez réessayer.',
+    
+    // Query Tasks
+    'query_task_prompt': 'Quelles tâches souhaitez-vous voir ? Par exemple, dites "tâches pour aujourd\'hui" ou "tâches haute priorité".',
+    'no_tasks_matching': 'Vous n\'avez pas de tâches correspondant à ces critères.',
+    'task_due': ', due {date}',
+    'task_due_time': ', due {date} à {time}',
+    'high_priority': ' (haute priorité)',
+    'tasks_count': 'Vous avez {count} tâche(s) : {list}.',
+    'tasks_count_many': 'Vous avez {count} tâche(s). Voici les 10 premières : {list}.',
+    'query_task_error': 'J\'ai rencontré une erreur lors de la récupération de vos tâches. Veuillez réessayer.',
+    
+    // Help & Unhandled
+    'help': 'Je peux vous aider à gérer vos tâches dans Notion. Vous pouvez ajouter des tâches, interroger vos tâches, mettre à jour les tâches ou les supprimer. Par exemple, dites "ajouter terminer le rapport demain à 17 heures" ou "quelles sont mes tâches pour aujourd\'hui". Que souhaitez-vous faire ?',
+    'unhandled': 'Je ne suis pas sûr de comment aider avec cela. Je peux vous aider à gérer vos tâches dans Notion. Vous pouvez ajouter une tâche, interroger vos tâches, mettre à jour une tâche, supprimer une tâche ou dire "aide" pour en savoir plus. Que souhaitez-vous faire ?',
+    'goodbye': 'Au revoir !',
+    
+    // Errors
+    'error_generic': 'J\'ai rencontré une erreur lors du traitement de votre demande. Veuillez réessayer.',
+    'error_license': 'Votre clé de licence n\'est pas valide. Veuillez contacter le support.',
+    'error_auth': 'Veuillez lier votre compte dans l\'application Alexa pour utiliser cette compétence.',
+    'error_unhandled_intent': 'Je ne suis pas sûr de comment aider avec cela. Vous pouvez ajouter des tâches, lister des tâches, les marquer comme terminées, les mettre à jour ou les supprimer. Que souhaitez-vous faire ?',
+    'error_default': 'Désolé, j\'ai rencontré une erreur. Veuillez réessayer plus tard.',
+    
+    // Common
+    'what_else': 'Que souhaitez-vous faire d\'autre ?',
+    'what_would_you_like': 'Que souhaitez-vous faire ?',
+  },
+  'es-ES': {
+    // Launch & Welcome
+    'welcome': '¡Bienvenido a Voice Planner! Puedo ayudarte a gestionar tus tareas. Puedes agregar tareas, listar tus tareas, marcarlas como completadas, actualizar su estado o eliminarlas. También puedes verificar el estado de tu conexión. ¿Qué te gustaría hacer?',
+    'welcome_reprompt': '¿Qué te gustaría hacer?',
+    'welcome_error': '¡Bienvenido a Voice Planner! He encontrado un problema al conectar con tu cuenta. Por favor, inténtalo de nuevo más tarde.',
+    'welcome_error_simple': 'Bienvenido a Voice Planner. Por favor, inténtalo de nuevo más tarde.',
+    
+    // Notion Connection
+    'notion_required': 'Para usar Voice Planner, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedo ayudarte a gestionar tus tareas en Notion. ¿Te gustaría ayuda para conectar tu cuenta?',
+    'notion_required_reprompt': '¿Te gustaría ayuda para conectar tu cuenta?',
+    'notion_required_simple': 'Por favor, conecta tu cuenta de Notion en la aplicación Alexa.',
+    'notion_required_add': 'Para agregar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes agregar tareas a tu espacio de trabajo de Notion.',
+    'notion_required_update': 'Para actualizar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes actualizar tus tareas.',
+    'notion_required_delete': 'Para eliminar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes eliminar tareas de tu espacio de trabajo de Notion.',
+    'notion_required_query': 'Para ver tus tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedo mostrarte tus tareas desde Notion.',
+    'notion_db_not_found': 'No pude encontrar tu base de datos de Tareas en Notion. Por favor, asegúrate de que la base de datos existe y se llama exactamente "Tasks". Puedes volver a conectar tu cuenta de Notion en la aplicación para configurarla de nuevo.',
+    'notion_db_not_found_simple': 'No pude encontrar tu base de datos de Tareas en Notion. Por favor, asegúrate de que existe e inténtalo de nuevo.',
+    'link_account': 'Por favor, vincula tu cuenta de Notion en la aplicación Alexa para continuar.',
+    
+    // Add Task
+    'add_task_prompt': '¿Qué tarea te gustaría agregar?',
+    'add_task_reprompt': 'Dime la tarea que quieres agregar.',
+    'task_added': 'Agregada: {taskName}',
+    'task_added_high': 'Tarea de alta prioridad agregada: {taskName}',
+    'task_added_low': 'Tarea de baja prioridad agregada: {taskName}',
+    'task_added_due_today': ', vence hoy',
+    'task_added_due_tomorrow': ', vence mañana',
+    'task_added_due_date': ', vence {date}',
+    'task_added_due_time': ' a las {time}',
+    'task_added_work': ' (trabajo)',
+    'add_task_error': 'He encontrado un error al agregar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Update Task
+    'update_task_prompt': '¿Qué tarea te gustaría actualizar?',
+    'update_task_reprompt': 'Dime qué tarea actualizar y qué cambiar.',
+    'task_not_found': 'No pude encontrar "{taskName}" en tus tareas. Por favor, intenta decir el nombre completo de la tarea.',
+    'update_unsure': 'Encontré "{taskName}", pero no estoy seguro de qué te gustaría actualizar. Puedes actualizar el estado, la prioridad o la fecha de vencimiento. Por ejemplo, di "marcar como hecho" o "establecer prioridad alta".',
+    'task_updated': 'Actualizada "{taskName}": {updates}.',
+    'status_done': 'hecho',
+    'status_in_progress': 'en progreso',
+    'status_to_do': 'por hacer',
+    'priority_high': 'alta',
+    'priority_low': 'baja',
+    'priority_normal': 'normal',
+    'due_date_to': 'fecha de vencimiento al {date}',
+    'due_date_to_time': 'fecha de vencimiento al {date} a las {time}',
+    'status_to': 'estado a {status}',
+    'priority_to': 'prioridad a {priority}',
+    'update_task_error': 'He encontrado un error al actualizar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Delete Task
+    'delete_task_prompt': '¿Qué tarea te gustaría eliminar?',
+    'delete_task_reprompt': 'Dime qué tarea eliminar.',
+    'no_completed_tasks': 'No tienes tareas completadas para eliminar.',
+    'no_in_process_tasks': 'No tienes tareas en progreso para eliminar.',
+    'no_to_do_tasks': 'No tienes tareas por hacer para eliminar.',
+    'no_work_tasks': 'No tienes tareas de trabajo para eliminar.',
+    'no_personal_tasks': 'No tienes tareas personales para eliminar.',
+    'no_tasks_found': 'No tienes tareas para eliminar.',
+    'no_tasks_matching_time': 'No tienes tareas que coincidan con esos criterios de tiempo.',
+    'deleted_all_completed': 'Todas las tareas completadas han sido eliminadas.',
+    'deleted_all_in_process': '{count} tarea(s) en progreso eliminada(s).',
+    'deleted_all_to_do': '{count} tarea(s) por hacer eliminada(s).',
+    'deleted_all_tasks': 'Todas las {count} tarea(s) eliminada(s).',
+    'deleted_all_work_tasks': '{count} tarea(s) de trabajo eliminada(s).',
+    'deleted_all_personal_tasks': '{count} tarea(s) personal(es) eliminada(s).',
+    'deleted_tasks_by_time': '{count} tarea(s) que coinciden con ese tiempo eliminada(s).',
+    'task_deleted': 'Eliminada: {taskName} de tu lista.',
+    'delete_task_error': 'He encontrado un error al eliminar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Query Tasks
+    'query_task_prompt': '¿Qué tareas te gustaría ver? Por ejemplo, di "tareas para hoy" o "tareas de alta prioridad".',
+    'no_tasks_matching': 'No tienes tareas que coincidan con esos criterios.',
+    'task_due': ', vence {date}',
+    'task_due_time': ', vence {date} a las {time}',
+    'high_priority': ' (alta prioridad)',
+    'tasks_count': 'Tienes {count} tarea(s): {list}.',
+    'tasks_count_many': 'Tienes {count} tarea(s). Aquí están las primeras 10: {list}.',
+    'query_task_error': 'He encontrado un error al recuperar tus tareas. Por favor, inténtalo de nuevo.',
+    
+    // Help & Unhandled
+    'help': 'Puedo ayudarte a gestionar tus tareas en Notion. Puedes agregar tareas, consultar tus tareas, actualizar tareas o eliminarlas. Por ejemplo, di "agregar terminar el informe mañana a las 5 pm" o "¿cuáles son mis tareas para hoy". ¿Qué te gustaría hacer?',
+    'unhandled': 'No estoy seguro de cómo ayudar con eso. Puedo ayudarte a gestionar tus tareas en Notion. Puedes agregar una tarea, consultar tus tareas, actualizar una tarea, eliminar una tarea o decir "ayuda" para saber más. ¿Qué te gustaría hacer?',
+    'goodbye': '¡Adiós!',
+    
+    // Errors
+    'error_generic': 'He encontrado un error al procesar tu solicitud. Por favor, inténtalo de nuevo.',
+    'error_license': 'Tu clave de licencia no es válida. Por favor, contacta con soporte.',
+    'error_auth': 'Por favor, vincula tu cuenta en la aplicación Alexa para usar esta habilidad.',
+    'error_unhandled_intent': 'No estoy seguro de cómo ayudar con eso. Puedes agregar tareas, listar tareas, marcarlas como completadas, actualizarlas o eliminarlas. ¿Qué te gustaría hacer?',
+    'error_default': 'Lo siento, he encontrado un error. Por favor, inténtalo de nuevo más tarde.',
+    
+    // Common
+    'what_else': '¿Qué más te gustaría hacer?',
+    'what_would_you_like': '¿Qué te gustaría hacer?',
+  },
+  'es-MX': {
+    // Launch & Welcome
+    'welcome': '¡Bienvenido a Voice Planner! Puedo ayudarte a gestionar tus tareas. Puedes agregar tareas, listar tus tareas, marcarlas como completadas, actualizar su estado o eliminarlas. También puedes verificar el estado de tu conexión. ¿Qué te gustaría hacer?',
+    'welcome_reprompt': '¿Qué te gustaría hacer?',
+    'welcome_error': '¡Bienvenido a Voice Planner! He encontrado un problema al conectar con tu cuenta. Por favor, inténtalo de nuevo más tarde.',
+    'welcome_error_simple': 'Bienvenido a Voice Planner. Por favor, inténtalo de nuevo más tarde.',
+    
+    // Notion Connection
+    'notion_required': 'Para usar Voice Planner, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedo ayudarte a gestionar tus tareas en Notion. ¿Te gustaría ayuda para conectar tu cuenta?',
+    'notion_required_reprompt': '¿Te gustaría ayuda para conectar tu cuenta?',
+    'notion_required_simple': 'Por favor, conecta tu cuenta de Notion en la aplicación Alexa.',
+    'notion_required_add': 'Para agregar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes agregar tareas a tu espacio de trabajo de Notion.',
+    'notion_required_update': 'Para actualizar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes actualizar tus tareas.',
+    'notion_required_delete': 'Para eliminar tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedes eliminar tareas de tu espacio de trabajo de Notion.',
+    'notion_required_query': 'Para ver tus tareas, necesitas conectar tu cuenta de Notion. Abre la aplicación Alexa, ve a Habilidades, encuentra Voice Planner y haz clic en Vincular cuenta. Una vez conectado, puedo mostrarte tus tareas desde Notion.',
+    'notion_db_not_found': 'No pude encontrar tu base de datos de Tareas en Notion. Por favor, asegúrate de que la base de datos existe y se llama exactamente "Tasks". Puedes volver a conectar tu cuenta de Notion en la aplicación para configurarla de nuevo.',
+    'notion_db_not_found_simple': 'No pude encontrar tu base de datos de Tareas en Notion. Por favor, asegúrate de que existe e inténtalo de nuevo.',
+    'link_account': 'Por favor, vincula tu cuenta de Notion en la aplicación Alexa para continuar.',
+    
+    // Add Task
+    'add_task_prompt': '¿Qué tarea te gustaría agregar?',
+    'add_task_reprompt': 'Dime la tarea que quieres agregar.',
+    'task_added': 'Agregada: {taskName}',
+    'task_added_high': 'Tarea de alta prioridad agregada: {taskName}',
+    'task_added_low': 'Tarea de baja prioridad agregada: {taskName}',
+    'task_added_due_today': ', vence hoy',
+    'task_added_due_tomorrow': ', vence mañana',
+    'task_added_due_date': ', vence {date}',
+    'task_added_due_time': ' a las {time}',
+    'task_added_work': ' (trabajo)',
+    'add_task_error': 'He encontrado un error al agregar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Update Task
+    'update_task_prompt': '¿Qué tarea te gustaría actualizar?',
+    'update_task_reprompt': 'Dime qué tarea actualizar y qué cambiar.',
+    'task_not_found': 'No pude encontrar "{taskName}" en tus tareas. Por favor, intenta decir el nombre completo de la tarea.',
+    'update_unsure': 'Encontré "{taskName}", pero no estoy seguro de qué te gustaría actualizar. Puedes actualizar el estado, la prioridad o la fecha de vencimiento. Por ejemplo, di "marcar como hecho" o "establecer prioridad alta".',
+    'task_updated': 'Actualizada "{taskName}": {updates}.',
+    'status_done': 'hecho',
+    'status_in_progress': 'en progreso',
+    'status_to_do': 'por hacer',
+    'priority_high': 'alta',
+    'priority_low': 'baja',
+    'priority_normal': 'normal',
+    'due_date_to': 'fecha de vencimiento al {date}',
+    'due_date_to_time': 'fecha de vencimiento al {date} a las {time}',
+    'status_to': 'estado a {status}',
+    'priority_to': 'prioridad a {priority}',
+    'update_task_error': 'He encontrado un error al actualizar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Delete Task
+    'delete_task_prompt': '¿Qué tarea te gustaría eliminar?',
+    'delete_task_reprompt': 'Dime qué tarea eliminar.',
+    'no_completed_tasks': 'No tienes tareas completadas para eliminar.',
+    'no_in_process_tasks': 'No tienes tareas en progreso para eliminar.',
+    'no_to_do_tasks': 'No tienes tareas por hacer para eliminar.',
+    'no_work_tasks': 'No tienes tareas de trabajo para eliminar.',
+    'no_personal_tasks': 'No tienes tareas personales para eliminar.',
+    'no_tasks_found': 'No tienes tareas para eliminar.',
+    'no_tasks_matching_time': 'No tienes tareas que coincidan con esos criterios de tiempo.',
+    'deleted_all_completed': 'Todas las tareas completadas han sido eliminadas.',
+    'deleted_all_in_process': '{count} tarea(s) en progreso eliminada(s).',
+    'deleted_all_to_do': '{count} tarea(s) por hacer eliminada(s).',
+    'deleted_all_tasks': 'Todas las {count} tarea(s) eliminada(s).',
+    'deleted_all_work_tasks': '{count} tarea(s) de trabajo eliminada(s).',
+    'deleted_all_personal_tasks': '{count} tarea(s) personal(es) eliminada(s).',
+    'deleted_tasks_by_time': '{count} tarea(s) que coinciden con ese tiempo eliminada(s).',
+    'task_deleted': 'Eliminada: {taskName} de tu lista.',
+    'delete_task_error': 'He encontrado un error al eliminar tu tarea. Por favor, inténtalo de nuevo.',
+    
+    // Query Tasks
+    'query_task_prompt': '¿Qué tareas te gustaría ver? Por ejemplo, di "tareas para hoy" o "tareas de alta prioridad".',
+    'no_tasks_matching': 'No tienes tareas que coincidan con esos criterios.',
+    'task_due': ', vence {date}',
+    'task_due_time': ', vence {date} a las {time}',
+    'high_priority': ' (alta prioridad)',
+    'tasks_count': 'Tienes {count} tarea(s): {list}.',
+    'tasks_count_many': 'Tienes {count} tarea(s). Aquí están las primeras 10: {list}.',
+    'query_task_error': 'He encontrado un error al recuperar tus tareas. Por favor, inténtalo de nuevo.',
+    
+    // Help & Unhandled
+    'help': 'Puedo ayudarte a gestionar tus tareas en Notion. Puedes agregar tareas, consultar tus tareas, actualizar tareas o eliminarlas. Por ejemplo, di "agregar terminar el informe mañana a las 5 pm" o "¿cuáles son mis tareas para hoy". ¿Qué te gustaría hacer?',
+    'unhandled': 'No estoy seguro de cómo ayudar con eso. Puedo ayudarte a gestionar tus tareas en Notion. Puedes agregar una tarea, consultar tus tareas, actualizar una tarea, eliminar una tarea o decir "ayuda" para saber más. ¿Qué te gustaría hacer?',
+    'goodbye': '¡Adiós!',
+    
+    // Errors
+    'error_generic': 'He encontrado un error al procesar tu solicitud. Por favor, inténtalo de nuevo.',
+    'error_license': 'Tu clave de licencia no es válida. Por favor, contacta con soporte.',
+    'error_auth': 'Por favor, vincula tu cuenta en la aplicación Alexa para usar esta habilidad.',
+    'error_unhandled_intent': 'No estoy seguro de cómo ayudar con eso. Puedes agregar tareas, listar tareas, marcarlas como completadas, actualizarlas o eliminarlas. ¿Qué te gustaría hacer?',
+    'error_default': 'Lo siento, he encontrado un error. Por favor, inténtalo de nuevo más tarde.',
+    
+    // Common
+    'what_else': '¿Qué más te gustaría hacer?',
+    'what_would_you_like': '¿Qué te gustaría hacer?',
   },
 };
 

@@ -38,7 +38,7 @@ export function buildLinkAccountResponse(handlerInput: HandlerInput): Response {
  *   "update my report" -> "report"
  *   "segna finisci rapporto come fatto" -> "finisci rapporto" (Italian)
  */
-export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' = 'en-US'): string {
+export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' | 'fr-FR' | 'es-ES' | 'es-MX' = 'en-US'): string {
   if (!raw) return "";
 
   let text = raw.trim().toLowerCase();
@@ -61,6 +61,22 @@ export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' = 'en-US'):
     /^cambia\s+/,
     /^completa\s+/,
     /^finisci\s+/,
+    // French
+    /^marquer\s+/,
+    /^définir\s+/,
+    /^mettre à jour\s+/,
+    /^modifier\s+/,
+    /^changer\s+/,
+    /^compléter\s+/,
+    /^terminer\s+/,
+    // Spanish
+    /^marcar\s+/,
+    /^establecer\s+/,
+    /^actualizar\s+/,
+    /^modificar\s+/,
+    /^cambiar\s+/,
+    /^completar\s+/,
+    /^terminar\s+/,
   ];
 
   const suffixPatterns = [
@@ -76,6 +92,18 @@ export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' = 'en-US'):
     /\s+a\s+fatto$/,
     /\s+fatto$/,
     /\s+completato$/,
+    // French
+    /\s+comme\s+terminé$/,
+    /\s+comme\s+complété$/,
+    /\s+à\s+terminé$/,
+    /\s+terminé$/,
+    /\s+complété$/,
+    // Spanish
+    /\s+como\s+hecho$/,
+    /\s+como\s+completado$/,
+    /\s+a\s+hecho$/,
+    /\s+hecho$/,
+    /\s+completado$/,
   ];
 
   for (const p of prefixPatterns) {
@@ -88,6 +116,10 @@ export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' = 'en-US'):
   // Remove filler words, but only if they do NOT affect the meaning
   const stopWords = locale === 'it-IT' 
     ? ["il", "la", "lo", "gli", "le", "un", "una", "uno", "di", "a"] // Italian
+    : locale === 'fr-FR'
+    ? ["le", "la", "les", "un", "une", "de", "du", "des", "à"] // French
+    : locale === 'es-ES' || locale === 'es-MX'
+    ? ["el", "la", "los", "las", "un", "una", "de", "del", "a"] // Spanish
     : ["the", "my", "a", "an", "some", "to"]; // English
   text = text
     .split(/\s+/)

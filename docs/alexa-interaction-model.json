@@ -33,6 +33,7 @@
                   ],
                   "samples": [
                       "update {userRequest}",
+                      "update the task {userRequest}",
                       "change {userRequest}",
                       "modify {userRequest}",
                       "move {userRequest}",
@@ -51,6 +52,8 @@
                   ],
                   "samples": [
                       "delete {userRequest}",
+                      "delete the task {userRequest}",
+                      "delete the tasks {userRequest}",
                       "remove {userRequest}",
                       "clear {userRequest}",
                       "erase {userRequest}",
@@ -70,6 +73,7 @@
                       "what do I have for {userRequest}",
                       "what are my tasks for {userRequest}",
                       "show me {userRequest}",
+                      "show my tasks {userRequest}",
                       "read my {userRequest}",
                       "list {userRequest}",
                       "tell me {userRequest}",

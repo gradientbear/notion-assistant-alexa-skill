@@ -1,0 +1,108 @@
+{
+  "interactionModel": {
+      "languageModel": {
+          "invocationName": "voice planner",
+          "intents": [
+              {
+                  "name": "AddTaskIntent",
+                  "slots": [
+                      {
+                          "name": "userRequest",
+                          "type": "AMAZON.SearchQuery"
+                      }
+                  ],
+                  "samples": [
+                      "aggiungi {userRequest}",
+                      "aggiungi attività {userRequest}",
+                      "aggiungi un'attività {userRequest}",
+                      "aggiungi alle cose da fare {userRequest}",
+                      "crea {userRequest}",
+                      "crea un'attività {userRequest}",
+                      "ricordami di {userRequest}",
+                      "imposta un promemoria per {userRequest}",
+                      "programma {userRequest}"
+                  ]
+              },
+              {
+                  "name": "UpdateTaskIntent",
+                  "slots": [
+                      {
+                          "name": "userRequest",
+                          "type": "AMAZON.SearchQuery"
+                      }
+                  ],
+                  "samples": [
+                      "aggiorna {userRequest}",
+                      "aggiorna l'attività {userRequest}",
+                      "cambia {userRequest}",
+                      "modifica {userRequest}",
+                      "sposta {userRequest}",
+                      "imposta {userRequest}",
+                      "ripianifica {userRequest}",
+                      "rinomina {userRequest}"
+                  ]
+              },
+              {
+                  "name": "DeleteTaskIntent",
+                  "slots": [
+                      {
+                          "name": "userRequest",
+                          "type": "AMAZON.SearchQuery"
+                      }
+                  ],
+                  "samples": [
+                      "elimina {userRequest}",
+                      "elimina l'attività {userRequest}",
+                      "elimina le attività {userRequest}",
+                      "rimuovi {userRequest}",
+                      "cancella {userRequest}",
+                      "cancella tutto {userRequest}",
+                      "elimina definitivamente {userRequest}"
+                  ]
+              },
+              {
+                  "name": "QueryTasksIntent",
+                  "slots": [
+                      {
+                          "name": "userRequest",
+                          "type": "AMAZON.SearchQuery"
+                      }
+                  ],
+                  "samples": [
+                      "cosa ho su {userRequest}",
+                      "cosa ho per {userRequest}",
+                      "quali sono le mie attività per {userRequest}",
+                      "mostrami {userRequest}",
+                      "mostrami le mie attività {userRequest}",
+                      "leggi le mie {userRequest}",
+                      "elenca {userRequest}",
+                      "dimmi {userRequest}",
+                      "controlla {userRequest}"
+                  ]
+              },
+              {
+                  "name": "AMAZON.HelpIntent",
+                  "samples": []
+              },
+              {
+                  "name": "AMAZON.CancelIntent",
+                  "samples": []
+              },
+              {
+                  "name": "AMAZON.StopIntent",
+                  "samples": []
+              },
+              {
+                  "name": "AMAZON.FallbackIntent",
+                  "samples": []
+              },
+              {
+                  "name": "AMAZON.NavigateHomeIntent",
+                  "samples": []
+              }
+          ],
+          "types": []
+      }
+  }
+}
+

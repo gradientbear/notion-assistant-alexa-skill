@@ -814,6 +814,123 @@ export async function deleteCompletedTasks(
   return completedTasks.length;
 }
 
+/**
+ * Query tasks with a filter (for conditional deletion)
+ */
+export async function queryTasksWithFilter(
+  client: Client,
+  databaseId: string,
+  filter: any
+): Promise<NotionTask[]> {
+  try {
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+        filter: Object.keys(filter).length > 0 ? filter : undefined,
+      })
+    );
+    return response.results.map(mapPageToTask);
+  } catch (error) {
+    console.error('[queryTasksWithFilter] Error querying tasks:', error);
+    return [];
+  }
+}
+
+/**
+ * Delete all tasks (bulk delete)
+ */
+export async function deleteAllTasks(
+  client: Client,
+  databaseId: string
+): Promise<number> {
+  try {
+    // Get all tasks (no filter)
+    const response = await withRetry(() =>
+      client.databases.query({
+        database_id: databaseId,
+      })
+    );
+    const allTasks = response.results.map(mapPageToTask);
+    
+    if (allTasks.length === 0) {
+      return 0;
+    }
+    
+    const taskIds = allTasks.map(task => task.id);
+    await deleteTasksBatch(client, databaseId, taskIds);
+    return allTasks.length;
+  } catch (error) {
+    console.error('[deleteAllTasks] Error deleting all tasks:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete tasks by status
+ */
+export async function deleteTasksByStatus(
+  client: Client,
+  databaseId: string,
+  status: 'TO DO' | 'IN_PROCESS' | 'DONE'
+): Promise<number> {
+  const normalizedStatus = normalizeStatus(status);
+  const filter = {
+    property: 'Status',
+    select: { equals: normalizedStatus },
+  };
+  
+  const tasks = await queryTasksWithFilter(client, databaseId, filter);
+  if (tasks.length === 0) {
+    return 0;
+  }
+  
+  const taskIds = tasks.map(task => task.id);
+  await deleteTasksBatch(client, databaseId, taskIds);
+  return tasks.length;
+}
+
+/**
+ * Delete tasks by category
+ */
+export async function deleteTasksByCategory(
+  client: Client,
+  databaseId: string,
+  category: 'PERSONAL' | 'WORK'
+): Promise<number> {
+  const normalizedCategory = normalizeCategory(category);
+  const filter = {
+    property: 'Category',
+    select: { equals: normalizedCategory },
+  };
+  
+  const tasks = await queryTasksWithFilter(client, databaseId, filter);
+  if (tasks.length === 0) {
+    return 0;
+  }
+  
+  const taskIds = tasks.map(task => task.id);
+  await deleteTasksBatch(client, databaseId, taskIds);
+  return tasks.length;
+}
+
+/**
+ * Delete tasks by time filter
+ */
+export async function deleteTasksByTimeFilter(
+  client: Client,
+  databaseId: string,
+  filter: any
+): Promise<number> {
+  const tasks = await queryTasksWithFilter(client, databaseId, filter);
+  if (tasks.length === 0) {
+    return 0;
+  }
+  
+  const taskIds = tasks.map(task => task.id);
+  await deleteTasksBatch(client, databaseId, taskIds);
+  return tasks.length;
+}
+
 
 
 /**

@@ -61,6 +61,135 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
+    // Helper function to activate license (idempotent)
+    async function activateLicense(
+      paymentIntentId: string,
+      userId: string,
+      paymentIntent?: Stripe.PaymentIntent,
+      session?: Stripe.Checkout.Session
+    ): Promise<{ success: boolean; error?: string }> {
+      try {
+        // Check if license already exists and is active (idempotency check)
+        const { data: existingLicense } = await supabase
+          .from('licenses')
+          .select('status')
+          .eq('stripe_payment_intent_id', paymentIntentId)
+          .maybeSingle();
+
+        if (existingLicense && existingLicense.status === 'active') {
+          console.log('[Stripe Webhook] License already active, skipping activation:', paymentIntentId);
+          // Still update user's license_key in case it's missing
+          await supabase
+            .from('users')
+            .update({ license_key: paymentIntentId })
+            .eq('id', userId);
+          return { success: true };
+        }
+
+        // Get user record (with retry for race conditions)
+        let user;
+        let retries = 3;
+        while (retries > 0) {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('id, email')
+            .eq('id', userId)
+            .single();
+
+          if (!userError && userData) {
+            user = userData;
+            break;
+          }
+
+          if (userError && userError.code !== 'PGRST116') {
+            // Not a "not found" error, fail immediately
+            console.error('[Stripe Webhook] Error fetching user:', userError);
+            return { success: false, error: `User fetch error: ${userError.message}` };
+          }
+
+          // User not found - wait and retry (race condition: user might be created soon)
+          console.log(`[Stripe Webhook] User not found, retrying... (${retries} attempts left)`);
+          retries--;
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+          }
+        }
+
+        if (!user) {
+          return { success: false, error: `User ${userId} not found after retries` };
+        }
+
+        // Prepare license data
+        const licenseData: any = {
+          stripe_payment_intent_id: paymentIntentId,
+          license_key: paymentIntentId, // Store payment intent ID as license key for backward compatibility
+          status: 'active',
+          purchase_date: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        // Add payment intent data if available
+        if (paymentIntent) {
+          licenseData.stripe_customer_id = paymentIntent.customer as string || null;
+          licenseData.amount_paid = paymentIntent.amount ? paymentIntent.amount / 100 : null;
+          licenseData.currency = paymentIntent.currency || 'usd';
+        } else if (session) {
+          // Fallback to session data
+          licenseData.stripe_customer_id = session.customer as string || null;
+          licenseData.amount_paid = session.amount_total ? session.amount_total / 100 : null;
+          licenseData.currency = session.currency || 'usd';
+        }
+
+        // Create or update license record (idempotent upsert)
+        const { error: licenseError } = await supabase
+          .from('licenses')
+          .upsert(licenseData, {
+            onConflict: 'stripe_payment_intent_id',
+          });
+
+        if (licenseError) {
+          console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
+          return { success: false, error: `License creation failed: ${licenseError.message}` };
+        }
+
+        // Update user's license_key field (critical - must succeed)
+        const { error: updateUserError } = await supabase
+          .from('users')
+          .update({ license_key: paymentIntentId })
+          .eq('id', userId);
+
+        if (updateUserError) {
+          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
+          // This is critical - if this fails, license validation will fail
+          // Try to rollback license status
+          await supabase
+            .from('licenses')
+            .update({ status: 'inactive' })
+            .eq('stripe_payment_intent_id', paymentIntentId);
+          return { success: false, error: `User update failed: ${updateUserError.message}` };
+        }
+
+        console.log('[Stripe Webhook] License activated successfully:', {
+          payment_intent_id: paymentIntentId,
+          user_id: userId,
+        });
+
+        // Generate opaque Alexa token (non-critical, don't fail if this errors)
+        try {
+          const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
+          await issueAccessToken(userId, ALEXA_CLIENT_ID, 'alexa');
+        } catch (tokenError: any) {
+          console.error('[Stripe Webhook] Error generating token (non-critical):', tokenError);
+          // Don't fail the webhook if token generation fails
+        }
+
+        return { success: true };
+      } catch (error: any) {
+        console.error('[Stripe Webhook] Unexpected error in activateLicense:', error);
+        return { success: false, error: error.message || 'Unknown error' };
+      }
+    }
+
     // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed': {
@@ -71,81 +200,42 @@ export async function POST(request: NextRequest) {
 
         if (!paymentIntentId) {
           console.error('[Stripe Webhook] Missing payment_intent in checkout session');
-          break;
+          // Return error so Stripe retries
+          return NextResponse.json(
+            { error: 'Missing payment_intent' },
+            { status: 400 }
+          );
         }
 
         if (!userId) {
           console.error('[Stripe Webhook] Missing user_id in checkout session metadata');
-          break;
-        }
-
-        // Retrieve payment intent to get full details
-        if (!stripe) {
-          console.error('[Stripe Webhook] Stripe client not available');
-          break;
-        }
-
-        let paymentIntent: Stripe.PaymentIntent;
-        try {
-          paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-        } catch (error: any) {
-          console.error('[Stripe Webhook] Error retrieving payment intent:', error);
-          break;
-        }
-
-        // Get user record
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('id', userId)
-          .single();
-
-        if (userError || !user) {
-          console.error('[Stripe Webhook] User not found:', userId);
-          break;
-        }
-
-        // Create or update license record using payment_intent.id as primary key
-        const { error: licenseError } = await supabase
-          .from('licenses')
-          .upsert({
-            stripe_payment_intent_id: paymentIntentId,
-            license_key: paymentIntentId, // Store payment intent ID as license key for backward compatibility
-            status: 'active',
-            stripe_customer_id: paymentIntent.customer as string || session.customer as string || null,
-            amount_paid: paymentIntent.amount ? paymentIntent.amount / 100 : (session.amount_total ? session.amount_total / 100 : null),
-            currency: paymentIntent.currency || session.currency || 'usd',
-            purchase_date: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'stripe_payment_intent_id',
-          });
-
-        if (licenseError) {
-          console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
-        }
-
-        // Update user's license_key field
-        const { error: updateUserError } = await supabase
-          .from('users')
-          .update({ license_key: paymentIntentId })
-          .eq('id', userId);
-
-        if (updateUserError) {
-          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
-        }
-
-        // Generate opaque Alexa token
-        try {
-          const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
-          await issueAccessToken(
-            userId,
-            ALEXA_CLIENT_ID,
-            'alexa'
+          return NextResponse.json(
+            { error: 'Missing user_id' },
+            { status: 400 }
           );
-        } catch (tokenError: any) {
-          console.error('[Stripe Webhook] Error generating token:', tokenError);
-          // Don't fail the webhook if token generation fails
+        }
+
+        // Try to retrieve payment intent for full details (but don't fail if unavailable)
+        let paymentIntent: Stripe.PaymentIntent | undefined;
+        if (stripe) {
+          try {
+            paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          } catch (error: any) {
+            console.warn('[Stripe Webhook] Could not retrieve payment intent, using session data:', error.message);
+            // Continue with session data only
+          }
+        }
+
+        // Activate license (handles idempotency and race conditions)
+        const result = await activateLicense(paymentIntentId, userId, paymentIntent, session);
+        
+        if (!result.success) {
+          console.error('[Stripe Webhook] Failed to activate license:', result.error);
+          // Return error so Stripe retries
+          return NextResponse.json(
+            { error: result.error || 'Failed to activate license' },
+            { status: 500 }
+          );
         }
 
         break;
@@ -154,66 +244,26 @@ export async function POST(request: NextRequest) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         const userId = paymentIntent.metadata?.user_id;
-        const paymentIntentId = paymentIntent.id; // Use payment intent ID as license key
+        const paymentIntentId = paymentIntent.id;
 
         if (!userId) {
           console.error('[Stripe Webhook] Missing user_id in payment intent metadata');
-          break;
-        }
-
-        // Get user record
-        const { data: user, error: userError } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('id', userId)
-          .single();
-
-        if (userError || !user) {
-          console.error('[Stripe Webhook] User not found:', userId);
-          break;
-        }
-
-        // Create or update license record using payment_intent.id as primary key
-        const { error: licenseError } = await supabase
-          .from('licenses')
-          .upsert({
-            stripe_payment_intent_id: paymentIntentId,
-            license_key: paymentIntentId, // Store payment intent ID as license key for backward compatibility
-            status: 'active',
-            stripe_customer_id: paymentIntent.customer as string || null,
-            amount_paid: paymentIntent.amount ? paymentIntent.amount / 100 : null, // Convert cents to dollars
-            currency: paymentIntent.currency || 'usd',
-            purchase_date: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'stripe_payment_intent_id',
-          });
-
-        if (licenseError) {
-          console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
-        }
-
-        // Update user's license_key field
-        const { error: updateUserError } = await supabase
-          .from('users')
-          .update({ license_key: paymentIntentId })
-          .eq('id', userId);
-
-        if (updateUserError) {
-          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
-        }
-
-        // Generate opaque Alexa token
-        try {
-          const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
-          await issueAccessToken(
-            userId,
-            ALEXA_CLIENT_ID,
-            'alexa'
+          return NextResponse.json(
+            { error: 'Missing user_id' },
+            { status: 400 }
           );
-        } catch (tokenError: any) {
-          console.error('[Stripe Webhook] Error generating token:', tokenError);
-          // Don't fail the webhook if token generation fails
+        }
+
+        // Activate license (handles idempotency and race conditions)
+        const result = await activateLicense(paymentIntentId, userId, paymentIntent);
+        
+        if (!result.success) {
+          console.error('[Stripe Webhook] Failed to activate license:', result.error);
+          // Return error so Stripe retries
+          return NextResponse.json(
+            { error: result.error || 'Failed to activate license' },
+            { status: 500 }
+          );
         }
 
         break;

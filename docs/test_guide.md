@@ -124,204 +124,126 @@ This guide walks you through testing the entire flow from user registration to c
 These simulate natural, messy user requests.
 
 🧪 Basic adds
-
 "add buy milk"
-
 "add pick up dry cleaning tomorrow"
-
 "create a task to call Sarah"
-
 "add take out the trash tonight"
-
 "add schedule dentist appointment"
 
 🧪 Adds with time parsing (chrono-node)
-
 "add pay rent next Tuesday"
-
 "remind me to water the plants every morning"
-
 "create a task to send the invoice at 4 pm"
-
 "add book flight in two weeks"
-
 "schedule gym session for tomorrow morning"
 
 🧪 Adds with category
-
 "add finish presentation to my work list"
-
 "add buy groceries to my personal list"
 
 🧪 Adds with complex phrasing
-
 "set a reminder to check the oven in 20 minutes"
-
 "add prepare report due Friday afternoon"
-
 "create call mom Sunday evening"
-
 "add revise homework before next Monday"
-
 "add finish the code review after lunch"
 
 🧪 Adds with priority
-
 "add urgent task submit tax forms today"
-
 "add high priority update project timeline"
 
 🧪 Messy / natural language
-
 "hey remind me to get a birthday gift for John"
-
 "uh add feed the dog at 7"
-
 "I need to remember to email the bank tomorrow morning"
 
 ✅ UPDATE TASK — Sample Test Sentences (≈ 30)
 🧪 Rename tasks
-
 "rename buy milk to buy almond milk"
-
 "change task call mom to call mom and dad"
-
 "change fix sink to repair kitchen sink"
 
 🧪 Reschedule (date, time, both)
-
 "move dentist appointment to next Friday"
-
 "reschedule pay rent to tomorrow morning"
-
 "change meeting with Steve to 4 pm"
-
 "set house cleaning for Saturday at 2 pm"
-
 "move morning workout to next Monday at 6 am"
 
 🧪 Change status
-
 "mark buy milk as in process"
-
 "set email bank to done"
-
 "set laundry task to to do"
 
 🧪 Change category
-
 "move presentation draft to work category"
-
 "set grocery shopping to personal category"
 
 🧪 Complex update sentences
-
 "update finish taxes move it to Tuesday afternoon"
-
 "change call with doctor move it to tomorrow at noon"
-
 "reschedule submit report from Friday to Monday morning"
 
 ✅ DELETE TASK — Sample Test Sentences (≈ 25)
 🧪 Delete by name
-
 "delete buy milk"
-
 "remove dentist appointment"
-
 "erase task call John"
 
 🧪 Delete by status
-
 "delete all completed tasks"
-
 "clear all done tasks"
-
 "remove in process tasks"
 
 🧪 Delete by time
-
 "delete tasks due today"
-
 "remove overdue tasks"
-
 "clear tasks due tomorrow"
 
 🧪 Delete bulk
-
 "delete everything"
-
 "clear entire list"
-
 "remove all tasks"
 
 🧪 Natural messy phrasing
-
 "ugh delete that task about fixing the sink"
-
 "remove whatever is done already"
 
 ✅ QUERY TASKS — Sample Test Sentences (≈ 35)
 🧪 General queries
-
 "what’s on my todo list"
-
 "read my tasks"
-
 "what do I need to do"
-
 "show all tasks"
 
 🧪 Time-based
-
 "what do I need to do today"
-
 "what are my tasks for tomorrow"
-
 "what tasks are due next week"
-
 "show tasks due after 5 pm"
-
 "what’s scheduled for Sunday morning"
-
 "what’s overdue"
-
 "what do I have this afternoon"
 
 🧪 Status-based
-
 "what tasks are incomplete"
-
 "show done tasks"
-
 "what did I finish today"
-
 "what is in process"
 
 🧪 Category and priority
-
 "show my work tasks"
-
 "read my personal reminders"
-
 "what are my high priority tasks"
 
 🧪 Keyword search
-
 "do I have anything about groceries"
-
 "show tasks related to the bank"
-
 "is there anything about cleaning"
-
 "what tasks mention birthday"
 
 🧪 Messy / complex
-
 "what incomplete tasks do I have for tomorrow"
-
 "show personal tasks due today"
-
 "what work tasks are overdue"
-
 "list my tasks after noon that are not done"

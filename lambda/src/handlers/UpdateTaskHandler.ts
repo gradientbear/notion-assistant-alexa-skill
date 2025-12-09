@@ -64,17 +64,27 @@ export class UpdateTaskHandler implements RequestHandler {
       const parsed = parseTaskFromUserRequest(userRequest, locale);
       const lowerRequest = userRequest.toLowerCase();
       
-      // Extract task name (remove update keywords - English and Italian)
+      // Extract task name (remove update keywords - English, Italian, French, Spanish)
       let taskNameText = userRequest;
       const updateKeywords = [
         // English
         'update', 'change', 'modify', 'set', 'move', 'reschedule', 'rename',
         // Italian
-        'aggiorna', 'modifica', 'cambia', 'imposta', 'sposta', 'ripianifica', 'rinomina'
+        'aggiorna', 'modifica', 'cambia', 'imposta', 'sposta', 'ripianifica', 'rinomina',
+        // French
+        'mettre à jour', 'modifier', 'changer', 'définir', 'déplacer', 'reprogrammer', 'renommer',
+        // Spanish
+        'actualizar', 'modificar', 'cambiar', 'establecer', 'mover', 'reprogramar', 'renombrar'
       ];
       for (const keyword of updateKeywords) {
         taskNameText = taskNameText.replace(new RegExp(`^${keyword}\\s+`, 'i'), '');
       }
+      
+      // Remove "the task:" / "the tasks:" prefix (common in test sentences)
+      taskNameText = taskNameText.replace(/^the\s+task:\s*/i, '');
+      taskNameText = taskNameText.replace(/^the\s+tasks:\s*/i, '');
+      taskNameText = taskNameText.replace(/^task:\s*/i, '');
+      taskNameText = taskNameText.replace(/^tasks:\s*/i, '');
       
       // Clean task name
       const cleanedTaskName = cleanTaskName(taskNameText, locale);
@@ -111,27 +121,39 @@ export class UpdateTaskHandler implements RequestHandler {
         updates.dueDateTime = parsed.dueDateTime;
       }
 
-      // If no updates detected, try to infer from keywords (English and Italian)
+      // If no updates detected, try to infer from keywords (English, Italian, French, Spanish)
       if (Object.keys(updates).length === 0) {
         if (lowerRequest.includes('done') || lowerRequest.includes('complete') || lowerRequest.includes('finish') ||
-            lowerRequest.includes('fatto') || lowerRequest.includes('completato') || lowerRequest.includes('finito')) {
+            lowerRequest.includes('fatto') || lowerRequest.includes('completato') || lowerRequest.includes('finito') ||
+            lowerRequest.includes('terminé') || lowerRequest.includes('complété') || lowerRequest.includes('fini') ||
+            lowerRequest.includes('hecho') || lowerRequest.includes('completado') || lowerRequest.includes('terminado')) {
           updates.status = 'DONE';
         } else if (lowerRequest.includes('in progress') || lowerRequest.includes('working on') ||
-                   lowerRequest.includes('in corso') || lowerRequest.includes('in lavorazione')) {
+                   lowerRequest.includes('in corso') || lowerRequest.includes('in lavorazione') ||
+                   lowerRequest.includes('en cours') || lowerRequest.includes('en train') ||
+                   lowerRequest.includes('en progreso') || lowerRequest.includes('en curso')) {
           updates.status = 'IN_PROCESS';
         } else if (lowerRequest.includes('to do') || lowerRequest.includes('todo') ||
-                   lowerRequest.includes('da fare')) {
+                   lowerRequest.includes('da fare') ||
+                   lowerRequest.includes('à faire') ||
+                   lowerRequest.includes('por hacer')) {
           updates.status = 'TO DO';
         }
         
         if (lowerRequest.includes('high priority') || lowerRequest.includes('urgent') ||
-            lowerRequest.includes('alta priorità') || lowerRequest.includes('urgente')) {
+            lowerRequest.includes('alta priorità') || lowerRequest.includes('urgente') ||
+            lowerRequest.includes('haute priorité') || lowerRequest.includes('urgent') ||
+            lowerRequest.includes('alta prioridad') || lowerRequest.includes('urgente')) {
           updates.priority = 'HIGH';
         } else if (lowerRequest.includes('low priority') || lowerRequest.includes('low') ||
-                   lowerRequest.includes('bassa priorità')) {
+                   lowerRequest.includes('bassa priorità') ||
+                   lowerRequest.includes('basse priorité') ||
+                   lowerRequest.includes('baja prioridad')) {
           updates.priority = 'LOW';
         } else if (lowerRequest.includes('normal priority') || lowerRequest.includes('medium priority') ||
-                   lowerRequest.includes('priorità normale')) {
+                   lowerRequest.includes('priorità normale') ||
+                   lowerRequest.includes('priorité normale') ||
+                   lowerRequest.includes('prioridad normal')) {
           updates.priority = 'NORMAL';
         }
       }

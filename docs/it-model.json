@@ -1,7 +1,7 @@
 {
   "interactionModel": {
     "languageModel": {
-      "invocationName": "pianificatore vocale",
+      "invocationName": "voice planner",
       "intents": [
         {
           "name": "AddTaskIntent",
