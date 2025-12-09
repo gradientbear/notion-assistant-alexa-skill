@@ -1,4 +1,8 @@
 import * as chrono from 'chrono-node';
+// Note: chrono-node handles Italian dates through its default parser
+// We use locale-specific keyword matching for better accuracy
+
+export type Locale = 'en-US' | 'it-IT';
 
 export interface ParsedTask {
   taskName: string;
@@ -18,12 +22,12 @@ export interface QueryFilter {
 /**
  * Clean task name by removing date/time references and command words
  */
-function cleanTaskName(raw: string): string {
+function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
   if (!raw) return '';
   
   let text = raw.trim();
   
-  // Remove common command prefixes
+  // Remove common command prefixes (English and Italian)
   const prefixPatterns = [
     /^add\s+/i,
     /^create\s+/i,
@@ -32,18 +36,32 @@ function cleanTaskName(raw: string): string {
     /^update\s+/i,
     /^change\s+/i,
     /^modify\s+/i,
+    // Italian prefixes
+    /^aggiungi\s+/i,
+    /^crea\s+/i,
+    /^ricordami di\s+/i,
+    /^imposta\s+/i,
+    /^aggiorna\s+/i,
+    /^modifica\s+/i,
+    /^cambia\s+/i,
   ];
   
   for (const pattern of prefixPatterns) {
     text = text.replace(pattern, '');
   }
   
-  // Remove common suffixes
+  // Remove common suffixes (English and Italian)
   const suffixPatterns = [
     /\s+to my tasks?$/i,
     /\s+to my to-do list$/i,
     /\s+as done$/i,
     /\s+as complete$/i,
+    // Italian suffixes
+    /\s+come fatto$/i,
+    /\s+come completato$/i,
+    /\s+a fatto$/i,
+    /\s+fatto$/i,
+    /\s+completato$/i,
   ];
   
   for (const pattern of suffixPatterns) {
@@ -54,11 +72,12 @@ function cleanTaskName(raw: string): string {
 }
 
 /**
- * Extract status from natural language
+ * Extract status from natural language (English and Italian)
  */
-function extractStatus(text: string): 'TO DO' | 'IN_PROCESS' | 'DONE' | undefined {
+function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PROCESS' | 'DONE' | undefined {
   const lower = text.toLowerCase();
   
+  // English keywords
   if (lower.includes('done') || lower.includes('complete') || lower.includes('finished')) {
     return 'DONE';
   }
@@ -69,15 +88,27 @@ function extractStatus(text: string): 'TO DO' | 'IN_PROCESS' | 'DONE' | undefine
     return 'TO DO';
   }
   
+  // Italian keywords
+  if (lower.includes('fatto') || lower.includes('completato') || lower.includes('finito') || lower.includes('terminato')) {
+    return 'DONE';
+  }
+  if (lower.includes('in corso') || lower.includes('in lavorazione') || lower.includes('stai facendo')) {
+    return 'IN_PROCESS';
+  }
+  if (lower.includes('da fare') || lower.includes('todo') || lower.includes('in sospeso')) {
+    return 'TO DO';
+  }
+  
   return undefined;
 }
 
 /**
- * Extract category from natural language
+ * Extract category from natural language (English and Italian)
  */
-function extractCategory(text: string): 'PERSONAL' | 'WORK' | undefined {
+function extractCategory(text: string, locale: Locale = 'en-US'): 'PERSONAL' | 'WORK' | undefined {
   const lower = text.toLowerCase();
   
+  // English keywords
   if (lower.includes('work') || lower.includes('office') || lower.includes('business')) {
     return 'WORK';
   }
@@ -85,15 +116,24 @@ function extractCategory(text: string): 'PERSONAL' | 'WORK' | undefined {
     return 'PERSONAL';
   }
   
+  // Italian keywords
+  if (lower.includes('lavoro') || lower.includes('ufficio') || lower.includes('business')) {
+    return 'WORK';
+  }
+  if (lower.includes('personale') || lower.includes('casa') || lower.includes('privato')) {
+    return 'PERSONAL';
+  }
+  
   return undefined;
 }
 
 /**
- * Extract priority from natural language
+ * Extract priority from natural language (English and Italian)
  */
-function extractPriority(text: string): 'LOW' | 'NORMAL' | 'HIGH' | undefined {
+function extractPriority(text: string, locale: Locale = 'en-US'): 'LOW' | 'NORMAL' | 'HIGH' | undefined {
   const lower = text.toLowerCase();
   
+  // English keywords
   if (lower.includes('high priority') || lower.includes('urgent') || lower.includes('important')) {
     return 'HIGH';
   }
@@ -104,13 +144,24 @@ function extractPriority(text: string): 'LOW' | 'NORMAL' | 'HIGH' | undefined {
     return 'NORMAL';
   }
   
+  // Italian keywords
+  if (lower.includes('alta priorità') || lower.includes('priorità alta') || lower.includes('urgente') || lower.includes('importante')) {
+    return 'HIGH';
+  }
+  if (lower.includes('bassa priorità') || lower.includes('priorità bassa') || lower.includes('bassa')) {
+    return 'LOW';
+  }
+  if (lower.includes('priorità normale') || lower.includes('media priorità') || lower.includes('normale')) {
+    return 'NORMAL';
+  }
+  
   return undefined;
 }
 
 /**
  * Parse task from userRequest slot (AMAZON.SearchQuery)
  */
-export function parseTaskFromUserRequest(userRequest: string): ParsedTask {
+export function parseTaskFromUserRequest(userRequest: string, locale: Locale = 'en-US'): ParsedTask {
   if (!userRequest) {
     return {
       taskName: '',
@@ -121,7 +172,9 @@ export function parseTaskFromUserRequest(userRequest: string): ParsedTask {
     };
   }
   
-  // Use chrono-node to parse dates/times
+  // Use chrono-node to parse dates/times (with locale support)
+  // Note: chrono-node should handle Italian dates even with default parser
+  // but we use locale-specific keyword matching for better accuracy
   const parsedDate = chrono.parseDate(userRequest);
   let dueDateTime: string | null = null;
   let textWithoutDate = userRequest;
@@ -139,13 +192,13 @@ export function parseTaskFromUserRequest(userRequest: string): ParsedTask {
   }
   
   // Extract status, category, priority
-  const status = extractStatus(userRequest) || 'TO DO';
-  const category = extractCategory(userRequest) || 'PERSONAL';
-  const priority = extractPriority(userRequest) || 'NORMAL';
+  const status = extractStatus(userRequest, locale) || 'TO DO';
+  const category = extractCategory(userRequest, locale) || 'PERSONAL';
+  const priority = extractPriority(userRequest, locale) || 'NORMAL';
   
   // Clean task name
   const taskName = textWithoutDate || userRequest;
-  const parsedName = cleanTaskName(taskName);
+  const parsedName = cleanTaskName(taskName, locale);
   
   return {
     taskName,
@@ -160,7 +213,7 @@ export function parseTaskFromUserRequest(userRequest: string): ParsedTask {
 /**
  * Parse query from userRequest slot to build Notion filter
  */
-export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
+export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 'en-US'): QueryFilter {
   if (!userRequest) {
     return {
       type: 'keyword',
@@ -174,6 +227,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
   let keyword: string | undefined;
   
   // Parse date/time queries using chrono-node
+  // Note: chrono-node should handle Italian dates even with default parser
+  // but we use locale-specific keyword matching for better accuracy
   const chronoResults = chrono.parse(userRequest);
   let dateFilter: any = null;
   
@@ -182,8 +237,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
     const parsedDate = result.start.date();
     const now = new Date();
     
-    // Today
-    if (lower.includes('today')) {
+    // Today (English and Italian)
+    if (lower.includes('today') || lower.includes('oggi')) {
       const todayStart = new Date(now);
       todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(now);
@@ -198,8 +253,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       };
       queryType = 'time';
     }
-    // Tomorrow
-    else if (lower.includes('tomorrow')) {
+    // Tomorrow (English and Italian)
+    else if (lower.includes('tomorrow') || lower.includes('domani')) {
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStart = new Date(tomorrow);
@@ -216,8 +271,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       };
       queryType = 'time';
     }
-    // This week
-    else if (lower.includes('this week')) {
+    // This week (English and Italian)
+    else if (lower.includes('this week') || lower.includes('questa settimana')) {
       const weekStart = new Date(now);
       weekStart.setDate(now.getDate() - now.getDay());
       weekStart.setHours(0, 0, 0, 0);
@@ -234,8 +289,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       };
       queryType = 'time';
     }
-    // Next week
-    else if (lower.includes('next week')) {
+    // Next week (English and Italian)
+    else if (lower.includes('next week') || lower.includes('prossima settimana')) {
       const nextWeekStart = new Date(now);
       nextWeekStart.setDate(now.getDate() - now.getDay() + 7);
       nextWeekStart.setHours(0, 0, 0, 0);
@@ -252,8 +307,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       };
       queryType = 'time';
     }
-    // Overdue
-    else if (lower.includes('overdue')) {
+    // Overdue (English and Italian)
+    else if (lower.includes('overdue') || lower.includes('scaduto') || lower.includes('in ritardo')) {
       dateFilter = {
         and: [
           {
@@ -272,9 +327,9 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       };
       queryType = 'time';
     }
-    // Before/After time
-    else if (lower.includes('before') || lower.includes('after')) {
-      const isBefore = lower.includes('before');
+    // Before/After time (English and Italian)
+    else if (lower.includes('before') || lower.includes('after') || lower.includes('prima') || lower.includes('dopo')) {
+      const isBefore = lower.includes('before') || lower.includes('prima');
       const timeMatch = userRequest.match(/(\d{1,2})\s*(pm|am|:?\d{2})?/i);
       
       if (timeMatch && parsedDate) {
@@ -319,8 +374,9 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
     filters.push(dateFilter);
   }
   
-  // Status queries
-  if (lower.includes('to do') || lower.includes('todo') || lower.includes('not done') || lower.includes('incomplete')) {
+  // Status queries (English and Italian)
+  if (lower.includes('to do') || lower.includes('todo') || lower.includes('not done') || lower.includes('incomplete') ||
+      lower.includes('da fare') || lower.includes('in sospeso')) {
     filters.push({
       property: 'Status',
       select: {
@@ -328,7 +384,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       },
     });
     if (queryType === 'keyword') queryType = 'status';
-  } else if (lower.includes('in progress') || lower.includes('working on') || lower.includes('ongoing')) {
+  } else if (lower.includes('in progress') || lower.includes('working on') || lower.includes('ongoing') ||
+             lower.includes('in corso') || lower.includes('in lavorazione')) {
     filters.push({
       property: 'Status',
       select: {
@@ -336,7 +393,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       },
     });
     if (queryType === 'keyword') queryType = 'status';
-  } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished')) {
+  } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished') ||
+             lower.includes('fatto') || lower.includes('completato') || lower.includes('finito')) {
     filters.push({
       property: 'Status',
       select: {
@@ -346,8 +404,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
     if (queryType === 'keyword') queryType = 'status';
   }
   
-  // Category queries
-  if (lower.includes('work') && !lower.includes('homework')) {
+  // Category queries (English and Italian)
+  if ((lower.includes('work') && !lower.includes('homework')) || lower.includes('lavoro') || lower.includes('ufficio')) {
     filters.push({
       property: 'Category',
       select: {
@@ -355,7 +413,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       },
     });
     if (queryType === 'keyword') queryType = 'category';
-  } else if (lower.includes('personal') || lower.includes('home')) {
+  } else if (lower.includes('personal') || lower.includes('home') || 
+             lower.includes('personale') || lower.includes('casa')) {
     filters.push({
       property: 'Category',
       select: {
@@ -365,8 +424,9 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
     if (queryType === 'keyword') queryType = 'category';
   }
   
-  // Priority queries
-  if (lower.includes('high priority') || lower.includes('urgent') || lower.includes('important')) {
+  // Priority queries (English and Italian)
+  if (lower.includes('high priority') || lower.includes('urgent') || lower.includes('important') ||
+      lower.includes('alta priorità') || lower.includes('priorità alta') || lower.includes('urgente')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -374,7 +434,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       },
     });
     if (queryType === 'keyword') queryType = 'priority';
-  } else if (lower.includes('low priority') || lower.includes('low')) {
+  } else if (lower.includes('low priority') || lower.includes('low') ||
+             lower.includes('bassa priorità') || lower.includes('priorità bassa')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -382,7 +443,8 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
       },
     });
     if (queryType === 'keyword') queryType = 'priority';
-  } else if (lower.includes('normal priority') || lower.includes('medium priority')) {
+  } else if (lower.includes('normal priority') || lower.includes('medium priority') ||
+             lower.includes('priorità normale') || lower.includes('media priorità')) {
     filters.push({
       property: 'Priority',
       select: {
@@ -402,8 +464,13 @@ export function parseQueryFromUserRequest(userRequest: string): QueryFilter {
     });
   }
   
-  // Remove query words
-  const queryWords = ['what', 'are', 'my', 'tasks', 'for', 'show', 'me', 'list', 'tell', 'check', 'read', 'do', 'i', 'have', 'about'];
+  // Remove query words (English and Italian)
+  const queryWords = [
+    // English
+    'what', 'are', 'my', 'tasks', 'for', 'show', 'me', 'list', 'tell', 'check', 'read', 'do', 'i', 'have', 'about',
+    // Italian
+    'cosa', 'quali', 'mie', 'attività', 'per', 'mostrami', 'dimmi', 'elenca', 'controlla', 'leggi', 'fai', 'ho', 'di'
+  ];
   const keywordWords = keywordText
     .toLowerCase()
     .split(/\s+/)

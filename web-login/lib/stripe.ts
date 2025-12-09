@@ -3,9 +3,7 @@ import Stripe from 'stripe';
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || '';
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
-if (!stripeSecretKey) {
-  console.warn('[Stripe] STRIPE_SECRET_KEY not set. Stripe features will be disabled.');
-}
+// Stripe will be null if STRIPE_SECRET_KEY is not set
 
 export const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
@@ -17,7 +15,7 @@ export function verifyWebhookSignature(
   signature: string
 ): Stripe.Event | null {
   if (!stripe || !stripeWebhookSecret) {
-    throw new Error('Stripe not configured');
+    throw new Error('Stripe not configured. Please set STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET environment variables.');
   }
 
   try {
@@ -40,7 +38,7 @@ export async function createCheckoutSession(params: {
   metadata?: Record<string, string>;
 }): Promise<Stripe.Checkout.Session | null> {
   if (!stripe) {
-    throw new Error('Stripe not configured');
+    throw new Error('Stripe not configured. Please set STRIPE_SECRET_KEY environment variable.');
   }
 
   try {
@@ -57,6 +55,10 @@ export async function createCheckoutSession(params: {
       cancel_url: params.cancelUrl,
       customer_email: params.customerEmail,
       metadata: params.metadata || {},
+      // Pass metadata to payment intent so it's available in webhook events
+      payment_intent_data: {
+        metadata: params.metadata || {},
+      },
     });
 
     return session;
@@ -71,7 +73,7 @@ export async function createCheckoutSession(params: {
  */
 export async function getPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent | null> {
   if (!stripe) {
-    throw new Error('Stripe not configured');
+    throw new Error('Stripe not configured. Please set STRIPE_SECRET_KEY environment variable.');
   }
 
   try {

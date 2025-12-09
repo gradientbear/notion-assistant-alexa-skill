@@ -19,9 +19,6 @@ export class LicenseValidationInterceptor implements RequestInterceptor {
               const attributes = handlerInput.attributesManager.getSessionAttributes();
               attributes.user = user;
               handlerInput.attributesManager.setSessionAttributes(attributes);
-              console.log('[LicenseValidationInterceptor] User loaded (validation disabled)');
-            } else {
-              console.warn('[LicenseValidationInterceptor] User not found (validation disabled)');
             }
           } catch (error: any) {
             console.error('[LicenseValidationInterceptor] Error loading user (validation disabled):', error?.message);
@@ -65,7 +62,6 @@ export class LicenseValidationInterceptor implements RequestInterceptor {
       const attributes = handlerInput.attributesManager.getSessionAttributes();
       attributes.user = user;
       handlerInput.attributesManager.setSessionAttributes(attributes);
-      console.log('[LicenseValidationInterceptor] License validated successfully');
     } catch (error: any) {
       console.error('[LicenseValidationInterceptor] Error in interceptor:', {
         message: error?.message,

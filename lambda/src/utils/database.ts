@@ -4,18 +4,9 @@ import { User, License } from '../types';
 const supabaseUrl = process.env.SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY || '';
 
-console.log('[Database] Initializing Supabase client:', {
-  hasUrl: !!supabaseUrl,
-  hasKey: !!supabaseKey,
-  urlLength: supabaseUrl.length,
-  keyLength: supabaseKey.length
-});
-
 if (!supabaseUrl || !supabaseKey) {
   const error = new Error('Missing Supabase environment variables');
   console.error('[Database] Error:', error.message);
-  console.error('[Database] SUPABASE_URL:', supabaseUrl ? 'SET' : 'MISSING');
-  console.error('[Database] SUPABASE_SERVICE_KEY:', supabaseKey ? 'SET' : 'MISSING');
   throw error;
 }
 
@@ -26,7 +17,6 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
     schema: 'public',
   },
 });
-console.log('[Database] Supabase client created successfully');
 
 /**
  * Get user by Supabase Auth user ID (OAuth2 flow)
@@ -34,14 +24,7 @@ console.log('[Database] Supabase client created successfully');
  * Note: users.id now matches Supabase Auth user id directly
  */
 export async function getUserByAuthUserId(authUserId: string): Promise<User | null> {
-  console.log('[getUserByAuthUserId] Looking up user with id:', authUserId);
-  console.log('[getUserByAuthUserId] ID type:', typeof authUserId);
-  console.log('[getUserByAuthUserId] ID length:', authUserId.length);
-  console.log('[getUserByAuthUserId] Supabase URL:', supabaseUrl);
-  console.log('[getUserByAuthUserId] Has service key:', !!supabaseKey);
-  
   try {
-    const startTime = Date.now();
     const queryPromise = supabase
       .from('users')
       .select('*')
@@ -50,78 +33,23 @@ export async function getUserByAuthUserId(authUserId: string): Promise<User | nu
 
     const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
       setTimeout(() => {
-        console.warn('[getUserByAuthUserId] Query timeout after 5 seconds');
         resolve({ data: null, error: { code: 'TIMEOUT' } });
       }, 5000); // Increased from 1.5s to 5s for network latency
     });
 
     const result = await Promise.race([queryPromise, timeoutPromise]);
-    const elapsed = Date.now() - startTime;
     const { data, error } = result as any;
-    
-    console.log('[getUserByAuthUserId] Query completed in', elapsed, 'ms');
-    console.log('[getUserByAuthUserId] Query result:', {
-      has_data: !!data,
-      has_error: !!error,
-      error_code: error?.code,
-      error_message: error?.message,
-      error_details: error?.details,
-      error_hint: error?.hint,
-      data_keys: data ? Object.keys(data) : null,
-      data_id: data?.id,
-    });
 
     if (error) {
       if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
         console.error('[getUserByAuthUserId] Supabase error:', error);
-        console.error('[getUserByAuthUserId] Full error object:', JSON.stringify(error, null, 2));
-      } else if (error.code === 'PGRST116') {
-        console.log('[getUserByAuthUserId] No user found (expected for new users)');
       }
       return null;
     }
 
     if (!data) {
-      console.log('[getUserByAuthUserId] No user found with id:', authUserId);
-      // Try direct query to verify user exists and database is accessible
-      console.log('[getUserByAuthUserId] Verifying database connectivity...');
-      try {
-        const { data: allUsers, error: allError } = await supabase
-          .from('users')
-          .select('id, email')
-          .limit(5);
-        console.log('[getUserByAuthUserId] Sample users in DB:', {
-          count: allUsers?.length || 0,
-          sample_ids: allUsers?.map((u: any) => u.id) || [],
-          sample_emails: allUsers?.map((u: any) => u.email) || [],
-          error: allError,
-          error_code: allError?.code,
-          error_message: allError?.message,
-        });
-        
-        // Try exact match query with different method
-        const { data: exactMatch, error: exactError } = await supabase
-          .from('users')
-          .select('id, email')
-          .eq('id', authUserId);
-        console.log('[getUserByAuthUserId] Direct exact match query:', {
-          has_data: !!exactMatch,
-          data_count: exactMatch?.length || 0,
-          data_ids: exactMatch?.map((u: any) => u.id) || [],
-          error: exactError,
-        });
-      } catch (verifyError: any) {
-        console.error('[getUserByAuthUserId] Error verifying database:', verifyError?.message);
-      }
       return null;
     }
-
-    console.log('[getUserByAuthUserId] User found:', {
-      id: data.id,
-      email: data.email,
-      hasNotionToken: !!data.notion_token,
-      notionTokenLength: data.notion_token?.length || 0
-    });
 
     return data as User;
   } catch (err: any) {
@@ -138,19 +66,12 @@ export async function getUserByAuthUserId(authUserId: string): Promise<User | nu
  * Only used for backward compatibility with old users who haven't migrated to OAuth2
  */
 export async function getUserByAmazonId(amazonAccountId: string): Promise<User | null> {
-  console.log('[getUserByAmazonId] Looking up user with amazon_account_id:', amazonAccountId);
-  console.log('[getUserByAmazonId] Supabase URL:', supabaseUrl);
-  console.log('[getUserByAmazonId] Has service key:', !!supabaseKey);
-  
   try {
-    const startTime = Date.now();
-    
     // Try direct REST API call as fallback if Supabase client hangs
     // This bypasses the Supabase JS client which might have connection issues
     const directQuery = async () => {
       try {
         const queryUrl = `${supabaseUrl}/rest/v1/users?amazon_account_id=eq.${encodeURIComponent(amazonAccountId)}&select=*`;
-        console.log('[getUserByAmazonId] Trying direct REST API call...');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2500); // 2.5 second timeout
@@ -191,11 +112,8 @@ export async function getUserByAmazonId(amazonAccountId: string): Promise<User |
     let result: any;
     
     try {
-      console.log('[getUserByAmazonId] Using direct REST API (more reliable in Lambda)...');
       result = await directQuery();
     } catch (directError: any) {
-      console.warn('[getUserByAmazonId] Direct REST API failed, trying Supabase client as fallback:', directError.message);
-      
       // Fallback to Supabase client if direct API fails
       try {
         const queryPromise = supabase
@@ -206,8 +124,6 @@ export async function getUserByAmazonId(amazonAccountId: string): Promise<User |
 
         const timeoutPromise = new Promise<{ data: null; error: { code: string; message: string } }>((resolve) => {
           setTimeout(() => {
-            const elapsed = Date.now() - startTime;
-            console.warn('[getUserByAmazonId] Supabase client query timeout after 2 seconds (elapsed:', elapsed, 'ms)');
             resolve({ data: null, error: { code: 'TIMEOUT', message: 'Query timeout' } });
           }, 2000); // 2 second timeout for fallback
         });
@@ -223,37 +139,20 @@ export async function getUserByAmazonId(amazonAccountId: string): Promise<User |
         throw clientError;
       }
     }
-    const elapsed = Date.now() - startTime;
-    console.log('[getUserByAmazonId] Promise.race resolved in', elapsed, 'ms');
-    console.log('[getUserByAmazonId] Result type:', typeof result);
-    console.log('[getUserByAmazonId] Result keys:', result ? Object.keys(result) : 'null');
     
     const { data, error } = result as any;
-    console.log('[getUserByAmazonId] Extracted data:', !!data, 'error:', error ? { code: error.code, message: error.message } : 'none');
 
     if (error) {
       // Only log non-PGRST116 errors (PGRST116 is "no rows found" which is expected)
       if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
         console.error('[getUserByAmazonId] Supabase error:', JSON.stringify(error, null, 2));
-      } else if (error.code === 'PGRST116') {
-        console.log('[getUserByAmazonId] No user found (expected for new users)');
-      } else if (error.code === 'TIMEOUT') {
-        console.warn('[getUserByAmazonId] Query timed out');
       }
       return null;
     }
 
     if (!data) {
-      console.log('[getUserByAmazonId] No user found with amazon_account_id:', amazonAccountId);
       return null;
     }
-
-    console.log('[getUserByAmazonId] User found:', {
-      id: data.id,
-      email: data.email,
-      hasNotionToken: !!data.notion_token,
-      notionTokenLength: data.notion_token?.length || 0
-    });
 
     return data as User;
   } catch (err: any) {
@@ -347,11 +246,6 @@ export async function updateUserAmazonAccountId(
   userId: string,
   amazonAccountId: string
 ): Promise<void> {
-  console.log('[updateUserAmazonAccountId] Updating amazon_account_id:', {
-    user_id: userId,
-    amazon_account_id: amazonAccountId,
-  });
-
   const { error } = await supabase
     .from('users')
     .update({
@@ -364,19 +258,30 @@ export async function updateUserAmazonAccountId(
     console.error('[updateUserAmazonAccountId] Error:', error);
     throw new Error(`Failed to update Amazon account ID: ${error.message}`);
   }
-
-  console.log('[updateUserAmazonAccountId] Successfully updated amazon_account_id');
 }
 
 export async function validateLicense(licenseKey: string): Promise<boolean> {
+  // licenseKey stores stripe_payment_intent_id for Stripe payments
+  // Query by stripe_payment_intent_id (primary key) for better performance and consistency
   const { data, error } = await supabase
     .from('licenses')
     .select('status')
-    .eq('license_key', licenseKey)
-    .single();
+    .eq('stripe_payment_intent_id', licenseKey)
+    .maybeSingle();
 
+  // Fallback to license_key for backward compatibility with legacy licenses
   if (error || !data) {
-    return false;
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('licenses')
+      .select('status')
+      .eq('license_key', licenseKey)
+      .maybeSingle();
+
+    if (fallbackError || !fallbackData) {
+      return false;
+    }
+
+    return fallbackData.status === 'active';
   }
 
   return data.status === 'active';

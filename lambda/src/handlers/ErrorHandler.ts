@@ -1,5 +1,6 @@
 import { ErrorHandler as AskErrorHandler, HandlerInput } from 'ask-sdk-core';
 import { buildSimpleResponse } from '../utils/alexa';
+import { getTranslation } from '../utils/i18n';
 
 export class ErrorHandler implements AskErrorHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -25,7 +26,7 @@ export class ErrorHandler implements AskErrorHandler {
       console.error('[ErrorHandler] Request envelope error');
       return buildSimpleResponse(
         handlerInput,
-        'I encountered an error processing your request. Please try again.'
+        getTranslation(handlerInput, 'error_generic')
       );
     }
 
@@ -33,7 +34,7 @@ export class ErrorHandler implements AskErrorHandler {
       console.error('[ErrorHandler] License validation error');
       return buildSimpleResponse(
         handlerInput,
-        'Your license key is invalid. Please contact support.'
+        getTranslation(handlerInput, 'error_license')
       );
     }
 
@@ -41,7 +42,7 @@ export class ErrorHandler implements AskErrorHandler {
       console.error('[ErrorHandler] User authentication error');
       return buildSimpleResponse(
         handlerInput,
-        'Please link your account in the Alexa app to use this skill.'
+        getTranslation(handlerInput, 'error_auth')
       );
     }
 
@@ -51,9 +52,7 @@ export class ErrorHandler implements AskErrorHandler {
       console.error('[ErrorHandler] Unhandled intent:', intentName);
       return buildSimpleResponse(
         handlerInput,
-        'I\'m not sure how to help with that. ' +
-        'You can add tasks, list tasks, mark them complete, update them, or delete them. ' +
-        'What would you like to do?'
+        getTranslation(handlerInput, 'error_unhandled_intent')
       );
     }
 
@@ -61,7 +60,7 @@ export class ErrorHandler implements AskErrorHandler {
     console.error('[ErrorHandler] Generic error, returning default message');
     return buildSimpleResponse(
       handlerInput,
-      'Sorry, I encountered an error. Please try again later.'
+      getTranslation(handlerInput, 'error_default')
     );
   }
 }

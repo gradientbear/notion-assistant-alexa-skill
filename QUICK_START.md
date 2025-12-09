@@ -18,7 +18,7 @@ In Supabase SQL Editor, run:
 **Vercel:**
 - `JWT_SECRET` (min 32 chars)
 - `JWT_EXPIRES_IN=3600`
-- `APP_ISS=https://voice-planner-murex.vercel.app`
+- `APP_ISS=https://voice-planner.com`
 - `ALEXA_OAUTH_CLIENT_ID`
 - `ALEXA_OAUTH_CLIENT_SECRET`
 - `ALEXA_REDIRECT_URIS`
@@ -27,7 +27,7 @@ In Supabase SQL Editor, run:
 
 **Lambda:**
 - `JWT_SECRET` (same as Vercel, for backward compatibility with old JWT tokens)
-- `INTROSPECT_URL=https://voice-planner-murex.vercel.app/api/auth/introspect`
+- `INTROSPECT_URL=https://voice-planner.com/api/auth/introspect`
 - `LEGACY_TOKEN_SUPPORT=true` (optional, for migration period)
 
 ## 4. Deploy
@@ -52,8 +52,8 @@ sam deploy
 1. Go to Alexa Developer Console
 2. Build → Account Linking
 3. Set:
-   - Authorization URI: `https://voice-planner-murex.vercel.app/api/oauth/authorize`
-   - Access Token URI: `https://voice-planner-murex.vercel.app/api/oauth/token`
+   - Authorization URI: `https://voice-planner.com/api/oauth/authorize`
+   - Access Token URI: `https://voice-planner.com/api/oauth/token`
    - Client ID/Secret: Your values
 4. Save and Build
 

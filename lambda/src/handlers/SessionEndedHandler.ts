@@ -6,7 +6,6 @@ export class SessionEndedHandler implements RequestHandler {
   }
 
   async handle(handlerInput: HandlerInput) {
-    console.log('Session ended:', handlerInput.requestEnvelope.request);
     return handlerInput.responseBuilder.getResponse();
   }
 }

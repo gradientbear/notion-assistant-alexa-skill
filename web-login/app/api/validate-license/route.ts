@@ -26,11 +26,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate license key
-    const { data: license, error: licenseError } = await supabase
+    // Query by stripe_payment_intent_id (primary key) first for better performance
+    let { data: license, error: licenseError } = await supabase
       .from('licenses')
       .select('status')
-      .eq('license_key', licenseKey)
-      .single();
+      .eq('stripe_payment_intent_id', licenseKey)
+      .maybeSingle();
+
+    // Fallback to license_key for backward compatibility
+    if (licenseError || !license) {
+      const fallbackResult = await supabase
+        .from('licenses')
+        .select('status')
+        .eq('license_key', licenseKey)
+        .maybeSingle();
+      
+      license = fallbackResult.data;
+      licenseError = fallbackResult.error;
+    }
 
     if (licenseError || !license || license.status !== 'active') {
       return NextResponse.json(

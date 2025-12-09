@@ -37,7 +37,6 @@ function AuthPageContent() {
     // Safety timeout - if checking auth takes too long, show the form
     const timeout = setTimeout(() => {
       if (checkingAuth) {
-        console.warn('[AuthPage] Session check timeout, showing auth form');
         setCheckingAuth(false);
       }
     }, 5000); // 5 second timeout
@@ -48,21 +47,17 @@ function AuthPageContent() {
 
   const checkSession = async () => {
     try {
-      console.log('[AuthPage] Checking session...');
-      
       // First, get the session to check if it exists
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       // If no session at all, we're done - show auth form
       if (!session || sessionError) {
-        console.log('[AuthPage] No session found, showing auth form');
         setCheckingAuth(false);
         return;
       }
 
       // Check if session is expired
       if (session.expires_at && session.expires_at < Date.now() / 1000) {
-        console.log('[AuthPage] Session expired, clearing');
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
@@ -73,7 +68,6 @@ function AuthPageContent() {
       
       // If there's an error getting the user, or no user, clear session and stay on auth page
       if (userError || !user) {
-        console.log('[AuthPage] No valid user found, clearing session. Error:', userError?.message);
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
@@ -81,23 +75,13 @@ function AuthPageContent() {
 
       // Double-check: verify the user has an email (basic validation)
       if (!user.email) {
-        console.log('[AuthPage] User has no email, clearing session');
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
       }
 
       // Only redirect if we have a valid user with email
-      console.log('[AuthPage] Valid session found for user:', user.email, '- checking redirect');
       const redirect = searchParams.get('redirect'); // This is already decoded by Next.js
-      
-      console.log('[AuthPage] Redirect check:', {
-        hasRedirect: !!redirect,
-        redirectUrl: redirect,
-        currentPath: window.location.pathname,
-        currentHref: window.location.href,
-        isApiEndpoint: redirect?.includes('/api/'),
-      });
       
       // Prevent redirect loops - if redirect URL is the same as current page, just go to dashboard
       // But always allow redirects to API endpoints (like /api/oauth/authorize) - these are OAuth flows
@@ -121,40 +105,22 @@ function AuthPageContent() {
         // This ensures the token is available even if cookies aren't sent
         // IMPORTANT: Check this FIRST, before sessionStorage check, to allow OAuth flow to complete
         const isOAuthAuthorize = redirect.includes('/api/oauth/authorize');
-        console.log('[AuthPage] OAuth authorize check:', {
-          isOAuthAuthorize,
-          isApiEndpoint,
-          isSameUrl,
-          wouldRedirectToLogin,
-          redirectUrl: redirect,
-        });
         
         if (isOAuthAuthorize && isApiEndpoint && !isSameUrl && !wouldRedirectToLogin) {
-          console.log('[AuthPage] Processing OAuth authorize redirect...');
           const { data: { session } } = await supabase.auth.getSession();
-          console.log('[AuthPage] Session check:', {
-            hasSession: !!session,
-            hasAccessToken: !!session?.access_token,
-          });
           
           if (session?.access_token) {
             const redirectUrl = new URL(redirect);
             // Add session token as query parameter (only for same-origin requests)
             redirectUrl.searchParams.set('_session_token', session.access_token);
-            console.log('[AuthPage] Redirecting to OAuth authorize with session token:', {
-              redirectUrl: redirectUrl.toString(),
-              tokenLength: session.access_token.length,
-            });
             // Clear any previous redirect attempt flag since we have a token
             const redirectKey = `redirect_attempted_${redirect}`;
             if (typeof window !== 'undefined') {
               sessionStorage.removeItem(redirectKey);
-              console.log('[AuthPage] Cleared sessionStorage flag:', redirectKey);
             }
             window.location.href = redirectUrl.toString();
             return;
           } else {
-            console.log('[AuthPage] No session token available, cannot redirect to OAuth authorize');
             router.push('/dashboard');
             return;
           }
@@ -167,7 +133,6 @@ function AuthPageContent() {
           const hasAttempted = typeof window !== 'undefined' ? sessionStorage.getItem(redirectKey) : null;
           
           if (hasAttempted) {
-            console.log('[AuthPage] Redirect already attempted, going to dashboard to prevent loop');
             if (typeof window !== 'undefined') {
               sessionStorage.removeItem(redirectKey); // Clean up
             }
@@ -182,23 +147,15 @@ function AuthPageContent() {
           
           // Always allow API endpoints (OAuth flows) unless it's the exact same URL
           // Use window.location.href for API endpoints to ensure cookies are sent
-          console.log('[AuthPage] Redirecting to API endpoint (full page reload):', redirect);
           window.location.href = redirect;
           return; // Don't continue execution after setting location
         } else if (!isSameUrl && !isSamePath && !wouldRedirectToLogin) {
           // Allow other redirects that aren't loops
-          console.log('[AuthPage] Redirecting to:', redirect);
           router.push(redirect);
         } else {
-          console.log('[AuthPage] Redirecting to dashboard (loop prevention or invalid redirect)', {
-            isSameUrl,
-            isSamePath,
-            wouldRedirectToLogin,
-          });
           router.push('/dashboard');
         }
       } else {
-        console.log('[AuthPage] Redirecting to dashboard (no redirect parameter)');
         router.push('/dashboard');
       }
     } catch (err) {
@@ -264,11 +221,9 @@ function AuthPageContent() {
               if (tokenData.refresh_token) {
                 localStorage.setItem('website_refresh_token', tokenData.refresh_token);
               }
-              console.log('[Login] Website JWT tokens issued and stored');
             }
           }
         } catch (tokenError: any) {
-          console.error('[Login] Error issuing website tokens:', tokenError);
           // Continue anyway - tokens will be issued on next page load
         }
         
@@ -321,7 +276,6 @@ function AuthPageContent() {
           await syncUserToDatabase(data.user.id, email, 'email');
           setMessage('Check your email to verify your account!');
         } catch (syncError: any) {
-          console.error('[Signup] Error syncing user:', syncError);
           // Still show success message, user will be created on email verification
           setMessage('Check your email to verify your account! Your account will be fully activated after verification.');
         }
@@ -358,38 +312,9 @@ function AuthPageContent() {
     }
   };
 
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setMessage('');
-    setLoading(true);
-
-    try {
-      if (!validateEmail(email)) {
-        throw new Error('Please enter a valid email address');
-      }
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
-
-      if (error) throw error;
-
-      setMessage('Check your email for the magic link! Click the link to sign in.');
-      setEmail('');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send magic link');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const syncUserToDatabase = async (authUserId: string, email: string, provider: string) => {
     try {
-      console.log('[syncUserToDatabase] Syncing user:', { authUserId, email, provider });
       const response = await fetch('/api/auth/sync-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -398,15 +323,12 @@ function AuthPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('[syncUserToDatabase] Failed to sync user to database:', errorData);
         throw new Error(errorData.error || 'Failed to sync user');
       }
 
       const result = await response.json();
-      console.log('[syncUserToDatabase] User synced successfully:', result);
       return result;
     } catch (err: any) {
-      console.error('[syncUserToDatabase] Error syncing user:', err);
       throw err;
     }
   };
@@ -550,45 +472,6 @@ function AuthPageContent() {
                   isLoading={loading}
                 >
                   Sign In
-                </Button>
-              </form>
-
-              <div className="relative my-4">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-2 bg-white text-gray-500">Or</span>
-                </div>
-              </div>
-
-              <form onSubmit={handleMagicLink} className="space-y-4">
-                <div>
-                  <label htmlFor="magic-email" className="block text-sm font-medium text-gray-700 mb-1">
-                    Sign in with Magic Link (Passwordless)
-                  </label>
-                  <input
-                    id="magic-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    placeholder="your@email.com"
-                    disabled={loading}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition disabled:bg-gray-100"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    We'll send you a link to sign in without a password
-                  </p>
-                </div>
-
-                <Button
-                  type="submit"
-                  variant="outline"
-                  className="w-full"
-                  isLoading={loading}
-                >
-                  Send Magic Link
                 </Button>
               </form>
             </>

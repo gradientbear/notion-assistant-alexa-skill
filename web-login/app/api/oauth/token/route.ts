@@ -19,61 +19,28 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest) {
   try {
-    // Log the full request for debugging
-    console.log('[OAuth Token] Full request:', {
-      url: request.url,
-      method: request.method,
-      contentType: request.headers.get('content-type'),
-      headers: Object.fromEntries(request.headers.entries()),
-    });
-    
-    console.log('[OAuth Token] ✅ Reached body parsing section');
-    
     // Parse request body (form-encoded or JSON)
     let body: any;
     const contentType = request.headers.get('content-type');
     
-    console.log('[OAuth Token] Attempting to parse body, content-type:', contentType);
-    
     try {
       if (contentType?.includes('application/x-www-form-urlencoded')) {
-        console.log('[OAuth Token] Parsing as form-urlencoded...');
-        
         // Try formData first (preferred method)
         try {
           const formData = await request.formData();
           body = Object.fromEntries(formData.entries());
-          console.log('[OAuth Token] Parsed form data via formData():', Object.keys(body));
         } catch (formDataError: any) {
-          console.warn('[OAuth Token] formData() failed, trying text() method:', {
-            error: formDataError.message,
-            error_name: formDataError.name,
-          });
-          
           // Fallback: parse manually from text
           const text = await request.text();
-          console.log('[OAuth Token] Raw body text length:', text.length);
           
           body = {};
           const params = new URLSearchParams(text);
           for (const [key, value] of params.entries()) {
             body[key] = value;
           }
-          console.log('[OAuth Token] Parsed form data via text():', Object.keys(body));
         }
-        
-        console.log('[OAuth Token] Form data values:', {
-          grant_type: body.grant_type,
-          has_code: !!body.code,
-          has_redirect_uri: !!body.redirect_uri,
-          has_client_id: !!body.client_id,
-          has_client_secret: !!body.client_secret,
-          code_preview: body.code ? body.code.substring(0, 10) + '...' : 'missing',
-        });
       } else {
-        console.log('[OAuth Token] Parsing as JSON...');
         body = await request.json();
-        console.log('[OAuth Token] Parsed JSON body:', Object.keys(body));
       }
     } catch (parseError: any) {
       console.error('[OAuth Token] Error parsing request body:', {
@@ -105,17 +72,12 @@ export async function POST(request: NextRequest) {
     
     const authHeader = request.headers.get('authorization');
     if (authHeader?.startsWith('Basic ')) {
-      console.log('[OAuth Token] Found Basic Auth header, extracting credentials...');
       try {
         const base64Credentials = authHeader.substring(6);
         const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
         const [id, secret] = credentials.split(':');
         clientId = id?.trim();
         clientSecret = secret?.trim();
-        console.log('[OAuth Token] Extracted from Basic Auth:', {
-          client_id_preview: clientId ? `${clientId.substring(0, 8)}...` : 'missing',
-          has_client_secret: !!clientSecret,
-        });
       } catch (basicAuthError: any) {
         console.error('[OAuth Token] Error parsing Basic Auth:', {
           error: basicAuthError.message,
@@ -131,30 +93,9 @@ export async function POST(request: NextRequest) {
       clientSecret = body.client_secret?.trim();
     }
 
-    console.log('[OAuth Token] Request body parsed:', {
-      grant_type: grantType,
-      has_code: !!body.code,
-      has_redirect_uri: !!body.redirect_uri,
-      has_client_id: !!clientId,
-      has_client_secret: !!clientSecret,
-      client_id_source: authHeader?.startsWith('Basic ') ? 'Basic Auth header' : 'request body',
-      code_preview: body.code ? body.code.substring(0, 10) + '...' : 'missing',
-    });
-
     // Validate client credentials
     const expectedClientId = process.env.ALEXA_OAUTH_CLIENT_ID?.trim(); // Trim whitespace
     const expectedClientSecret = process.env.ALEXA_OAUTH_CLIENT_SECRET?.trim(); // Trim whitespace
-
-    // Log for debugging (don't log actual secrets in production)
-    console.log('[OAuth Token] Client validation:', {
-      clientIdReceived: clientId ? `${clientId.substring(0, 8)}...` : 'missing',
-      clientIdExpected: expectedClientId ? `${expectedClientId.substring(0, 8)}...` : 'missing',
-      clientSecretReceived: clientSecret ? '***' : 'missing',
-      clientSecretExpected: expectedClientSecret ? '***' : 'missing',
-      clientIdMatch: clientId === expectedClientId,
-      hasClientIdEnv: !!expectedClientId,
-      hasClientSecretEnv: !!expectedClientSecret
-    });
 
     if (!clientId) {
       return NextResponse.json(
@@ -216,13 +157,6 @@ export async function POST(request: NextRequest) {
       }
 
       // Validate and consume authorization code
-      console.log('[OAuth Token] Validating authorization code:', {
-        code_preview: code ? code.substring(0, 10) + '...' : 'missing',
-        client_id: clientId ? clientId.substring(0, 8) + '...' : 'missing',
-        redirect_uri: redirectUri,
-        has_code_verifier: !!codeVerifier,
-      });
-
       let validationResult;
       try {
         validationResult = await validateAuthCode(code, clientId, redirectUri, codeVerifier);
@@ -246,11 +180,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('[OAuth Token] Authorization code validated successfully:', {
-        user_id: validationResult.userId,
-        scope: validationResult.scope,
-      });
-
       // Get user info
       const supabase = createServerClient();
       let { data: user, error: userError } = await supabase
@@ -261,12 +190,6 @@ export async function POST(request: NextRequest) {
 
       // If user doesn't exist, create them (user exists in Supabase Auth but not in users table)
       if (userError || !user) {
-        console.warn('[OAuth Token] User not found in database, attempting to create:', {
-          user_id: validationResult.userId,
-          error_code: userError?.code,
-          error_message: userError?.message,
-        });
-        
         // Try to get email from Supabase Auth
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
         const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -280,7 +203,7 @@ export async function POST(request: NextRequest) {
           // The user should have been created via /auth/callback, but if not, create minimal record
           userEmail = ''; // Will be updated later if needed
         } catch (authError: any) {
-          console.warn('[OAuth Token] Could not get email from Auth:', authError?.message);
+          // Continue with empty email
         }
         
         // Create minimal user record
@@ -301,7 +224,6 @@ export async function POST(request: NextRequest) {
         if (createError) {
           // If creation fails (e.g., duplicate), try to fetch again
           if (createError.code === '23505') {
-            console.log('[OAuth Token] User already exists (race condition), fetching...');
             const { data: fetchedUser } = await supabase
               .from('users')
               .select('*')
@@ -321,10 +243,6 @@ export async function POST(request: NextRequest) {
           }
         } else {
           user = newUser;
-          console.log('[OAuth Token] Created user record:', {
-            user_id: user.id,
-            email: user.email,
-          });
         }
       }
       
@@ -361,13 +279,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      console.log('[OAuth Token] Issued token for user:', {
-        user_id: user.id,
-        email: user.email,
-        has_amazon_account_id: !!user.amazon_account_id,
-        token_preview: tokenResult.access_token.substring(0, 20) + '...',
-        expires_in: tokenResult.expires_in,
-      });
+      // Token issued successfully
 
       return NextResponse.json({
         access_token: tokenResult.access_token,

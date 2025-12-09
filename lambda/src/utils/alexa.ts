@@ -1,5 +1,6 @@
 import { HandlerInput } from 'ask-sdk-core';
 import { Response } from 'ask-sdk-model';
+import { getTranslation } from './i18n';
 
 export function buildResponse(handlerInput: HandlerInput, speechText: string, repromptText?: string): Response {
   const responseBuilder = handlerInput.responseBuilder;
@@ -23,7 +24,7 @@ export function buildSimpleResponse(handlerInput: HandlerInput, speechText: stri
 
 export function buildLinkAccountResponse(handlerInput: HandlerInput): Response {
   return handlerInput.responseBuilder
-    .speak('Please link your Notion account in the Alexa app to continue.')
+    .speak(getTranslation(handlerInput, 'link_account'))
     .withLinkAccountCard()
     .withShouldEndSession(true)
     .getResponse();
@@ -35,8 +36,9 @@ export function buildLinkAccountResponse(handlerInput: HandlerInput): Response {
  *   "mark finish report as done" -> "finish report"
  *   "delete the task" -> "task"
  *   "update my report" -> "report"
+ *   "segna finisci rapporto come fatto" -> "finisci rapporto" (Italian)
  */
-export function cleanTaskName(raw: string): string {
+export function cleanTaskName(raw: string, locale: 'en-US' | 'it-IT' = 'en-US'): string {
   if (!raw) return "";
 
   let text = raw.trim().toLowerCase();
@@ -44,20 +46,36 @@ export function cleanTaskName(raw: string): string {
   // Remove ONLY top-level command wrappers
   // Do NOT remove verbs inside actual task names
   const prefixPatterns = [
+    // English
     /^mark\s+/,
     /^set\s+/,
     /^update\s+/,
     /^change\s+/,
     /^complete\s+/,
     /^finish\s+/,
+    // Italian
+    /^segna\s+/,
+    /^imposta\s+/,
+    /^aggiorna\s+/,
+    /^modifica\s+/,
+    /^cambia\s+/,
+    /^completa\s+/,
+    /^finisci\s+/,
   ];
 
   const suffixPatterns = [
+    // English
     /\s+as\s+done$/,
     /\s+as\s+complete$/,
     /\s+to\s+done$/,
     /\s+done$/,
     /\s+complete$/,
+    // Italian
+    /\s+come\s+fatto$/,
+    /\s+come\s+completato$/,
+    /\s+a\s+fatto$/,
+    /\s+fatto$/,
+    /\s+completato$/,
   ];
 
   for (const p of prefixPatterns) {
@@ -68,7 +86,9 @@ export function cleanTaskName(raw: string): string {
   }
 
   // Remove filler words, but only if they do NOT affect the meaning
-  const stopWords = ["the", "my", "a", "an", "some", "to"];
+  const stopWords = locale === 'it-IT' 
+    ? ["il", "la", "lo", "gli", "le", "un", "una", "uno", "di", "a"] // Italian
+    : ["the", "my", "a", "an", "some", "to"]; // English
   text = text
     .split(/\s+/)
     .filter((w) => !stopWords.includes(w))

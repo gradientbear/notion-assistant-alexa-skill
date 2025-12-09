@@ -2,6 +2,7 @@ import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse } from '../utils/alexa';
 import { findDatabaseByName, addTask } from '../utils/notion';
 import { parseTaskFromUserRequest } from '../utils/parsing';
+import { getTranslation, getLocale } from '../utils/i18n';
 
 export class AddTaskHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -12,39 +13,20 @@ export class AddTaskHandler implements RequestHandler {
     
     const canHandle = isIntentRequest && intentName === 'AddTaskIntent';
     
-    if (isIntentRequest) {
-      console.log('[AddTaskHandler] canHandle check:', {
-        isIntentRequest,
-        intentName,
-        canHandle
-      });
-    }
-    
     return canHandle;
   }
 
   async handle(handlerInput: HandlerInput) {
     try {
-      console.log('[AddTaskHandler] Handler started');
       const attributes = handlerInput.attributesManager.getSessionAttributes();
       const user = attributes.user;
       const notionClient = attributes.notionClient;
 
-      console.log('[AddTaskHandler] Session check:', {
-        hasUser: !!user,
-        hasNotionClient: !!notionClient,
-        userId: user?.id,
-        hasNotionToken: !!user?.notion_token
-      });
-
       if (!user || !notionClient) {
-        console.warn('[AddTaskHandler] Missing user or Notion client');
         return buildResponse(
           handlerInput,
-          'To add tasks, you need to connect your Notion account. ' +
-          'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
-          'Once connected, you can add tasks to your Notion workspace.',
-          'What would you like to do?'
+          getTranslation(handlerInput, 'notion_required_add'),
+          getTranslation(handlerInput, 'what_would_you_like')
         );
       }
 
@@ -54,16 +36,12 @@ export class AddTaskHandler implements RequestHandler {
       // Extract userRequest from AMAZON.SearchQuery slot
       const userRequest = slots.userRequest?.value;
 
-      console.log('[AddTaskHandler] Handler invoked');
-      console.log('[AddTaskHandler] Intent name:', request.intent.name);
-      console.log('[AddTaskHandler] userRequest:', userRequest);
-
       // userRequest is required
       if (!userRequest || userRequest.trim().length === 0) {
         return buildResponse(
           handlerInput,
-          'What task would you like to add?',
-          'Tell me the task you want to add.'
+          getTranslation(handlerInput, 'add_task_prompt'),
+          getTranslation(handlerInput, 'add_task_reprompt')
         );
       }
 
@@ -71,43 +49,22 @@ export class AddTaskHandler implements RequestHandler {
       let tasksDbId = user.tasks_db_id || null;
       
       if (!tasksDbId) {
-        console.log('[AddTaskHandler] tasks_db_id not found in user record, searching by name...');
         tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
-        
-        // If found via search, update user record for future use
-        if (tasksDbId) {
-          console.log('[AddTaskHandler] Found Tasks database via search, consider updating user record');
-        }
-      } else {
-        console.log('[AddTaskHandler] Using stored tasks_db_id:', tasksDbId);
       }
       
       if (!tasksDbId) {
         return buildResponse(
           handlerInput,
-          'I couldn\'t find your Tasks database in Notion. ' +
-          'Please make sure the database exists and is named exactly "Tasks". ' +
-          'You can reconnect your Notion account in the app to set it up again.',
-          'What would you like to do?'
+          getTranslation(handlerInput, 'notion_db_not_found'),
+          getTranslation(handlerInput, 'what_would_you_like')
         );
       }
 
       // Parse task from natural language using parsing utilities
-      const parsed = parseTaskFromUserRequest(userRequest);
-      
-      console.log('[AddTaskHandler] Parsed task:', parsed);
+      const locale = getLocale(handlerInput);
+      const parsed = parseTaskFromUserRequest(userRequest, locale);
 
       // Add task with parsed values
-      console.log('[AddTaskHandler] Adding task to Notion:', {
-        taskName: parsed.taskName,
-        parsedName: parsed.parsedName,
-        priority: parsed.priority,
-        category: parsed.category,
-        dueDateTime: parsed.dueDateTime,
-        status: parsed.status,
-        databaseId: tasksDbId
-      });
-
       let pageId: string;
       try {
         pageId = await addTask(
@@ -120,10 +77,6 @@ export class AddTaskHandler implements RequestHandler {
           parsed.dueDateTime || null,
           parsed.status || 'TO DO'
         );
-        console.log('[AddTaskHandler] Task added successfully to Notion:', {
-          pageId,
-          taskName: parsed.taskName,
-          databaseId: tasksDbId
         });
       } catch (notionError: any) {
         console.error('[AddTaskHandler] Notion API error:', {
@@ -137,12 +90,12 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       // Build confirmation message
-      let confirmation = `Added: ${parsed.parsedName}`;
+      let confirmation = getTranslation(handlerInput, 'task_added', { taskName: parsed.parsedName });
       
       if (parsed.priority === 'HIGH') {
-        confirmation = `Added high priority task: ${parsed.parsedName}`;
+        confirmation = getTranslation(handlerInput, 'task_added_high', { taskName: parsed.parsedName });
       } else if (parsed.priority === 'LOW') {
-        confirmation = `Added low priority task: ${parsed.parsedName}`;
+        confirmation = getTranslation(handlerInput, 'task_added_low', { taskName: parsed.parsedName });
       }
 
       if (parsed.dueDateTime) {
@@ -153,29 +106,30 @@ export class AddTaskHandler implements RequestHandler {
         dueDateOnly.setHours(0, 0, 0, 0);
 
         if (dueDateOnly.getTime() === today.getTime()) {
-          confirmation += ', due today';
+          confirmation += getTranslation(handlerInput, 'task_added_due_today');
         } else if (dueDateOnly.getTime() === today.getTime() + 86400000) {
-          confirmation += ', due tomorrow';
+          confirmation += getTranslation(handlerInput, 'task_added_due_tomorrow');
         } else {
-          confirmation += `, due ${dueDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+          const dateStr = dueDateObj.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+          confirmation += getTranslation(handlerInput, 'task_added_due_date', { date: dateStr });
         }
         
         // Add time if specified
         const hours = dueDateObj.getHours();
         const minutes = dueDateObj.getMinutes();
         if (hours !== 0 || minutes !== 0) {
-          const timeStr = dueDateObj.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          confirmation += ` at ${timeStr}`;
+          const timeStr = dueDateObj.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
+          confirmation += getTranslation(handlerInput, 'task_added_due_time', { time: timeStr });
         }
       }
 
       if (parsed.category === 'WORK') {
-        confirmation += ' (work)';
+        confirmation += getTranslation(handlerInput, 'task_added_work');
       }
 
       confirmation += '.';
 
-      return buildResponse(handlerInput, confirmation, 'What else would you like to do?');
+      return buildResponse(handlerInput, confirmation, getTranslation(handlerInput, 'what_else'));
     } catch (error: any) {
       console.error('[AddTaskHandler] Error adding task:', error);
       console.error('[AddTaskHandler] Error details:', {
@@ -188,8 +142,8 @@ export class AddTaskHandler implements RequestHandler {
       });
       return buildResponse(
         handlerInput,
-        'I encountered an error adding your task. Please try again.',
-        'What would you like to do?'
+        getTranslation(handlerInput, 'add_task_error'),
+        getTranslation(handlerInput, 'what_would_you_like')
       );
     }
   }

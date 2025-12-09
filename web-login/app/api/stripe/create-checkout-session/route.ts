@@ -63,6 +63,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate price ID format (should start with 'price_')
+    if (!priceId.startsWith('price_')) {
+      return NextResponse.json(
+        { 
+          error: 'invalid_request', 
+          error_description: `Invalid Stripe price ID format. Expected format: 'price_...', got: '${priceId.substring(0, 20)}...'` 
+        },
+        { status: 400 }
+      );
+    }
+
     // Create checkout session
     // Note: license_key will be set to payment_intent.id by the webhook
     const session = await createCheckoutSession({

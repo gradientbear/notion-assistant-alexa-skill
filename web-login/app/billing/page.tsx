@@ -41,7 +41,12 @@ export default function BillingPage() {
       // Get Stripe price ID from environment or use default
       const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || '';
       if (!priceId) {
-        throw new Error('Stripe price ID not configured');
+        throw new Error('Stripe price ID not configured. Please set NEXT_PUBLIC_STRIPE_PRICE_ID in your environment variables.');
+      }
+      
+      // Validate price ID format (should start with 'price_')
+      if (!priceId.startsWith('price_')) {
+        throw new Error(`Invalid Stripe price ID format. Expected format: 'price_...', got: '${priceId.substring(0, 10)}...'`);
       }
 
       // Create Stripe checkout session

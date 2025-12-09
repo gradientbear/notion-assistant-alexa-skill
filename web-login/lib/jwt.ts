@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || '';
 const JWT_EXPIRES_IN = parseInt(process.env.JWT_EXPIRES_IN || '3600', 10);
 const WEBSITE_JWT_EXPIRES_IN = parseInt(process.env.WEBSITE_JWT_EXPIRES_IN || '3600', 10); // 1 hour default
-const APP_ISS = process.env.APP_ISS || 'https://voice-planner-murex.vercel.app';
+const APP_ISS = process.env.APP_ISS || 'https://voice-planner.com';
 
 /**
  * Validates that JWT_SECRET is set (for runtime, not build time)

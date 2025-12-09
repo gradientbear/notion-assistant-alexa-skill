@@ -189,7 +189,7 @@ export default function PrivacyPage() {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-gray-700">
                   <strong>Email:</strong> support@notion-data.com<br />
-                  <strong>Website:</strong> https://voice-planner-murex.vercel.app
+                  <strong>Website:</strong> https://voice-planner.com
                 </p>
               </div>
             </section>

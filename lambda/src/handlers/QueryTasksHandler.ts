@@ -4,6 +4,7 @@ import { findDatabaseByName, mapPageToTask } from '../utils/notion';
 import { parseQueryFromUserRequest } from '../utils/parsing';
 import { Client } from '@notionhq/client';
 import { NotionTask } from '../types';
+import { getTranslation, getLocale } from '../utils/i18n';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
@@ -79,9 +80,11 @@ async function queryTasks(
 /**
  * Format task list for speech response
  */
-function formatTaskList(tasks: NotionTask[]): string {
+function formatTaskList(tasks: NotionTask[], handlerInput: HandlerInput): string {
+  const locale = getLocale(handlerInput);
+  
   if (tasks.length === 0) {
-    return 'You have no tasks matching that criteria.';
+    return getTranslation(handlerInput, 'no_tasks_matching');
   }
   
   if (tasks.length === 1) {
@@ -89,18 +92,18 @@ function formatTaskList(tasks: NotionTask[]): string {
     let response = task.parsedName || task.name;
     if (task.dueDateTime) {
       const dueDate = new Date(task.dueDateTime);
-      const dateStr = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const dateStr = dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
       const hours = dueDate.getHours();
       const minutes = dueDate.getMinutes();
       if (hours !== 0 || minutes !== 0) {
-        const timeStr = dueDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        response += `, due ${dateStr} at ${timeStr}`;
+        const timeStr = dueDate.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
+        response += getTranslation(handlerInput, 'task_due_time', { date: dateStr, time: timeStr });
       } else {
-        response += `, due ${dateStr}`;
+        response += getTranslation(handlerInput, 'task_due', { date: dateStr });
       }
     }
     if (task.priority === 'HIGH') {
-      response += ' (high priority)';
+      response += getTranslation(handlerInput, 'high_priority');
     }
     return response;
   }
@@ -111,20 +114,20 @@ function formatTaskList(tasks: NotionTask[]): string {
     let taskStr = `${index + 1}. ${task.parsedName || task.name}`;
     if (task.dueDateTime) {
       const dueDate = new Date(task.dueDateTime);
-      const dateStr = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      taskStr += `, due ${dateStr}`;
+      const dateStr = dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+      taskStr += getTranslation(handlerInput, 'task_due', { date: dateStr });
     }
     if (task.priority === 'HIGH') {
-      taskStr += ' (high priority)';
+      taskStr += getTranslation(handlerInput, 'high_priority');
     }
     return taskStr;
   }).join('. ');
   
   if (tasks.length > 10) {
-    return `You have ${tasks.length} tasks. Here are the first 10: ${taskList}.`;
+    return getTranslation(handlerInput, 'tasks_count_many', { count: tasks.length.toString(), list: taskList });
   }
   
-  return `You have ${tasks.length} tasks: ${taskList}.`;
+  return getTranslation(handlerInput, 'tasks_count', { count: tasks.length.toString(), list: taskList });
 }
 
 export class QueryTasksHandler implements RequestHandler {
@@ -134,38 +137,19 @@ export class QueryTasksHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name
       : null;
     
-    const canHandle = isIntentRequest && intentName === 'QueryTasksIntent';
-    
-    if (isIntentRequest) {
-      console.log('[QueryTasksHandler] canHandle check:', {
-        isIntentRequest,
-        intentName,
-        canHandle
-      });
-    }
-    
-    return canHandle;
+    return isIntentRequest && intentName === 'QueryTasksIntent';
   }
 
   async handle(handlerInput: HandlerInput) {
-    console.log('[QueryTasksHandler] Handler invoked');
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
-    
-    console.log('[QueryTasksHandler] Session check:', {
-      hasUser: !!user,
-      hasNotionClient: !!notionClient,
-      userId: user?.id
-    });
 
     if (!user || !notionClient) {
       return buildResponse(
         handlerInput,
-        'To view your tasks, you need to connect your Notion account. ' +
-        'Open the Alexa app, go to Skills, find Voice Planner, and click Link Account. ' +
-        'Once connected, I can show you your tasks from Notion.',
-        'What would you like to do?'
+        getTranslation(handlerInput, 'notion_required_query'),
+        getTranslation(handlerInput, 'what_would_you_like')
       );
     }
 
@@ -176,13 +160,11 @@ export class QueryTasksHandler implements RequestHandler {
       // Extract userRequest from AMAZON.SearchQuery slot
       const userRequest = slots.userRequest?.value;
 
-      console.log('[QueryTasksHandler] userRequest:', userRequest);
-
       if (!userRequest || userRequest.trim().length === 0) {
         return buildResponse(
           handlerInput,
-          'What tasks would you like to see? For example, say "tasks for today" or "high priority tasks".',
-          'What would you like to do?'
+          getTranslation(handlerInput, 'query_task_prompt'),
+          getTranslation(handlerInput, 'what_would_you_like')
         );
       }
 
@@ -190,28 +172,20 @@ export class QueryTasksHandler implements RequestHandler {
       let tasksDbId = user.tasks_db_id || null;
       
       if (!tasksDbId) {
-        console.log('[QueryTasksHandler] tasks_db_id not found in user record, searching by name...');
         tasksDbId = await findDatabaseByName(notionClient, 'Tasks');
-      } else {
-        console.log('[QueryTasksHandler] Using stored tasks_db_id:', tasksDbId);
       }
       
       if (!tasksDbId) {
         return buildResponse(
           handlerInput,
-          'I couldn\'t find your Tasks database in Notion. Please make sure it exists and try again.',
-          'What would you like to do?'
+          getTranslation(handlerInput, 'notion_db_not_found_simple'),
+          getTranslation(handlerInput, 'what_would_you_like')
         );
       }
 
       // Parse query from userRequest
-      const queryFilter = parseQueryFromUserRequest(userRequest);
-      
-      console.log('[QueryTasksHandler] Parsed query filter:', {
-        type: queryFilter.type,
-        filters: queryFilter.filters,
-        keyword: queryFilter.keyword
-      });
+      const locale = getLocale(handlerInput);
+      const queryFilter = parseQueryFromUserRequest(userRequest, locale);
 
       // Query tasks with filter
       const tasks = await queryTasks(
@@ -221,12 +195,10 @@ export class QueryTasksHandler implements RequestHandler {
         queryFilter.keyword
       );
 
-      console.log('[QueryTasksHandler] Found tasks:', tasks.length);
-
       // Format response
-      const responseText = formatTaskList(tasks);
+      const responseText = formatTaskList(tasks, handlerInput);
 
-      return buildResponse(handlerInput, responseText, 'What else would you like to do?');
+      return buildResponse(handlerInput, responseText, getTranslation(handlerInput, 'what_else'));
     } catch (error: any) {
       console.error('[QueryTasksHandler] Error querying tasks:', error);
       console.error('[QueryTasksHandler] Error details:', {
@@ -237,8 +209,8 @@ export class QueryTasksHandler implements RequestHandler {
       });
       return buildResponse(
         handlerInput,
-        'I encountered an error retrieving your tasks. Please try again.',
-        'What would you like to do?'
+        getTranslation(handlerInput, 'query_task_error'),
+        getTranslation(handlerInput, 'what_would_you_like')
       );
     }
   }

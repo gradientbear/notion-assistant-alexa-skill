@@ -27,10 +27,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   // Check if license check should be skipped (for testing)
-  const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
-                           process.env.NODE_ENV === 'development';
+  // Only skip if explicitly set to 'true' - don't auto-skip in development
+  const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true';
   // License status is determined by has_jwt_token from API (checks opaque tokens)
-  const [licenseActive, setLicenseActive] = useState(skipLicenseCheck); // Default to true if skipping
+  const [licenseActive, setLicenseActive] = useState(false); // Default to false - require actual payment
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,23 +48,15 @@ export default function DashboardPage() {
     // Store website JWT tokens if present (from auth callback)
     if (accessToken) {
       localStorage.setItem('website_access_token', accessToken);
-      console.log('[Dashboard] Stored website access token');
     }
     
     if (refreshToken) {
       // Refresh token is also stored in HTTP-only cookie by auth callback
       // But we can also store it in localStorage as backup (less secure but works)
       localStorage.setItem('website_refresh_token', refreshToken);
-      console.log('[Dashboard] Stored website refresh token');
     }
     
     if (notionConnected || tokenGenerated || accessToken) {
-      console.log('[Dashboard] 🔄 Detected state change, refreshing user data...', {
-        notionConnected,
-        tokenGenerated,
-        hasAccessToken: !!accessToken,
-        timestamp: new Date().toISOString(),
-      });
       // Remove the query parameters first
       window.history.replaceState({}, '', '/dashboard');
       
@@ -73,16 +65,13 @@ export default function DashboardPage() {
       // For Notion connection: OAuth callback already waited 2 seconds, so wait 3 more seconds here (total 5 seconds)
       // For token generation: wait 4 seconds total
       const delay = notionConnected ? 3000 : (tokenGenerated ? 4000 : 500);
-      console.log('[Dashboard] ⏳ Waiting', delay, 'ms before refreshing user data (handling replication lag)...');
       
       setTimeout(() => {
-        console.log('[Dashboard] 🔄 First refresh attempt...');
-        fetchUserData();
+        fetchUserData().then((res) => { console.log('[Timeout1 Result]', res)});
         // Also refresh again after another delay to ensure data is updated
         if (notionConnected || tokenGenerated) {
           setTimeout(() => {
-            console.log('[Dashboard] 🔄 Second refresh attempt...');
-            fetchUserData();
+            fetchUserData().then((res) => { console.log('[Timeout2 Result]', res)});
           }, 3000); // Increased from 2000ms to 3000ms
         }
       }, delay);
@@ -115,10 +104,8 @@ export default function DashboardPage() {
           }),
         });
         
-        if (syncResponse.ok) {
-          console.log('[Dashboard] User synced to database');
-        } else {
-          console.warn('[Dashboard] User sync failed, will rely on /api/users/me fallback');
+        if (!syncResponse.ok) {
+          // User sync failed, will rely on /api/users/me fallback
         }
       }
     } catch (syncError) {
@@ -137,7 +124,7 @@ export default function DashboardPage() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (!authUser) {
         router.push('/');
-        return;
+        return null; // Add return value
       }
 
       // Try to get website JWT token first, fall back to Supabase session
@@ -153,7 +140,7 @@ export default function DashboardPage() {
           return fetchUserData(retryCount + 1);
         }
         router.push('/');
-        return;
+        return null; // Add return value
       }
 
       // Get user from database with retry logic
@@ -179,7 +166,6 @@ export default function DashboardPage() {
 
           // If 404 and we haven't exhausted retries, wait and retry
           if (response.status === 404 && attempt < 2) {
-            console.log(`[Dashboard] User not found, retrying... (attempt ${attempt + 1}/3)`);
             await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1))); // Exponential backoff
             continue;
           }
@@ -202,77 +188,44 @@ export default function DashboardPage() {
       }
 
       const userData: User = await response.json();
-      console.log('[Dashboard] User data loaded:', {
-        id: userData.id,
-        email: userData.email,
-        notion_setup_complete: userData.notion_setup_complete,
-        has_notion_token: !!(userData as any).notion_token,
-        notion_token_length: (userData as any).notion_token?.length || 0,
-        notion_token_preview: (userData as any).notion_token ? (userData as any).notion_token.substring(0, 10) + '...' : 'NULL',
-        has_jwt_token: (userData as any).has_jwt_token,
-        license_key: userData.license_key,
-        amazon_account_id: userData.amazon_account_id,
-      });
-      
-      // Log the full response to see what's actually being returned
-      console.log('[Dashboard] Full API response:', JSON.stringify(userData, null, 2));
       
       // Validate critical fields
       const hasValidNotion = userData.notion_setup_complete && !!(userData as any).notion_token;
       const hasValidLicense = !!(userData as any).has_jwt_token;
-      
-      console.log('[Dashboard] Validation check:', {
-        hasValidNotion,
-        hasValidLicense,
-        notion_setup_complete: userData.notion_setup_complete,
-        notion_token_exists: !!(userData as any).notion_token,
-        has_jwt_token: (userData as any).has_jwt_token,
-      });
-      
-      // Warn if user says Notion is connected but API shows it's not
-      // This indicates duplicate user records issue
-      if (!hasValidNotion && userData.notion_setup_complete === false && !!(userData as any).notion_token === false) {
-        console.warn('[Dashboard] ⚠️ Notion appears disconnected, but user may have connected it to a different user record.');
-        console.warn('[Dashboard] ⚠️ Solution: Reconnect Notion to update the correct user record.');
-      }
       
       setUser(userData);
       setLoading(false); // User data loaded successfully, stop loading
 
       // License status is determined by has_jwt_token (which checks for opaque tokens in oauth_access_tokens table)
       // This is set by /api/users/me endpoint which checks for active opaque tokens
-      const shouldSkipLicense = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
-                                 process.env.NODE_ENV === 'development';
+      const shouldSkipLicense = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true';
       
-      // Set license active based on has_jwt_token (opaque token exists) or test mode
+      // Set license active based on has_jwt_token (opaque token exists) or explicit test mode
       const isLicenseActive = !!(userData as any).has_jwt_token || shouldSkipLicense;
       setLicenseActive(isLicenseActive);
       
-      console.log('[Dashboard] License status:', {
-        has_jwt_token: !!(userData as any).has_jwt_token,
-        shouldSkipLicense,
-        isLicenseActive,
-        note: 'has_jwt_token checks for active opaque tokens in oauth_access_tokens table',
-      });
+      // Return the user data so it can be used in .then() callbacks
+      return userData;
     } catch (error) {
       console.error('Error fetching user data:', error);
       // If it's a 404 and we're coming from OAuth, show a helpful message and retry
       if (error instanceof Error && (error.message.includes('404') || error.message.includes('not found'))) {
         if (retryCount < 2) {
-          console.log('[Dashboard] User not found - might be a race condition, will retry...');
           setError('Setting up your account...');
           // Don't set loading to false, let it retry
           setTimeout(() => {
             fetchUserData(retryCount + 1);
           }, 2000);
-          return;
+          return null; // Add return value
         } else {
           setError('Account setup is taking longer than expected. Please refresh the page.');
           setLoading(false); // Give up retrying
+          return null; // Add return value
         }
       } else {
         setError('Failed to load your account. Please try refreshing the page.');
         setLoading(false); // Stop loading on error
+        return null; // Add return value
       }
     }
   };
@@ -365,9 +318,9 @@ export default function DashboardPage() {
               number={2}
               title="Connect Notion"
               description="Link your Notion workspace to create and manage tasks"
-              status={(user.notion_setup_complete && !!(user as any).notion_token) ? 'complete' : 'current'}
+              status={(user.notion_setup_complete && !!(user as any).notion_token && (user as any).notion_token !== '' && (user as any).notion_token !== null) ? 'complete' : 'current'}
             >
-              {(user.notion_setup_complete && !!(user as any).notion_token) ? (
+              {(user.notion_setup_complete && !!(user as any).notion_token && (user as any).notion_token !== '' && (user as any).notion_token !== null) ? (
                 <div className="space-y-2">
                   <p className="text-sm text-green-600 font-medium">✓ Notion connected</p>
                   <Button 
@@ -418,42 +371,25 @@ export default function DashboardPage() {
             <Step
               number={4}
               title="Link Alexa"
-              description="Connect your Alexa device to start using voice commands"
+              description="Connect your Alexa device to start using voice commands (requires payment verification)"
               status={
                 user.amazon_account_id
                   ? 'complete'
-                  : ((user.notion_setup_complete && !!(user as any).notion_token) && user.has_jwt_token) || skipLicenseCheck
+                  : ((user.notion_setup_complete && !!(user as any).notion_token && (user as any).notion_token !== '' && (user as any).notion_token !== null) && user.has_jwt_token) || skipLicenseCheck
                   ? 'current'
                   : 'pending'
               }
             >
               {(() => {
-                const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true' || 
-                                         process.env.NODE_ENV === 'development';
+                const skipLicenseCheck = process.env.NEXT_PUBLIC_SKIP_LICENSE_CHECK === 'true';
                 // Check if Notion is connected - require BOTH notion_setup_complete AND notion_token
-                // This ensures Notion is actually connected, not just marked as complete
-                const hasNotionConnection = user.notion_setup_complete && !!(user as any).notion_token;
+                // Also verify notion_token is not empty string (could be set to empty string)
+                const hasNotionConnection = user.notion_setup_complete && 
+                                           !!(user as any).notion_token && 
+                                           (user as any).notion_token !== '' &&
+                                           (user as any).notion_token !== null;
                 const hasJwtToken = user.has_jwt_token || skipLicenseCheck;
                 const canLink = hasNotionConnection && hasJwtToken && !user.amazon_account_id;
-                
-                console.log('[Dashboard] Alexa link button check:', {
-                  hasNotionToken: !!user.notion_token,
-                  notionTokenValue: user.notion_token ? 'EXISTS' : 'NULL',
-                  notionSetupComplete: user.notion_setup_complete,
-                  hasNotionConnection,
-                  hasJwtToken,
-                  userHasJwtToken: user.has_jwt_token,
-                  skipLicenseCheck,
-                  canLink,
-                  hasAmazonAccount: !!user.amazon_account_id,
-                  userObject: {
-                    id: user.id,
-                    email: user.email,
-                    notion_setup_complete: user.notion_setup_complete,
-                    has_jwt_token: user.has_jwt_token,
-                    amazon_account_id: user.amazon_account_id,
-                  }
-                });
                 
                 if (canLink) {
                   return (
@@ -490,7 +426,7 @@ export default function DashboardPage() {
                   return (
                     <div className="space-y-2">
                       <p className="text-sm text-gray-500">
-                        Complete license purchase to enable Alexa linking
+                        Payment verification required. Complete license purchase to enable Alexa linking.
                       </p>
                       <Button 
                         onClick={handleBuyLicense}

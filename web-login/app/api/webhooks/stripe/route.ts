@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyWebhookSignature } from '@/lib/stripe';
+import { verifyWebhookSignature, stripe } from '@/lib/stripe';
 import { revokeUserTokens, issueAccessToken } from '@/lib/oauth';
 import { createServerClient } from '@/lib/supabase';
 import Stripe from 'stripe';
@@ -11,8 +11,10 @@ export const dynamic = 'force-dynamic';
  * POST /api/webhooks/stripe
  * 
  * Handles Stripe webhook events:
- * - payment_intent.succeeded: Activate license
+ * - checkout.session.completed: Activate license (for Checkout Sessions)
+ * - payment_intent.succeeded: Activate license (direct payment intents)
  * - charge.refunded: Deactivate license and revoke tokens
+ * - payment_intent.canceled: Deactivate license and revoke tokens
  * - payment_intent.payment_failed: Handle failed payment
  */
 export async function POST(request: NextRequest) {
@@ -41,6 +43,94 @@ export async function POST(request: NextRequest) {
 
     // Handle different event types
     switch (event.type) {
+      case 'checkout.session.completed': {
+        // Handle Checkout Session completion (primary event for Checkout Sessions)
+        const session = event.data.object as Stripe.Checkout.Session;
+        const paymentIntentId = session.payment_intent as string;
+        const userId = session.metadata?.user_id;
+
+        if (!paymentIntentId) {
+          console.error('[Stripe Webhook] Missing payment_intent in checkout session');
+          break;
+        }
+
+        if (!userId) {
+          console.error('[Stripe Webhook] Missing user_id in checkout session metadata');
+          break;
+        }
+
+        // Retrieve payment intent to get full details
+        if (!stripe) {
+          console.error('[Stripe Webhook] Stripe client not available');
+          break;
+        }
+
+        let paymentIntent: Stripe.PaymentIntent;
+        try {
+          paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        } catch (error: any) {
+          console.error('[Stripe Webhook] Error retrieving payment intent:', error);
+          break;
+        }
+
+        // Get user record
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('id, email')
+          .eq('id', userId)
+          .single();
+
+        if (userError || !user) {
+          console.error('[Stripe Webhook] User not found:', userId);
+          break;
+        }
+
+        // Create or update license record using payment_intent.id as primary key
+        const { error: licenseError } = await supabase
+          .from('licenses')
+          .upsert({
+            stripe_payment_intent_id: paymentIntentId,
+            license_key: paymentIntentId, // Store payment intent ID as license key for backward compatibility
+            status: 'active',
+            stripe_customer_id: paymentIntent.customer as string || session.customer as string || null,
+            amount_paid: paymentIntent.amount ? paymentIntent.amount / 100 : (session.amount_total ? session.amount_total / 100 : null),
+            currency: paymentIntent.currency || session.currency || 'usd',
+            purchase_date: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, {
+            onConflict: 'stripe_payment_intent_id',
+          });
+
+        if (licenseError) {
+          console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
+        }
+
+        // Update user's license_key field
+        const { error: updateUserError } = await supabase
+          .from('users')
+          .update({ license_key: paymentIntentId })
+          .eq('id', userId);
+
+        if (updateUserError) {
+          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
+        }
+
+        // Generate opaque Alexa token
+        try {
+          const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
+          await issueAccessToken(
+            userId,
+            ALEXA_CLIENT_ID,
+            'alexa'
+          );
+        } catch (tokenError: any) {
+          console.error('[Stripe Webhook] Error generating token:', tokenError);
+          // Don't fail the webhook if token generation fails
+        }
+
+        break;
+      }
+
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
         const userId = paymentIntent.metadata?.user_id;
@@ -81,8 +171,6 @@ export async function POST(request: NextRequest) {
 
         if (licenseError) {
           console.error('[Stripe Webhook] Error creating/updating license:', licenseError);
-        } else {
-          console.log('[Stripe Webhook] License activated:', paymentIntentId);
         }
 
         // Update user's license_key field
@@ -98,13 +186,11 @@ export async function POST(request: NextRequest) {
         // Generate opaque Alexa token
         try {
           const ALEXA_CLIENT_ID = process.env.ALEXA_OAUTH_CLIENT_ID || 'voice-planner';
-          const tokenResult = await issueAccessToken(
+          await issueAccessToken(
             userId,
             ALEXA_CLIENT_ID,
             'alexa'
           );
-
-          console.log('[Stripe Webhook] Generated opaque token for user:', userId);
         } catch (tokenError: any) {
           console.error('[Stripe Webhook] Error generating token:', tokenError);
           // Don't fail the webhook if token generation fails
@@ -130,15 +216,12 @@ export async function POST(request: NextRequest) {
 
           if (licenseError) {
             console.error('[Stripe Webhook] Error deactivating license:', licenseError);
-          } else {
-            console.log('[Stripe Webhook] License deactivated:', paymentIntentId);
           }
 
           // Revoke all tokens for users with this license
           if (userId) {
             try {
               await revokeUserTokens(userId);
-              console.log('[Stripe Webhook] Tokens revoked for user:', userId);
             } catch (revokeError) {
               console.error('[Stripe Webhook] Error revoking tokens:', revokeError);
             }
@@ -171,14 +254,13 @@ export async function POST(request: NextRequest) {
       }
 
       case 'payment_intent.payment_failed': {
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        console.log('[Stripe Webhook] Payment failed:', paymentIntent.id);
-        // Optionally notify user or log for review
+        // Payment failed - optionally notify user or log for review
         break;
       }
 
       default:
-        console.log('[Stripe Webhook] Unhandled event type:', event.type);
+        // Unhandled event type
+        break;
     }
 
     return NextResponse.json({ received: true });
