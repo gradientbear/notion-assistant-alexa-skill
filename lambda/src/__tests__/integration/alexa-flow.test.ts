@@ -65,17 +65,11 @@ describe('Alexa Skill Integration', () => {
 
   it('should handle LaunchRequest', async () => {
     const request = createLaunchRequest();
+    const context: any = {
+      callbackWaitsForEmptyEventLoop: true,
+    };
     
-    // Use Promise-based invocation (without callback)
-    const response = await new Promise<ResponseEnvelope>((resolve, reject) => {
-      handler(request, {} as any, (error: Error | null, result?: ResponseEnvelope) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result as ResponseEnvelope);
-        }
-      });
-    });
+    const response = (await handler(request, context)) as ResponseEnvelope;
     
     expect(response).toBeDefined();
     expect(response.version).toBe('1.0');
@@ -97,15 +91,11 @@ describe('Alexa Skill Integration', () => {
       },
     };
 
-    const response = await new Promise<ResponseEnvelope>((resolve, reject) => {
-      handler(request, {} as any, (error: Error | null, result?: ResponseEnvelope) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result as ResponseEnvelope);
-        }
-      });
-    });
+    const context: any = {
+      callbackWaitsForEmptyEventLoop: true,
+    };
+    
+    const response = (await handler(request, context)) as ResponseEnvelope;
     
     expect(response).toBeDefined();
     expect(response.version).toBe('1.0');

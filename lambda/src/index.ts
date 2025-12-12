@@ -2,7 +2,11 @@ import { SkillBuilders } from 'ask-sdk-core';
 import { LaunchRequestHandler } from './handlers/LaunchRequestHandler';
 import { QueryTasksHandler } from './handlers/QueryTasksHandler';
 import { AddTaskHandler } from './handlers/AddTaskHandler';
-import { UpdateTaskHandler } from './handlers/UpdateTaskHandler';
+import { UpdateTaskStatusHandler } from './handlers/UpdateTaskStatusHandler';
+import { UpdateTaskPriorityHandler } from './handlers/UpdateTaskPriorityHandler';
+import { UpdateDueDateHandler } from './handlers/UpdateDueDateHandler';
+import { UpdateTaskCategoryHandler } from './handlers/UpdateTaskCategoryHandler';
+import { ReorderTaskHandler } from './handlers/ReorderTaskHandler';
 import { DeleteTaskHandler } from './handlers/DeleteTaskHandler';
 import { UnhandledIntentHandler } from './handlers/UnhandledIntentHandler';
 import { SessionEndedHandler } from './handlers/SessionEndedHandler';
@@ -21,7 +25,11 @@ const skill = SkillBuilders.custom()
     // Task handlers (new interaction model)
     new QueryTasksHandler(),
     new AddTaskHandler(),
-    new UpdateTaskHandler(),
+    new UpdateTaskStatusHandler(),
+    new UpdateTaskPriorityHandler(),
+    new UpdateDueDateHandler(),
+    new UpdateTaskCategoryHandler(),
+    new ReorderTaskHandler(),
     new DeleteTaskHandler(),
     // Utility handlers
     new UnhandledIntentHandler(),

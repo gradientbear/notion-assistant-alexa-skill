@@ -55,6 +55,7 @@ async function getUserWorkspace(client: Client): Promise<string | null> {
 async function createPrivacyPage(client: Client): Promise<string | null> {
   try {
     // First, try to find if Voice Planner page already exists
+    // Search more thoroughly - check both title property and page title
     const searchResponse = await withRetry(() =>
       client.search({
         query: 'Voice Planner',
@@ -62,6 +63,7 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
           property: 'object',
           value: 'page',
         },
+        page_size: 100, // Increase page size to find more results
       })
     );
 
@@ -70,13 +72,14 @@ async function createPrivacyPage(client: Client): Promise<string | null> {
         if (item.object !== 'page') return false;
         // Check title in properties or in title array
         const title = item.properties?.title?.title?.[0]?.plain_text || 
-                     item.title?.[0]?.plain_text;
+                     item.title?.[0]?.plain_text ||
+                     item.properties?.Name?.title?.[0]?.plain_text;
         return title === 'Voice Planner';
       }
     );
 
     if (existingPage) {
-      console.log('Voice Planner page already exists, using existing page');
+      console.log('Voice Planner page already exists, using existing page:', (existingPage as any).id);
       return (existingPage as any).id;
     }
 
@@ -244,6 +247,9 @@ async function createTasksDatabase(
           NotionID: {
             rich_text: {},
           },
+          Deleted: {
+            checkbox: {},
+          }
         },
       })
     );

@@ -1,10 +1,10 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse } from '../utils/alexa';
 import { findDatabaseByName, mapPageToTask } from '../utils/notion';
-import { parseQueryFromUserRequest } from '../utils/parsing';
 import { Client } from '@notionhq/client';
 import { NotionTask } from '../types';
 import { getTranslation, getLocale } from '../utils/i18n';
+import * as chrono from 'chrono-node';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000;
@@ -29,7 +29,39 @@ async function withRetry<T>(
 }
 
 /**
- * Query tasks from Notion database with filters
+ * Helper function to add deleted = false filter to existing filters
+ */
+function addDeletedFilter(existingFilter: any): any {
+  const deletedFilter = {
+    property: 'Deleted',
+    checkbox: { equals: false },
+  };
+
+  if (!existingFilter || Object.keys(existingFilter).length === 0) {
+    return deletedFilter;
+  }
+
+  // If filter already has 'and' or 'or', combine with deleted filter
+  if (existingFilter.and) {
+    return {
+      and: [...existingFilter.and, deletedFilter],
+    };
+  }
+
+  if (existingFilter.or) {
+    return {
+      and: [existingFilter, deletedFilter],
+    };
+  }
+
+  // Single property filter - combine with and
+  return {
+    and: [existingFilter, deletedFilter],
+  };
+}
+
+/**
+ * Query tasks from Notion database with filters (excluding deleted)
  */
 async function queryTasks(
   client: Client,
@@ -39,6 +71,9 @@ async function queryTasks(
 ): Promise<NotionTask[]> {
   try {
     let queryFilter = filter;
+    
+    // Add deleted filter
+    queryFilter = addDeletedFilter(queryFilter);
     
     // If keyword is provided, add text search filter
     if (keyword) {
@@ -137,7 +172,7 @@ export class QueryTasksHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name
       : null;
     
-    return isIntentRequest && intentName === 'QueryTasksIntent';
+    return isIntentRequest && intentName === 'ReadTasksIntent';
   }
 
   async handle(handlerInput: HandlerInput) {
@@ -157,16 +192,11 @@ export class QueryTasksHandler implements RequestHandler {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
       
-      // Extract userRequest from AMAZON.SearchQuery slot
-      const userRequest = slots.userRequest?.value;
-
-      if (!userRequest || userRequest.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'query_task_prompt'),
-          getTranslation(handlerInput, 'what_would_you_like')
-        );
-      }
+      // Extract values from specific slots (all optional)
+      const status = slots.status?.value;
+      const priority = slots.priority?.value;
+      const category = slots.category?.value;
+      const dueDateTime = slots.dueDateTime?.value;
 
       // Try to use stored database ID first, fallback to search
       let tasksDbId = user.tasks_db_id || null;
@@ -183,16 +213,90 @@ export class QueryTasksHandler implements RequestHandler {
         );
       }
 
-      // Parse query from userRequest
-      const locale = getLocale(handlerInput);
-      const queryFilter = parseQueryFromUserRequest(userRequest, locale);
+      // Build Notion filter from slot values
+      const filters: any[] = [];
+      
+      if (status) {
+        const normalizedStatus = status.toUpperCase().replace(/\s+/g, '_');
+        let statusValue = 'TO DO';
+        if (normalizedStatus === 'IN_PROCESS' || normalizedStatus === 'IN_PROGRESS') {
+          statusValue = 'IN_PROCESS';
+        } else if (normalizedStatus === 'DONE' || normalizedStatus === 'COMPLETE') {
+          statusValue = 'DONE';
+        }
+        filters.push({
+          property: 'Status',
+          select: { equals: statusValue },
+        });
+      }
+      
+      if (priority) {
+        const normalizedPriority = priority.toUpperCase() === 'MEDIUM' ? 'NORMAL' : priority.toUpperCase();
+        filters.push({
+          property: 'Priority',
+          select: { equals: normalizedPriority },
+        });
+      }
+      
+      if (category) {
+        const normalizedCategory = category.toUpperCase();
+        filters.push({
+          property: 'Category',
+          select: { equals: normalizedCategory },
+        });
+      }
+      
+      if (dueDateTime) {
+        // Parse date/time from slot using chrono-node
+        const chronoResult = chrono.parseDate(dueDateTime);
+        
+        if (chronoResult) {
+          const dateStart = new Date(chronoResult);
+          dateStart.setHours(0, 0, 0, 0);
+          const dateEnd = new Date(chronoResult);
+          dateEnd.setHours(23, 59, 59, 999);
+          
+          filters.push({
+            property: 'Due Date Time',
+            date: {
+              on_or_after: dateStart.toISOString(),
+              on_or_before: dateEnd.toISOString(),
+            },
+          });
+        } else {
+          // Fallback to native Date parsing
+          const parsedDate = new Date(dueDateTime);
+          if (!isNaN(parsedDate.getTime())) {
+            const dateStart = new Date(parsedDate);
+            dateStart.setHours(0, 0, 0, 0);
+            const dateEnd = new Date(parsedDate);
+            dateEnd.setHours(23, 59, 59, 999);
+            
+            filters.push({
+              property: 'Due Date Time',
+              date: {
+                on_or_after: dateStart.toISOString(),
+                on_or_before: dateEnd.toISOString(),
+              },
+            });
+          }
+        }
+      }
+
+      // Build final filter
+      let finalFilter: any = {};
+      if (filters.length === 1) {
+        finalFilter = filters[0];
+      } else if (filters.length > 1) {
+        finalFilter = { and: filters };
+      }
 
       // Query tasks with filter
       const tasks = await queryTasks(
         notionClient,
         tasksDbId,
-        queryFilter.filters,
-        queryFilter.keyword
+        finalFilter,
+        undefined // No keyword search
       );
 
       // Format response

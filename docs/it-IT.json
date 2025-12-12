@@ -1,108 +1,142 @@
 {
-  "interactionModel": {
+    "interactionModel": {
       "languageModel": {
-          "invocationName": "voice planner",
-          "intents": [
-              {
-                  "name": "AddTaskIntent",
-                  "slots": [
-                      {
-                          "name": "userRequest",
-                          "type": "AMAZON.SearchQuery"
-                      }
-                  ],
-                  "samples": [
-                      "aggiungi {userRequest}",
-                      "aggiungi attività {userRequest}",
-                      "aggiungi un'attività {userRequest}",
-                      "aggiungi alle cose da fare {userRequest}",
-                      "crea {userRequest}",
-                      "crea un'attività {userRequest}",
-                      "ricordami di {userRequest}",
-                      "imposta un promemoria per {userRequest}",
-                      "programma {userRequest}"
-                  ]
-              },
-              {
-                  "name": "UpdateTaskIntent",
-                  "slots": [
-                      {
-                          "name": "userRequest",
-                          "type": "AMAZON.SearchQuery"
-                      }
-                  ],
-                  "samples": [
-                      "aggiorna {userRequest}",
-                      "aggiorna l'attività {userRequest}",
-                      "cambia {userRequest}",
-                      "modifica {userRequest}",
-                      "sposta {userRequest}",
-                      "imposta {userRequest}",
-                      "ripianifica {userRequest}",
-                      "rinomina {userRequest}"
-                  ]
-              },
-              {
-                  "name": "DeleteTaskIntent",
-                  "slots": [
-                      {
-                          "name": "userRequest",
-                          "type": "AMAZON.SearchQuery"
-                      }
-                  ],
-                  "samples": [
-                      "elimina {userRequest}",
-                      "elimina l'attività {userRequest}",
-                      "elimina le attività {userRequest}",
-                      "rimuovi {userRequest}",
-                      "cancella {userRequest}",
-                      "cancella tutto {userRequest}",
-                      "elimina definitivamente {userRequest}"
-                  ]
-              },
-              {
-                  "name": "QueryTasksIntent",
-                  "slots": [
-                      {
-                          "name": "userRequest",
-                          "type": "AMAZON.SearchQuery"
-                      }
-                  ],
-                  "samples": [
-                      "cosa ho su {userRequest}",
-                      "cosa ho per {userRequest}",
-                      "quali sono le mie attività per {userRequest}",
-                      "mostrami {userRequest}",
-                      "mostrami le mie attività {userRequest}",
-                      "leggi le mie {userRequest}",
-                      "elenca {userRequest}",
-                      "dimmi {userRequest}",
-                      "controlla {userRequest}"
-                  ]
-              },
-              {
-                  "name": "AMAZON.HelpIntent",
-                  "samples": []
-              },
-              {
-                  "name": "AMAZON.CancelIntent",
-                  "samples": []
-              },
-              {
-                  "name": "AMAZON.StopIntent",
-                  "samples": []
-              },
-              {
-                  "name": "AMAZON.FallbackIntent",
-                  "samples": []
-              },
-              {
-                  "name": "AMAZON.NavigateHomeIntent",
-                  "samples": []
-              }
-          ],
-          "types": []
+        "invocationName": "pianificatore vocale",
+        "intents": [
+          {
+            "name": "CreateTaskIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "priority", "type": "PRIORITY" },
+              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" },
+              { "name": "category", "type": "CATEGORY" },
+              { "name": "notes", "type": "AMAZON.SearchQuery" }
+            ],
+            "samples": [
+              "aggiungi {taskName}",
+              "crea un'attività {taskName}",
+              "ricordami di {taskName}",
+              "programmare {taskName}",
+              "aggiungi {taskName} per domani",
+              "crea un'attività {taskName} per oggi"
+            ]
+          },
+          {
+            "name": "ReadTasksIntent",
+            "slots": [
+              { "name": "status", "type": "STATUS" },
+              { "name": "priority", "type": "PRIORITY" },
+              { "name": "category", "type": "CATEGORY" },
+              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" }
+            ],
+            "samples": [
+              "mostrami le mie attività",
+              "leggi le mie attività",
+              "mostra le attività {status}",
+              "mostra le attività per {dueDateTime}",
+              "leggi le attività {priority}",
+              "mostra le attività {category}"
+            ]
+          },
+          {
+            "name": "UpdateTaskStatusIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "status", "type": "STATUS" }
+            ],
+            "samples": [
+              "segna {taskName} come {status}",
+              "aggiorna lo stato di {taskName} a {status}",
+              "cambia lo stato di {taskName}"
+            ]
+          },
+          {
+            "name": "UpdateTaskPriorityIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "priority", "type": "PRIORITY" }
+            ],
+            "samples": [
+              "cambia la priorità di {taskName} a {priority}",
+              "imposta {taskName} a priorità {priority}"
+            ]
+          },
+          {
+            "name": "UpdateDueDateIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" }
+            ],
+            "samples": [
+              "cambia la data di scadenza di {taskName}",
+              "aggiorna la data di {taskName}"
+            ]
+          },
+          {
+            "name": "UpdateTaskCategoryIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "category", "type": "CATEGORY" }
+            ],
+            "samples": [
+              "sposta {taskName} in {category}",
+              "cambia categoria di {taskName}"
+            ]
+          },
+          {
+            "name": "DeleteTaskIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" }
+            ],
+            "samples": [
+              "elimina {taskName}",
+              "cancella {taskName}",
+              "rimuovi {taskName}"
+            ]
+          },
+          {
+            "name": "ReorderTaskIntent",
+            "slots": [
+              { "name": "taskName", "type": "AMAZON.SearchQuery" },
+              { "name": "position", "type": "POSITION" }
+            ],
+            "samples": [
+              "sposta {taskName} in prima posizione",
+              "metti {taskName} in cima alla lista",
+              "posiziona {taskName} dopo {position}"
+            ]
+          },
+          { "name": "AMAZON.HelpIntent", "samples": [] },
+          { "name": "AMAZON.CancelIntent", "samples": [] },
+          { "name": "AMAZON.StopIntent", "samples": [] },
+          { "name": "AMAZON.FallbackIntent", "samples": [] }
+        ],
+        "types": [
+          { "name": "PRIORITY", "values": [{ "name": { "value": "BASSA" } }, { "name": { "value": "NORMALE" } }, { "name": { "value": "ALTA" } }] },
+          { "name": "STATUS", "values": [{ "name": { "value": "TO DO" } }, { "name": { "value": "IN CORSO" } }, { "name": { "value": "FATTO" } }] },
+          { "name": "CATEGORY", "values": [{ "name": { "value": "PERSONALE" } }, { "name": { "value": "LAVORO" } }] },
+          { "name": "POSITION", "values": [{ "name": { "value": "prima" } }, { "name": { "value": "seconda" } }, { "name": { "value": "ultima" } }, { "name": { "value": "in cima" } }, { "name": { "value": "in fondo" } }] }
+        ]
+      },
+      "dialog": {
+        "intents": [
+          { "name": "CreateTaskIntent" },
+          { "name": "ReadTasksIntent" },
+          { "name": "UpdateTaskStatusIntent" },
+          { "name": "UpdateTaskPriorityIntent" },
+          { "name": "UpdateDueDateIntent" },
+          { "name": "UpdateTaskCategoryIntent" },
+          { "name": "DeleteTaskIntent" },
+          { "name": "ReorderTaskIntent" }
+        ],
+        "prompts": [
+          { "id": "Elicit.Slot.TaskName", "variations": [{ "type": "PlainText", "value": "Quale attività vuoi aggiungere?" }] },
+          { "id": "Elicit.Slot.Priority", "variations": [{ "type": "PlainText", "value": "Quale priorità vuoi impostare? Bassa, normale o alta?" }] },
+          { "id": "Elicit.Slot.Status", "variations": [{ "type": "PlainText", "value": "Quale stato vuoi impostare?" }] },
+          { "id": "Elicit.Slot.DueDateTime", "variations": [{ "type": "PlainText", "value": "Qual è la data di scadenza?" }] },
+          { "id": "Elicit.Slot.Category", "variations": [{ "type": "PlainText", "value": "È un'attività personale o di lavoro?" }] },
+          { "id": "Elicit.Slot.Position", "variations": [{ "type": "PlainText", "value": "Dove vuoi posizionare l'attività?" }] }
+        ]
       }
-  }
+    }
 }
-

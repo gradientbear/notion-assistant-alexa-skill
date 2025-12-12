@@ -36,17 +36,21 @@ export default function NotionConnectPage() {
       }
 
       // Get user from database to get auth_user_id
+      const session = await supabase.auth.getSession();
       const response = await fetch('/api/users/me', {
         headers: {
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          'Authorization': `Bearer ${(await session).data.session?.access_token}`,
         },
       });
 
       if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Failed to fetch user data:', response.status, errorText);
         throw new Error('Failed to fetch user data');
       }
 
       const userData = await response.json();
+      console.log('User data fetched:', { hasLicenseKey: !!userData.license_key });
 
       // Call Notion OAuth initiation endpoint
       const initiateResponse = await fetch('/api/oauth/initiate', {
@@ -58,20 +62,25 @@ export default function NotionConnectPage() {
           email: authUser.email,
           auth_user_id: authUser.id,
           licenseKey: userData.license_key || '',
-          amazon_account_id: userData.amazon_account_id || null,
+          // Don't pass amazon_account_id for web-initiated OAuth flows
+          // This ensures web users get redirected properly instead of JSON response
+          amazon_account_id: null,
         }),
       });
 
       if (!initiateResponse.ok) {
-        const errorData = await initiateResponse.json();
+        const errorData = await initiateResponse.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('OAuth initiation failed:', initiateResponse.status, errorData);
         throw new Error(errorData.error || 'Failed to initiate Notion connection');
       }
 
       const { authUrl } = await initiateResponse.json();
+      console.log('Redirecting to Notion OAuth:', authUrl);
 
       // Redirect to Notion OAuth
       window.location.href = authUrl;
     } catch (err: any) {
+      console.error('Error in handleConnect:', err);
       setError(err.message || 'An error occurred');
       setLoading(false);
     }
@@ -109,6 +118,7 @@ export default function NotionConnectPage() {
 
           <Button
             onClick={handleConnect}
+            type="button"
             className="w-full"
             isLoading={loading}
           >

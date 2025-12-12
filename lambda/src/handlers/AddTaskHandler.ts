@@ -1,8 +1,8 @@
 import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse } from '../utils/alexa';
 import { findDatabaseByName, addTask } from '../utils/notion';
-import { parseTaskFromUserRequest } from '../utils/parsing';
 import { getTranslation, getLocale } from '../utils/i18n';
+import * as chrono from 'chrono-node';
 
 export class AddTaskHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -11,7 +11,7 @@ export class AddTaskHandler implements RequestHandler {
       ? (handlerInput.requestEnvelope.request as any).intent?.name 
       : null;
     
-    const canHandle = isIntentRequest && intentName === 'AddTaskIntent';
+    const canHandle = isIntentRequest && intentName === 'CreateTaskIntent';
     
     return canHandle;
   }
@@ -33,11 +33,39 @@ export class AddTaskHandler implements RequestHandler {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
       
-      // Extract userRequest from AMAZON.SearchQuery slot
-      const userRequest = slots.userRequest?.value;
+      // Extract values from specific slots
+      const taskName = slots.taskName?.value;
+      const priority = slots.priority?.value;
+      const dueDateTime = slots.dueDateTime?.value;
+      const category = slots.category?.value;
+      const notes = slots.notes?.value;
 
-      // userRequest is required
-      if (!userRequest || userRequest.trim().length === 0) {
+      // Check required slots - dialog management will handle elicitation
+      if (!taskName || taskName.trim().length === 0) {
+        return buildResponse(
+          handlerInput,
+          getTranslation(handlerInput, 'add_task_prompt'),
+          getTranslation(handlerInput, 'add_task_reprompt')
+        );
+      }
+
+      if (!priority || priority.trim().length === 0) {
+        return buildResponse(
+          handlerInput,
+          getTranslation(handlerInput, 'add_task_prompt'),
+          getTranslation(handlerInput, 'add_task_reprompt')
+        );
+      }
+
+      if (!dueDateTime || dueDateTime.trim().length === 0) {
+        return buildResponse(
+          handlerInput,
+          getTranslation(handlerInput, 'add_task_prompt'),
+          getTranslation(handlerInput, 'add_task_reprompt')
+        );
+      }
+
+      if (!category || category.trim().length === 0) {
         return buildResponse(
           handlerInput,
           getTranslation(handlerInput, 'add_task_prompt'),
@@ -60,22 +88,44 @@ export class AddTaskHandler implements RequestHandler {
         );
       }
 
-      // Parse task from natural language using parsing utilities
+      // Parse date/time from dueDateTime slot using chrono-node
       const locale = getLocale(handlerInput);
-      const parsed = parseTaskFromUserRequest(userRequest, locale);
+      let parsedDueDateTime: string | null = null;
+      if (dueDateTime) {
+        // Use chrono-node as primary parser for better natural language support
+        const chronoResult = chrono.parseDate(dueDateTime);
+        if (chronoResult) {
+          parsedDueDateTime = chronoResult.toISOString();
+        } else {
+          // Fallback to native Date if chrono fails
+          const parsedDate = new Date(dueDateTime);
+          if (!isNaN(parsedDate.getTime())) {
+            parsedDueDateTime = parsedDate.toISOString();
+          }
+        }
+      }
 
-      // Add task with parsed values
+      // Normalize priority and category values
+      const normalizedPriority = priority.toUpperCase() === 'MEDIUM' ? 'NORMAL' : 
+                                 (priority.toUpperCase() as 'LOW' | 'NORMAL' | 'HIGH');
+      const normalizedCategory = category.toUpperCase() as 'PERSONAL' | 'WORK';
+      
+      // Clean task name
+      const cleanedTaskName = taskName.trim();
+      const parsedName = cleanedTaskName;
+
+      // Add task with slot values
       let pageId: string;
       try {
         pageId = await addTask(
           notionClient,
           tasksDbId,
-          parsed.taskName,
-          parsed.parsedName,
-          parsed.priority || 'NORMAL',
-          parsed.category || 'PERSONAL',
-          parsed.dueDateTime || null,
-          parsed.status || 'TO DO'
+          cleanedTaskName,
+          parsedName,
+          normalizedPriority,
+          normalizedCategory,
+          parsedDueDateTime,
+          'TO DO'
         );
       } catch (notionError: any) {
         console.error('[AddTaskHandler] Notion API error:', {
@@ -89,16 +139,16 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       // Build confirmation message
-      let confirmation = getTranslation(handlerInput, 'task_added', { taskName: parsed.parsedName });
+      let confirmation = getTranslation(handlerInput, 'task_added', { taskName: parsedName });
       
-      if (parsed.priority === 'HIGH') {
-        confirmation = getTranslation(handlerInput, 'task_added_high', { taskName: parsed.parsedName });
-      } else if (parsed.priority === 'LOW') {
-        confirmation = getTranslation(handlerInput, 'task_added_low', { taskName: parsed.parsedName });
+      if (normalizedPriority === 'HIGH') {
+        confirmation = getTranslation(handlerInput, 'task_added_high', { taskName: parsedName });
+      } else if (normalizedPriority === 'LOW') {
+        confirmation = getTranslation(handlerInput, 'task_added_low', { taskName: parsedName });
       }
 
-      if (parsed.dueDateTime) {
-        const dueDateObj = new Date(parsed.dueDateTime);
+      if (parsedDueDateTime) {
+        const dueDateObj = new Date(parsedDueDateTime);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const dueDateOnly = new Date(dueDateObj);
@@ -122,7 +172,7 @@ export class AddTaskHandler implements RequestHandler {
         }
       }
 
-      if (parsed.category === 'WORK') {
+      if (normalizedCategory === 'WORK') {
         confirmation += getTranslation(handlerInput, 'task_added_work');
       }
 

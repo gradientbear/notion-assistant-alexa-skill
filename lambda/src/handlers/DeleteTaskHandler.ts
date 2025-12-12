@@ -3,17 +3,9 @@ import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import {
   findDatabaseByName,
   getAllTasks,
-  getCompletedTasksForDeletion,
   deleteTask,
-  deleteTasksBatch,
-  deleteCompletedTasks,
-  deleteAllTasks,
-  deleteTasksByStatus,
-  deleteTasksByCategory,
-  deleteTasksByTimeFilter,
 } from '../utils/notion';
 import { getTranslation, getLocale } from '../utils/i18n';
-import { parseDeletionCondition } from '../utils/parsing';
 
 export class DeleteTaskHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -43,10 +35,10 @@ export class DeleteTaskHandler implements RequestHandler {
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
       
-      // Extract userRequest from AMAZON.SearchQuery slot
-      const userRequest = slots.userRequest?.value;
+      // Extract taskName from slot
+      const taskName = slots.taskName?.value;
       
-      if (!userRequest || userRequest.trim().length === 0) {
+      if (!taskName || taskName.trim().length === 0) {
         return buildResponse(
           handlerInput,
           getTranslation(handlerInput, 'delete_task_prompt'),
@@ -65,91 +57,9 @@ export class DeleteTaskHandler implements RequestHandler {
 
       const locale = getLocale(handlerInput);
       
-      // Parse deletion condition to determine what to delete
-      const deletionCondition = parseDeletionCondition(userRequest, locale);
-      
-      // Handle conditional deletion based on type
-      if (deletionCondition.type === 'all') {
-        // Delete all tasks
-        const deletedCount = await deleteAllTasks(notionClient, tasksDbId);
-        
-        if (deletedCount === 0) {
-          return buildResponse(
-            handlerInput,
-            getTranslation(handlerInput, 'no_tasks_found'),
-            getTranslation(handlerInput, 'what_else')
-          );
-        }
-
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'deleted_all_tasks', { count: deletedCount.toString() }),
-          getTranslation(handlerInput, 'what_else')
-        );
-      } else if (deletionCondition.type === 'status' && deletionCondition.status) {
-        // Delete tasks by status
-        const deletedCount = await deleteTasksByStatus(notionClient, tasksDbId, deletionCondition.status);
-        
-        if (deletedCount === 0) {
-          const statusKey = deletionCondition.status === 'DONE' ? 'no_completed_tasks' :
-                           deletionCondition.status === 'IN_PROCESS' ? 'no_in_process_tasks' :
-                           'no_to_do_tasks';
-          return buildResponse(
-            handlerInput,
-            getTranslation(handlerInput, statusKey),
-            getTranslation(handlerInput, 'what_else')
-          );
-        }
-
-        const statusKey = deletionCondition.status === 'DONE' ? 'deleted_all_completed' :
-                         deletionCondition.status === 'IN_PROCESS' ? 'deleted_all_in_process' :
-                         'deleted_all_to_do';
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, statusKey, { count: deletedCount.toString() }),
-          getTranslation(handlerInput, 'what_else')
-        );
-      } else if (deletionCondition.type === 'category' && deletionCondition.category) {
-        // Delete tasks by category
-        const deletedCount = await deleteTasksByCategory(notionClient, tasksDbId, deletionCondition.category);
-        
-        if (deletedCount === 0) {
-          const categoryKey = deletionCondition.category === 'WORK' ? 'no_work_tasks' : 'no_personal_tasks';
-          return buildResponse(
-            handlerInput,
-            getTranslation(handlerInput, categoryKey),
-            getTranslation(handlerInput, 'what_else')
-          );
-        }
-
-        const categoryKey = deletionCondition.category === 'WORK' ? 'deleted_all_work_tasks' : 'deleted_all_personal_tasks';
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, categoryKey, { count: deletedCount.toString() }),
-          getTranslation(handlerInput, 'what_else')
-        );
-      } else if (deletionCondition.type === 'time' && deletionCondition.filter) {
-        // Delete tasks by time filter
-        const deletedCount = await deleteTasksByTimeFilter(notionClient, tasksDbId, deletionCondition.filter);
-        
-        if (deletedCount === 0) {
-          return buildResponse(
-            handlerInput,
-            getTranslation(handlerInput, 'no_tasks_matching_time'),
-            getTranslation(handlerInput, 'what_else')
-          );
-        }
-
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'deleted_tasks_by_time', { count: deletedCount.toString() }),
-          getTranslation(handlerInput, 'what_else')
-        );
-      }
-      
-      // Default: Delete by task name (single task)
+      // Delete by task name (single task)
       // Remove "the task:" / "the tasks:" prefix before cleaning (common in test sentences)
-      let cleanedSlot = userRequest;
+      let cleanedSlot = taskName;
       cleanedSlot = cleanedSlot.replace(/^the\s+task:\s*/i, '');
       cleanedSlot = cleanedSlot.replace(/^the\s+tasks:\s*/i, '');
       cleanedSlot = cleanedSlot.replace(/^task:\s*/i, '');

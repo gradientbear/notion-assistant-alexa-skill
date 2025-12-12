@@ -189,7 +189,19 @@ export async function GET(request: NextRequest) {
     
     if (!setupResult.success) {
       console.error('Notion workspace setup failed:', setupResult);
-      // Continue anyway - user can retry later
+      // If critical setup failed (no page or no database), log detailed error
+      if (!setupResult.privacyPageId) {
+        console.error('❌ CRITICAL: Voice Planner page was not created!');
+      }
+      if (!setupResult.tasksDbId) {
+        console.error('❌ CRITICAL: Tasks database was not created!');
+      }
+      // Continue anyway - user can retry later, but we should still save the token
+    } else {
+      console.log('✅ Notion workspace setup completed successfully:', {
+        privacyPageId: setupResult.privacyPageId,
+        tasksDbId: setupResult.tasksDbId,
+      });
     }
     
     // Get Supabase Auth user ID from OAuth session (MOST RELIABLE - stored during initiation)
@@ -314,12 +326,27 @@ export async function GET(request: NextRequest) {
           updated_at: new Date().toISOString(),
         };
         
-        // Only update database IDs if they were successfully created (not null)
+        // Always update database IDs if setup returned them (even if user already had them)
+        // This ensures IDs are refreshed if pages were recreated
         if (setupResult.privacyPageId) {
           updateData.privacy_page_id = setupResult.privacyPageId;
         }
         if (setupResult.tasksDbId) {
           updateData.tasks_db_id = setupResult.tasksDbId;
+        }
+        // If setup failed but user had existing IDs, keep them
+        // But log a warning
+        const existingPrivacyPageId = (existingUser as any).privacy_page_id;
+        const existingTasksDbId = (existingUser as any).tasks_db_id;
+        if (!setupResult.success && (existingPrivacyPageId || existingTasksDbId)) {
+          console.warn('⚠️ Setup failed but user has existing page/database IDs. Keeping existing IDs.');
+          // Don't overwrite existing IDs if setup failed
+          if (!setupResult.privacyPageId && existingPrivacyPageId) {
+            updateData.privacy_page_id = existingPrivacyPageId;
+          }
+          if (!setupResult.tasksDbId && existingTasksDbId) {
+            updateData.tasks_db_id = existingTasksDbId;
+          }
         }
         
         console.log('Update data prepared (Alexa flow):', {
@@ -489,12 +516,27 @@ export async function GET(request: NextRequest) {
           updated_at: new Date().toISOString(),
         };
         
-        // Only update database IDs if they were successfully created (not null)
+        // Always update database IDs if setup returned them (even if user already had them)
+        // This ensures IDs are refreshed if pages were recreated
         if (setupResult.privacyPageId) {
           updateData.privacy_page_id = setupResult.privacyPageId;
         }
         if (setupResult.tasksDbId) {
           updateData.tasks_db_id = setupResult.tasksDbId;
+        }
+        // If setup failed but user had existing IDs, keep them
+        // But log a warning
+        const existingPrivacyPageId = (existingUser as any).privacy_page_id;
+        const existingTasksDbId = (existingUser as any).tasks_db_id;
+        if (!setupResult.success && (existingPrivacyPageId || existingTasksDbId)) {
+          console.warn('⚠️ Setup failed but user has existing page/database IDs. Keeping existing IDs.');
+          // Don't overwrite existing IDs if setup failed
+          if (!setupResult.privacyPageId && existingPrivacyPageId) {
+            updateData.privacy_page_id = existingPrivacyPageId;
+          }
+          if (!setupResult.tasksDbId && existingTasksDbId) {
+            updateData.tasks_db_id = existingTasksDbId;
+          }
         }
         
         // Note: users.id should already match Supabase Auth user id (authUserId)
@@ -513,7 +555,14 @@ export async function GET(request: NextRequest) {
           database_ids: {
             privacy_page: !!updateData.privacy_page_id,
             tasks: !!updateData.tasks_db_id,
-          }
+          },
+          privacy_page_id: updateData.privacy_page_id,
+          tasks_db_id: updateData.tasks_db_id,
+          setup_result: {
+            privacyPageId: setupResult.privacyPageId,
+            tasksDbId: setupResult.tasksDbId,
+            success: setupResult.success,
+          },
         });
         
         console.log('🔍 CRITICAL: About to update user:', {
@@ -553,6 +602,10 @@ export async function GET(request: NextRequest) {
             has_notion_token: !!updateResult[0].notion_token,
             notion_setup_complete: updateResult[0].notion_setup_complete,
             updated_at: updateResult[0].updated_at,
+            privacy_page_id: (updateResult[0] as any).privacy_page_id,
+            tasks_db_id: (updateResult[0] as any).tasks_db_id,
+            has_privacy_page_id: !!(updateResult[0] as any).privacy_page_id,
+            has_tasks_db_id: !!(updateResult[0] as any).tasks_db_id,
           } : null,
         });
         
@@ -618,8 +671,10 @@ export async function GET(request: NextRequest) {
           has_notion_token: !!verifyUser.notion_token,
           notion_token_length: verifyUser.notion_token?.length || 0,
           notion_setup_complete: verifyUser.notion_setup_complete,
-          has_tasks_db: !!verifyUser.tasks_db_id,
-          has_privacy_page: !!verifyUser.privacy_page_id,
+          has_tasks_db: !!(verifyUser as any).tasks_db_id,
+          has_privacy_page: !!(verifyUser as any).privacy_page_id,
+          tasks_db_id: (verifyUser as any).tasks_db_id,
+          privacy_page_id: (verifyUser as any).privacy_page_id,
           updated_at: verifyUser.updated_at,
         });
         
@@ -640,6 +695,10 @@ export async function GET(request: NextRequest) {
             timestamp_changed: verifyUserData.updated_at !== existingUser.updated_at,
             has_notion_token: !!verifyUserData.notion_token,
             notion_setup_complete: verifyUserData.notion_setup_complete,
+            privacy_page_id: (verifyUserData as any).privacy_page_id,
+            tasks_db_id: (verifyUserData as any).tasks_db_id,
+            has_privacy_page_id: !!(verifyUserData as any).privacy_page_id,
+            has_tasks_db_id: !!(verifyUserData as any).tasks_db_id,
           });
           
           // If verification query shows different data, log warning
@@ -656,6 +715,23 @@ export async function GET(request: NextRequest) {
               user_id: verifyUserData.id,
               update_result_notion_token: !!verifyUser.notion_token,
               verification_query_notion_token: !!verifyUserData.notion_token,
+            });
+          }
+          
+          // Verify page/database IDs were saved
+          if (!(verifyUserData as any).privacy_page_id) {
+            console.error('❌ CRITICAL: privacy_page_id is NULL in verification query!', {
+              user_id: verifyUserData.id,
+              setup_result_privacy_page_id: setupResult.privacyPageId,
+              update_data_privacy_page_id: updateData.privacy_page_id,
+            });
+          }
+          
+          if (!(verifyUserData as any).tasks_db_id) {
+            console.error('❌ CRITICAL: tasks_db_id is NULL in verification query!', {
+              user_id: verifyUserData.id,
+              setup_result_tasks_db_id: setupResult.tasksDbId,
+              update_data_tasks_db_id: updateData.tasks_db_id,
             });
           }
         } else if (verifyError) {
@@ -735,13 +811,25 @@ export async function GET(request: NextRequest) {
     
     console.log('=== User Database Update Complete ===');
 
-    // Clean up session
+    // Clean up session BEFORE redirect/response to prevent race conditions
     await deleteOAuthSession(state);
 
     // Handle Alexa account linking - return OAuth2 token format
-    if (session.amazon_account_id) {
-      // Generate a token for Alexa (this could be a JWT or simple token)
-      // For simplicity, we'll use a base64 encoded string of user info
+    // BUT: Only return JSON if this is actually an Alexa OAuth request
+    // Check if request is coming from Alexa (has specific headers or referer)
+    // For web browser requests, always redirect to dashboard
+    const userAgent = request.headers.get('user-agent') || '';
+    const referer = request.headers.get('referer') || '';
+    const isAlexaRequest = userAgent.includes('Alexa') || 
+                          userAgent.includes('Amazon') ||
+                          referer.includes('alexa.amazon.com') ||
+                          referer.includes('layla.amazon.com') ||
+                          request.headers.get('x-alexa-request') === 'true';
+    
+    // Only return JSON for actual Alexa requests
+    // Web users with amazon_account_id should still get redirected
+    if (session.amazon_account_id && isAlexaRequest) {
+      // Generate a token for Alexa
       const alexaToken = Buffer.from(
         JSON.stringify({
           amazon_account_id: session.amazon_account_id,

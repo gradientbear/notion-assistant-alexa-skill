@@ -28,6 +28,7 @@ export interface NotionTask {
   status: 'TO DO' | 'IN_PROCESS' | 'DONE';
   category: 'PERSONAL' | 'WORK';
   notes: string | null;
+  deleted?: boolean;
   createdAt?: string;
   updatedAt?: string;
   notionId?: string;

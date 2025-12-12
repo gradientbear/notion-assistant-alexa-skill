@@ -119,6 +119,9 @@ export async function addTask(
     Category: {
       select: { name: category },
     },
+    Deleted: {
+      checkbox: false,
+    },
   };
 
   if (dueDateTime) {
@@ -190,15 +193,18 @@ export async function getTopPriorityTasks(
   limit: number = 3
 ): Promise<NotionTask[]> {
   try {
+    const baseFilter = {
+      or: [
+        { property: 'Status', select: { equals: 'TO DO' } },
+        { property: 'Status', select: { equals: 'IN_PROCESS' } },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          or: [
-            { property: 'Status', select: { equals: 'TO DO' } },
-            { property: 'Status', select: { equals: 'IN_PROCESS' } },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -222,25 +228,28 @@ export async function getTodayTasks(
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
+    const baseFilter = {
+      and: [
+        {
+          property: 'Due Date Time',
+          date: {
+            on_or_before: tomorrow,
+          },
+        },
+        {
+          or: [
+            { property: 'Status', select: { equals: 'TO DO' } },
+            { property: 'Status', select: { equals: 'IN_PROCESS' } },
+          ],
+        },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          and: [
-            {
-              property: 'Due Date Time',
-              date: {
-                on_or_before: tomorrow,
-              },
-            },
-            {
-              or: [
-                { property: 'Status', select: { equals: 'TO DO' } },
-                { property: 'Status', select: { equals: 'IN_PROCESS' } },
-              ],
-            },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -311,30 +320,66 @@ export function mapPageToTask(page: any): NotionTask {
     status: normalizeStatus(statusRaw),
     category: normalizeCategory(categoryRaw),
     notes: props.Notes?.rich_text?.[0]?.plain_text || null,
+    deleted: props.Deleted?.checkbox || false,
     createdAt: props['Created At']?.created_time || null,
     updatedAt: props['Updated At']?.last_edited_time || null,
     notionId: props.NotionID?.rich_text?.[0]?.plain_text || page.id,
   };
 }
 
+/**
+ * Helper function to add deleted = false filter to existing filters
+ */
+function addDeletedFilter(existingFilter: any): any {
+  const deletedFilter = {
+    property: 'Deleted',
+    checkbox: { equals: false },
+  };
+
+  if (!existingFilter || Object.keys(existingFilter).length === 0) {
+    return deletedFilter;
+  }
+
+  // If filter already has 'and' or 'or', combine with deleted filter
+  if (existingFilter.and) {
+    return {
+      and: [...existingFilter.and, deletedFilter],
+    };
+  }
+
+  if (existingFilter.or) {
+    return {
+      and: [existingFilter, deletedFilter],
+    };
+  }
+
+  // Single property filter - combine with and
+  return {
+    and: [existingFilter, deletedFilter],
+  };
+}
+
 
 /**
- * Get all tasks (excluding done/completed)
+ * Get all tasks (excluding done/completed and deleted)
  */
 export async function getAllTasks(
   client: Client,
   databaseId: string
 ): Promise<NotionTask[]> {
   try {
+    const baseFilter = {
+      or: [
+        { property: 'Status', select: { equals: 'TO DO' } },
+        { property: 'Status', select: { equals: 'IN_PROCESS' } },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          or: [
-            { property: 'Status', select: { equals: 'TO DO' } },
-            { property: 'Status', select: { equals: 'IN_PROCESS' } },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -349,7 +394,7 @@ export async function getAllTasks(
 }
 
 /**
- * Get tasks by priority
+ * Get tasks by priority (excluding deleted)
  */
 export async function getTasksByPriority(
   client: Client,
@@ -358,13 +403,16 @@ export async function getTasksByPriority(
 ): Promise<NotionTask[]> {
   try {
     const normalizedPriority = normalizePriority(priority);
+    const baseFilter = {
+      property: 'Priority',
+      select: { equals: normalizedPriority },
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          property: 'Priority',
-          select: { equals: normalizedPriority },
-        },
+        filter,
         sorts: [
           { property: 'Due Date Time', direction: 'ascending' },
         ],
@@ -378,7 +426,7 @@ export async function getTasksByPriority(
 }
 
 /**
- * Get tasks by status
+ * Get tasks by status (excluding deleted)
  */
 export async function getTasksByStatus(
   client: Client,
@@ -387,13 +435,16 @@ export async function getTasksByStatus(
 ): Promise<NotionTask[]> {
   try {
     const normalizedStatus = normalizeStatus(status);
+    const baseFilter = {
+      property: 'Status',
+      select: { equals: normalizedStatus },
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          property: 'Status',
-          select: { equals: normalizedStatus },
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -408,7 +459,7 @@ export async function getTasksByStatus(
 }
 
 /**
- * Get tasks by category
+ * Get tasks by category (excluding deleted)
  */
 export async function getTasksByCategory(
   client: Client,
@@ -417,13 +468,16 @@ export async function getTasksByCategory(
 ): Promise<NotionTask[]> {
   try {
     const normalizedCategory = normalizeCategory(category);
+    const baseFilter = {
+      property: 'Category',
+      select: { equals: normalizedCategory },
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          property: 'Category',
-          select: { equals: normalizedCategory },
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -438,22 +492,25 @@ export async function getTasksByCategory(
 }
 
 /**
- * Get pending tasks (to do or in progress)
+ * Get pending tasks (to do or in progress, excluding deleted)
  */
 export async function getPendingTasks(
   client: Client,
   databaseId: string
 ): Promise<NotionTask[]> {
   try {
+    const baseFilter = {
+      or: [
+        { property: 'Status', select: { equals: 'TO DO' } },
+        { property: 'Status', select: { equals: 'IN_PROCESS' } },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          or: [
-            { property: 'Status', select: { equals: 'TO DO' } },
-            { property: 'Status', select: { equals: 'IN_PROCESS' } },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
           { property: 'Due Date Time', direction: 'ascending' },
@@ -468,7 +525,7 @@ export async function getPendingTasks(
 }
 
 /**
- * Get overdue tasks
+ * Get overdue tasks (excluding deleted)
  */
 export async function getOverdueTasks(
   client: Client,
@@ -476,23 +533,26 @@ export async function getOverdueTasks(
 ): Promise<NotionTask[]> {
   try {
     const today = new Date().toISOString().split('T')[0];
+    const baseFilter = {
+      and: [
+        {
+          property: 'Due Date Time',
+          date: { before: today },
+        },
+        {
+          or: [
+            { property: 'Status', select: { equals: 'TO DO' } },
+            { property: 'Status', select: { equals: 'IN_PROCESS' } },
+          ],
+        },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          and: [
-            {
-              property: 'Due Date Time',
-              date: { before: today },
-            },
-            {
-              or: [
-                { property: 'Status', select: { equals: 'TO DO' } },
-                { property: 'Status', select: { equals: 'IN_PROCESS' } },
-              ],
-            },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Due Date Time', direction: 'ascending' },
         ],
@@ -506,7 +566,7 @@ export async function getOverdueTasks(
 }
 
 /**
- * Get tasks due tomorrow
+ * Get tasks due tomorrow (excluding deleted)
  */
 export async function getTasksDueTomorrow(
   client: Client,
@@ -514,13 +574,16 @@ export async function getTasksDueTomorrow(
 ): Promise<NotionTask[]> {
   try {
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const baseFilter = {
+      property: 'Due Date Time',
+      date: { equals: tomorrow },
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          property: 'Due Date Time',
-          date: { equals: tomorrow },
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
         ],
@@ -534,10 +597,7 @@ export async function getTasksDueTomorrow(
 }
 
 /**
- * Get tasks due this week (next 7 days)
- */
-/**
- * Get tasks by date range
+ * Get tasks by date range (excluding deleted)
  */
 export async function getTasksByDate(
   client: Client,
@@ -545,13 +605,16 @@ export async function getTasksByDate(
   date: string
 ): Promise<NotionTask[]> {
   try {
+    const baseFilter = {
+      property: 'Due Date Time',
+      date: { equals: date },
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          property: 'Due Date Time',
-          date: { equals: date },
-        },
+        filter,
         sorts: [
           { property: 'Priority', direction: 'descending' },
         ],
@@ -565,7 +628,7 @@ export async function getTasksByDate(
 }
 
 /**
- * Get tasks due this week
+ * Get tasks due this week (excluding deleted)
  */
 export async function getTasksDueThisWeek(
   client: Client,
@@ -574,21 +637,24 @@ export async function getTasksDueThisWeek(
   try {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    const baseFilter = {
+      and: [
+        {
+          property: 'Due Date Time',
+          date: { on_or_after: today },
+        },
+        {
+          property: 'Due Date Time',
+          date: { on_or_before: nextWeek },
+        },
+      ],
+    };
+    const filter = addDeletedFilter(baseFilter);
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: {
-          and: [
-            {
-              property: 'Due Date Time',
-              date: { on_or_after: today },
-            },
-            {
-              property: 'Due Date Time',
-              date: { on_or_before: nextWeek },
-            },
-          ],
-        },
+        filter,
         sorts: [
           { property: 'Due Date Time', direction: 'ascending' },
           { property: 'Priority', direction: 'descending' },
@@ -603,7 +669,7 @@ export async function getTasksDueThisWeek(
 }
 
 /**
- * Get completed tasks (optionally filtered by time range)
+ * Get completed tasks (excluding deleted, optionally filtered by time range)
  */
 export async function getCompletedTasks(
   client: Client,
@@ -611,13 +677,13 @@ export async function getCompletedTasks(
   timeRange?: { start: string; end: string }
 ): Promise<NotionTask[]> {
   try {
-    let filter: any = {
+    let baseFilter: any = {
       property: 'Status',
       select: { equals: 'DONE' },
     };
 
     if (timeRange) {
-      filter = {
+      baseFilter = {
         and: [
           { property: 'Status', select: { equals: 'DONE' } },
           {
@@ -630,6 +696,8 @@ export async function getCompletedTasks(
         ],
       };
     }
+
+    const filter = addDeletedFilter(baseFilter);
 
     const response = await withRetry(() =>
       client.databases.query({
@@ -764,7 +832,7 @@ export async function markTasksCompleteBatch(
 }
 
 /**
- * Delete task (soft delete - mark as done, or hard delete the page)
+ * Delete task (set deleted field to true)
  */
 export async function deleteTask(
   client: Client,
@@ -780,8 +848,17 @@ export async function deleteTask(
       })
     );
   } else {
-    // Soft delete - mark as done
-    await updateTaskStatus(client, pageId, 'DONE');
+    // Soft delete - set deleted field to true
+    await withRetry(() =>
+      client.pages.update({
+        page_id: pageId,
+        properties: {
+          Deleted: {
+            checkbox: true,
+          },
+        },
+      })
+    );
   }
 }
 
@@ -815,7 +892,7 @@ export async function deleteCompletedTasks(
 }
 
 /**
- * Query tasks with a filter (for conditional deletion)
+ * Query tasks with a filter (excluding deleted, for conditional deletion)
  */
 export async function queryTasksWithFilter(
   client: Client,
@@ -823,10 +900,14 @@ export async function queryTasksWithFilter(
   filter: any
 ): Promise<NotionTask[]> {
   try {
+    const finalFilter = Object.keys(filter).length > 0 
+      ? addDeletedFilter(filter)
+      : addDeletedFilter({});
+    
     const response = await withRetry(() =>
       client.databases.query({
         database_id: databaseId,
-        filter: Object.keys(filter).length > 0 ? filter : undefined,
+        filter: finalFilter,
       })
     );
     return response.results.map(mapPageToTask);
