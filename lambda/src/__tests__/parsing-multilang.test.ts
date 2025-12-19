@@ -24,14 +24,12 @@ const testSentences = {
     update: [
       'update finire rapporto',
       'update the task: mark clean the kitchen as done',
-      'mark buy milk as in process',
       'set email bank to done',
       'update finire rapporto priorità alta',
     ],
     delete: [
       'delete finire rapporto',
       'delete all completed tasks',
-      'delete all in process tasks',
       'delete all work tasks',
       'delete tasks due today',
     ],
@@ -189,7 +187,7 @@ describe('Multi-Language Parsing Tests', () => {
           expect(result).toBeDefined();
           expect(result.taskName).toBeTruthy();
           expect(result.parsedName).toBeTruthy();
-          expect(result.status).toMatch(/^(TO DO|IN_PROCESS|DONE)$/);
+          expect(result.status).toMatch(/^(TO DO|DONE)$/);
           expect(result.category).toMatch(/^(PERSONAL|WORK)$/);
           expect(result.priority).toMatch(/^(LOW|NORMAL|HIGH)$/);
           
@@ -221,7 +219,7 @@ describe('Multi-Language Parsing Tests', () => {
           expect(result.type).toMatch(/^(all|status|time|category|name)$/);
           
           if (result.type === 'status') {
-            expect(result.status).toMatch(/^(TO DO|IN_PROCESS|DONE)$/);
+            expect(result.status).toMatch(/^(TO DO|DONE)$/);
           }
           if (result.type === 'category') {
             expect(result.category).toMatch(/^(PERSONAL|WORK)$/);
@@ -260,19 +258,6 @@ describe('Multi-Language Parsing Tests', () => {
       });
     });
 
-    it('should extract IN_PROCESS status in all languages', () => {
-      const tests = [
-        { text: 'set to in progress', locale: 'en-US' as Locale },
-        { text: 'aggiorna a in corso', locale: 'it-IT' as Locale },
-        { text: 'mettre à jour à en cours', locale: 'fr-FR' as Locale },
-        { text: 'actualizar a en progreso', locale: 'es-ES' as Locale },
-      ];
-
-      tests.forEach(({ text, locale }) => {
-        const result = parseTaskFromUserRequest(text, locale);
-        expect(result.status).toBe('IN_PROCESS');
-      });
-    });
   });
 
   describe('Category Extraction', () => {

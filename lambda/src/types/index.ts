@@ -25,7 +25,7 @@ export interface NotionTask {
   parsedName: string;
   priority: 'LOW' | 'NORMAL' | 'HIGH';
   dueDateTime: string | null;
-  status: 'TO DO' | 'IN_PROCESS' | 'DONE';
+  status: 'TO DO' | 'DONE';
   category: 'PERSONAL' | 'WORK';
   notes: string | null;
   deleted?: boolean;

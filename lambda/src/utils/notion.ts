@@ -101,7 +101,7 @@ export async function addTask(
   priority: 'LOW' | 'NORMAL' | 'HIGH' = 'NORMAL',
   category: 'PERSONAL' | 'WORK' = 'PERSONAL',
   dueDateTime?: string | null,
-  status: 'TO DO' | 'IN_PROCESS' | 'DONE' = 'TO DO'
+  status: 'TO DO' | 'DONE' = 'TO DO'
 ): Promise<string> {
   const properties: any = {
     'Task Name': {
@@ -194,10 +194,8 @@ export async function getTopPriorityTasks(
 ): Promise<NotionTask[]> {
   try {
     const baseFilter = {
-      or: [
-        { property: 'Status', select: { equals: 'TO DO' } },
-        { property: 'Status', select: { equals: 'IN_PROCESS' } },
-      ],
+      property: 'Status',
+      select: { equals: 'TO DO' },
     };
     const filter = addDeletedFilter(baseFilter);
     
@@ -237,10 +235,8 @@ export async function getTodayTasks(
           },
         },
         {
-          or: [
-            { property: 'Status', select: { equals: 'TO DO' } },
-            { property: 'Status', select: { equals: 'IN_PROCESS' } },
-          ],
+          property: 'Status',
+          select: { equals: 'TO DO' },
         },
       ],
     };
@@ -280,15 +276,13 @@ function normalizePriority(priority: string): 'LOW' | 'NORMAL' | 'HIGH' {
 }
 
 // Helper function to normalize status value
-function normalizeStatus(status: string): 'TO DO' | 'IN_PROCESS' | 'DONE' {
+function normalizeStatus(status: string): 'TO DO' | 'DONE' {
   const normalized = status.toUpperCase().replace(/\s+/g, '_');
   if (normalized === 'TO_DO' || normalized === 'TODO' || normalized === 'TO-DO') return 'TO DO';
-  if (normalized === 'IN_PROGRESS' || normalized === 'IN-PROGRESS' || normalized === 'DOING') return 'IN_PROCESS';
   if (normalized === 'DONE' || normalized === 'COMPLETE' || normalized === 'COMPLETED' || normalized === 'FINISHED') return 'DONE';
   // Handle old lowercase values
   const lower = status.toLowerCase();
   if (lower === 'to do' || lower === 'todo') return 'TO DO';
-  if (lower === 'in progress' || lower === 'doing') return 'IN_PROCESS';
   if (lower === 'done' || lower === 'complete') return 'DONE';
   return 'TO DO';
 }
@@ -369,10 +363,8 @@ export async function getAllTasks(
 ): Promise<NotionTask[]> {
   try {
     const baseFilter = {
-      or: [
-        { property: 'Status', select: { equals: 'TO DO' } },
-        { property: 'Status', select: { equals: 'IN_PROCESS' } },
-      ],
+      property: 'Status',
+      select: { equals: 'TO DO' },
     };
     const filter = addDeletedFilter(baseFilter);
     
@@ -431,7 +423,7 @@ export async function getTasksByPriority(
 export async function getTasksByStatus(
   client: Client,
   databaseId: string,
-  status: 'TO DO' | 'IN_PROCESS' | 'DONE'
+  status: 'TO DO' | 'DONE'
 ): Promise<NotionTask[]> {
   try {
     const normalizedStatus = normalizeStatus(status);
@@ -500,10 +492,8 @@ export async function getPendingTasks(
 ): Promise<NotionTask[]> {
   try {
     const baseFilter = {
-      or: [
-        { property: 'Status', select: { equals: 'TO DO' } },
-        { property: 'Status', select: { equals: 'IN_PROCESS' } },
-      ],
+      property: 'Status',
+      select: { equals: 'TO DO' },
     };
     const filter = addDeletedFilter(baseFilter);
     
@@ -540,10 +530,8 @@ export async function getOverdueTasks(
           date: { before: today },
         },
         {
-          or: [
-            { property: 'Status', select: { equals: 'TO DO' } },
-            { property: 'Status', select: { equals: 'IN_PROCESS' } },
-          ],
+          property: 'Status',
+          select: { equals: 'TO DO' },
         },
       ],
     };
@@ -743,7 +731,7 @@ export async function getCompletedTasksForDeletion(
 export async function updateTaskStatus(
   client: Client,
   pageId: string,
-  status: 'TO DO' | 'IN_PROCESS' | 'DONE'
+  status: 'TO DO' | 'DONE'
 ): Promise<void> {
   const normalizedStatus = normalizeStatus(status);
   
@@ -768,7 +756,7 @@ export async function updateTask(
   client: Client,
   pageId: string,
   updates: {
-    status?: 'TO DO' | 'IN_PROCESS' | 'DONE';
+    status?: 'TO DO' | 'DONE';
     priority?: 'LOW' | 'NORMAL' | 'HIGH';
     dueDateTime?: string | null;
   }
@@ -952,7 +940,7 @@ export async function deleteAllTasks(
 export async function deleteTasksByStatus(
   client: Client,
   databaseId: string,
-  status: 'TO DO' | 'IN_PROCESS' | 'DONE'
+  status: 'TO DO' | 'DONE'
 ): Promise<number> {
   const normalizedStatus = normalizeStatus(status);
   const filter = {
@@ -1195,7 +1183,6 @@ export async function createTasksDatabase(
             select: {
               options: [
                 { name: 'TO DO', color: 'gray' },
-                { name: 'IN_PROCESS', color: 'blue' },
                 { name: 'DONE', color: 'green' },
               ],
             },
@@ -1216,6 +1203,9 @@ export async function createTasksDatabase(
           },
           NotionID: {
             rich_text: {},
+          },
+          Deleted: {
+            checkbox: {},
           },
         },
       })
@@ -1242,7 +1232,7 @@ export async function createTasksDatabase(
 export async function getTaskCount(
   client: Client,
   databaseId: string,
-  status?: 'TO DO' | 'IN_PROCESS' | 'DONE'
+  status?: 'TO DO' | 'DONE'
 ): Promise<number> {
   try {
     let filter: any = {};
@@ -1254,10 +1244,8 @@ export async function getTaskCount(
     } else {
       // Count all non-done tasks
       filter = {
-        or: [
-          { property: 'Status', select: { equals: 'TO DO' } },
-          { property: 'Status', select: { equals: 'IN_PROCESS' } },
-        ],
+        property: 'Status',
+        select: { equals: 'TO DO' },
       };
     }
 
@@ -1315,10 +1303,8 @@ export async function getNextDeadline(
               date: { on_or_after: today },
             },
             {
-              or: [
-                { property: 'Status', select: { equals: 'TO DO' } },
-                { property: 'Status', select: { equals: 'IN_PROCESS' } },
-              ],
+              property: 'Status',
+              select: { equals: 'TO DO' },
             },
           ],
         },

@@ -268,8 +268,6 @@ function AuthPageContent() {
         },
       });
 
-      console.log('[AuthPage] Signup data:', data);
-
       if (error) throw error;
 
       if (data.user) {

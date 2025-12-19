@@ -57,7 +57,7 @@ export const mockTasks = [
     parsedName: 'Finish quarterly report',
     priority: 'NORMAL' as const,
     dueDateTime: '2024-12-30T17:00:00Z',
-    status: 'IN_PROCESS' as const,
+    status: 'TO DO' as const,
     category: 'WORK' as const,
     notes: null,
     createdAt: '2024-01-02T00:00:00Z',

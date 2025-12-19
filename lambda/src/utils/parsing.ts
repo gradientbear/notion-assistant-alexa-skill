@@ -8,7 +8,7 @@ export interface ParsedTask {
   taskName: string;
   parsedName: string;
   dueDateTime?: string | null;
-  status?: 'TO DO' | 'IN_PROCESS' | 'DONE';
+  status?: 'TO DO' | 'DONE';
   category?: 'PERSONAL' | 'WORK';
   priority?: 'LOW' | 'NORMAL' | 'HIGH';
 }
@@ -44,7 +44,10 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     // Italian prefixes
     /^aggiungi\s+/i,
     /^crea\s+/i,
+    /^crea un'attività\s+/i,
     /^ricordami di\s+/i,
+    /^inserisci\s+/i,
+    /^inserisci un'attività\s+/i,
     /^imposta\s+/i,
     /^aggiorna\s+/i,
     /^modifica\s+/i,
@@ -109,15 +112,12 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
 /**
  * Extract status from natural language (English, Italian, French, Spanish)
  */
-function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PROCESS' | 'DONE' | undefined {
+function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'DONE' | undefined {
   const lower = text.toLowerCase();
   
   // English keywords
   if (lower.includes('done') || lower.includes('complete') || lower.includes('finished')) {
     return 'DONE';
-  }
-  if (lower.includes('in progress') || lower.includes('working on') || lower.includes('doing')) {
-    return 'IN_PROCESS';
   }
   if (lower.includes('to do') || lower.includes('todo') || lower.includes('pending')) {
     return 'TO DO';
@@ -127,9 +127,6 @@ function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PR
   if (lower.includes('fatto') || lower.includes('completato') || lower.includes('finito') || lower.includes('terminato')) {
     return 'DONE';
   }
-  if (lower.includes('in corso') || lower.includes('in lavorazione') || lower.includes('stai facendo')) {
-    return 'IN_PROCESS';
-  }
   if (lower.includes('da fare') || lower.includes('todo') || lower.includes('in sospeso')) {
     return 'TO DO';
   }
@@ -138,9 +135,6 @@ function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PR
   if (lower.includes('terminé') || lower.includes('complété') || lower.includes('fini') || lower.includes('achevé')) {
     return 'DONE';
   }
-  if (lower.includes('en cours') || lower.includes('en train') || lower.includes('en progression')) {
-    return 'IN_PROCESS';
-  }
   if (lower.includes('à faire') || lower.includes('todo') || lower.includes('en attente')) {
     return 'TO DO';
   }
@@ -148,9 +142,6 @@ function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'IN_PR
   // Spanish keywords
   if (lower.includes('hecho') || lower.includes('completado') || lower.includes('terminado') || lower.includes('finalizado')) {
     return 'DONE';
-  }
-  if (lower.includes('en progreso') || lower.includes('en curso') || lower.includes('trabajando')) {
-    return 'IN_PROCESS';
   }
   if (lower.includes('por hacer') || lower.includes('a hacer') || lower.includes('pendiente')) {
     return 'TO DO';
@@ -267,23 +258,126 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
     };
   }
   
-  // Use chrono-node to parse dates/times (with locale support)
-  // Note: chrono-node should handle Italian dates even with default parser
-  // but we use locale-specific keyword matching for better accuracy
-  const parsedDate = chrono.parseDate(userRequest);
+  // Map Italian month names to numbers
+  const italianMonths: { [key: string]: number } = {
+    'gennaio': 0, 'febbraio': 1, 'marzo': 2, 'aprile': 3,
+    'maggio': 4, 'giugno': 5, 'luglio': 6, 'agosto': 7,
+    'settembre': 8, 'ottobre': 9, 'novembre': 10, 'dicembre': 11
+  };
+  
+  // Check for Italian date pattern: "DD mese" or "mese DD" or "il DD mese" or "del DD mese YYYY" (e.g., "25 dicembre", "il 25 dicembre", "dicembre 25", "del 20 dicembre 2025")
+  const italianDatePattern1 = /(?:il\s+|del\s+)?(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)(?:\s+(\d{4}))?/i;
+  const italianDatePattern2 = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{1,2})(?:\s+(\d{4}))?/i;
+  const italianDateMatch1 = userRequest.match(italianDatePattern1);
+  const italianDateMatch2 = userRequest.match(italianDatePattern2);
+  const italianDateMatch = italianDateMatch1 || italianDateMatch2;
+  
+  let parsedDate: Date | null = null;
   let dueDateTime: string | null = null;
   let textWithoutDate = userRequest;
   
-  if (parsedDate) {
+  // Handle Italian specific dates before chrono parsing
+  if (italianDateMatch) {
+    let day: number;
+    let monthName: string;
+    let matchedText: string;
+    let year: number | null = null;
+    
+    if (italianDateMatch1) {
+      day = parseInt(italianDateMatch1[1], 10);
+      monthName = italianDateMatch1[2].toLowerCase();
+      year = italianDateMatch1[3] ? parseInt(italianDateMatch1[3], 10) : null;
+      matchedText = italianDateMatch1[0]; // Full match including "il" or "del" if present
+    } else if (italianDateMatch2) {
+      day = parseInt(italianDateMatch2[2], 10);
+      monthName = italianDateMatch2[1].toLowerCase();
+      year = italianDateMatch2[3] ? parseInt(italianDateMatch2[3], 10) : null;
+      matchedText = italianDateMatch2[0];
+    } else {
+      // This should never happen, but TypeScript requires it
+      day = 1;
+      monthName = 'gennaio';
+      matchedText = '';
+    }
+    
+    const month = italianMonths[monthName];
+    const currentYear = new Date().getFullYear();
+    const targetYear = year || currentYear;
+    
+    // Create date - if year not specified and month/day has passed this year, use next year
+    if (!year) {
+      parsedDate = new Date(currentYear, month, day, 0, 0, 0, 0);
+      if (parsedDate < new Date()) {
+        parsedDate.setFullYear(currentYear + 1);
+      }
+    } else {
+      parsedDate = new Date(targetYear, month, day, 0, 0, 0, 0);
+    }
+    
     dueDateTime = parsedDate.toISOString();
-    // Try to remove date references from text
-    const chronoResults = chrono.parse(userRequest);
-    if (chronoResults.length > 0) {
-      const firstResult = chronoResults[0];
-      if (firstResult.text) {
-        textWithoutDate = userRequest.replace(firstResult.text, '').trim();
+    
+    // Remove the date from the text to get the task name
+    textWithoutDate = userRequest.replace(matchedText, '').trim();
+  } else {
+    // Use chrono-node to parse dates/times (with locale support)
+    // Note: chrono-node should handle Italian dates even with default parser
+    // but we use locale-specific keyword matching for better accuracy
+    parsedDate = chrono.parseDate(userRequest);
+    
+    if (parsedDate) {
+      dueDateTime = parsedDate.toISOString();
+      // Try to remove date references from text
+      const chronoResults = chrono.parse(userRequest);
+      if (chronoResults.length > 0) {
+        const firstResult = chronoResults[0];
+        if (firstResult.text) {
+          textWithoutDate = userRequest.replace(firstResult.text, '').trim();
+        }
       }
     }
+  }
+  
+  // Handle Italian time expressions explicitly (e.g., "oggi alle 18", "domani alle 16")
+  let parsedTime: { hours: number; minutes: number } | null = null;
+
+  // Check for Italian time pattern: "alle HH", "alle HH:MM", "alle ore HH", "alle ore HH:MM"
+  const italianTimePattern = /alle\s+(?:ore\s+)?(\d{1,2})(?::(\d{2}))?/i;
+  const timeMatch = userRequest.match(italianTimePattern);
+  if (timeMatch) {
+    const hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      parsedTime = { hours, minutes };
+    }
+  }
+
+  // If we found a time but no date, try to parse date again or use today
+  if (parsedTime && !parsedDate) {
+    // Remove time expression and try parsing again
+    const withoutTime = textWithoutDate.replace(italianTimePattern, '').trim();
+    parsedDate = chrono.parseDate(withoutTime);
+    
+    // If still no date, default to today for "alle HH" patterns
+    if (!parsedDate && userRequest.toLowerCase().includes('alle')) {
+      parsedDate = new Date();
+      parsedDate.setHours(0, 0, 0, 0);
+    }
+    
+    if (parsedDate) {
+      textWithoutDate = withoutTime;
+    }
+  }
+
+  // If we have both date and time, combine them
+  if (parsedDate && parsedTime) {
+    const combinedDate = new Date(parsedDate);
+    combinedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+    dueDateTime = combinedDate.toISOString();
+    // Remove time expression from task name
+    textWithoutDate = textWithoutDate.replace(italianTimePattern, '').trim();
+  } else if (parsedDate && !dueDateTime) {
+    // If we parsed a date but haven't set dueDateTime yet (from chrono-node)
+    dueDateTime = parsedDate.toISOString();
   }
   
   // Extract status, category, priority
@@ -329,13 +423,64 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
   // Parse date/time queries using chrono-node
   // Note: chrono-node should handle Italian dates even with default parser
   // but we use locale-specific keyword matching for better accuracy
-  const chronoResults = chrono.parse(cleanedRequest);
+  
+  // Map Italian month names to numbers
+  const italianMonths: { [key: string]: number } = {
+    'gennaio': 0, 'febbraio': 1, 'marzo': 2, 'aprile': 3,
+    'maggio': 4, 'giugno': 5, 'luglio': 6, 'agosto': 7,
+    'settembre': 8, 'ottobre': 9, 'novembre': 10, 'dicembre': 11
+  };
+  
+  // Check for Italian date pattern: "DD mese" or "mese DD" (e.g., "25 dicembre", "dicembre 25")
+  const italianDatePattern1 = /(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/i;
+  const italianDatePattern2 = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{1,2})/i;
+  const italianDateMatch1 = cleanedRequest.match(italianDatePattern1);
+  const italianDateMatch2 = cleanedRequest.match(italianDatePattern2);
+  const italianDateMatch = italianDateMatch1 || italianDateMatch2;
+  const now = new Date();
   let dateFilter: any = null;
   
-  if (chronoResults.length > 0) {
+  // Handle Italian specific dates before chrono parsing
+  if (italianDateMatch) {
+    let day: number;
+    let monthName: string;
+    if (italianDateMatch1) {
+      day = parseInt(italianDateMatch1[1], 10);
+      monthName = italianDateMatch1[2].toLowerCase();
+    } else if (italianDateMatch2) {
+      day = parseInt(italianDateMatch2[2], 10);
+      monthName = italianDateMatch2[1].toLowerCase();
+    } else {
+      // This should never happen, but TypeScript requires it
+      day = 1;
+      monthName = 'gennaio';
+    }
+    const month = italianMonths[monthName];
+    const year = now.getFullYear();
+    
+    // Create date - if month/day has passed this year, use next year
+    const dateStart = new Date(year, month, day, 0, 0, 0, 0);
+    if (dateStart < now) {
+      dateStart.setFullYear(year + 1);
+    }
+    const dateEnd = new Date(dateStart);
+    dateEnd.setHours(23, 59, 59, 999);
+    
+    dateFilter = {
+      property: 'Due Date Time',
+      date: {
+        on_or_after: dateStart.toISOString(),
+        on_or_before: dateEnd.toISOString(),
+      },
+    };
+    queryType = 'time';
+  }
+  
+  const chronoResults = chrono.parse(cleanedRequest);
+  
+  if (chronoResults.length > 0 && !dateFilter) {
     const result = chronoResults[0];
     const parsedDate = result.start.date();
-    const now = new Date();
     
     // Today (English, Italian, French, Spanish)
     if (lower.includes('today') || lower.includes('oggi') || lower.includes('aujourd\'hui') || lower.includes('hoy')) {
@@ -486,17 +631,6 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       },
     });
     if (queryType === 'keyword') queryType = 'status';
-  } else if (lower.includes('in progress') || lower.includes('working on') || lower.includes('ongoing') ||
-             lower.includes('in corso') || lower.includes('in lavorazione') ||
-             lower.includes('en cours') || lower.includes('en train') ||
-             lower.includes('en progreso') || lower.includes('en curso')) {
-    filters.push({
-      property: 'Status',
-      select: {
-        equals: 'IN_PROCESS',
-      },
-    });
-    if (queryType === 'keyword') queryType = 'status';
   } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished') ||
              lower.includes('fatto') || lower.includes('completato') || lower.includes('finito') ||
              lower.includes('terminé') || lower.includes('complété') || lower.includes('fini') ||
@@ -633,7 +767,7 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
 export interface DeletionCondition {
   type: 'all' | 'status' | 'time' | 'category' | 'name';
   filter?: any; // Notion filter object
-  status?: 'TO DO' | 'IN_PROCESS' | 'DONE';
+  status?: 'TO DO' | 'DONE';
   category?: 'PERSONAL' | 'WORK';
 }
 
@@ -678,21 +812,6 @@ export function parseDeletionCondition(userRequest: string, locale: Locale = 'en
       filter: {
         property: 'Status',
         select: { equals: 'DONE' },
-      },
-    };
-  }
-  
-  if (cleanedLower.includes('in process') || cleanedLower.includes('in progress') ||
-      cleanedLower.includes('working on') ||
-      cleanedLower.includes('in corso') || cleanedLower.includes('in lavorazione') ||
-      cleanedLower.includes('en cours') || cleanedLower.includes('en train') ||
-      cleanedLower.includes('en progreso') || cleanedLower.includes('en curso')) {
-    return {
-      type: 'status',
-      status: 'IN_PROCESS',
-      filter: {
-        property: 'Status',
-        select: { equals: 'IN_PROCESS' },
       },
     };
   }

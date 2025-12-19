@@ -2,6 +2,8 @@ import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse } from '../utils/alexa';
 import { findDatabaseByName, addTask } from '../utils/notion';
 import { getTranslation, getLocale } from '../utils/i18n';
+import { parseTaskFromUserRequest } from '../utils/parsing';
+import { normalizePriority, normalizeCategory } from '../utils/normalization';
 import * as chrono from 'chrono-node';
 
 export class AddTaskHandler implements RequestHandler {
@@ -32,16 +34,17 @@ export class AddTaskHandler implements RequestHandler {
 
       const request = handlerInput.requestEnvelope.request as any;
       const slots = request.intent.slots || {};
+      const locale = getLocale(handlerInput);
       
       // Extract values from specific slots
-      const taskName = slots.taskName?.value;
-      const priority = slots.priority?.value;
-      const dueDateTime = slots.dueDateTime?.value;
-      const category = slots.category?.value;
+      const taskNameSlot = slots.taskName?.value;
+      const prioritySlot = slots.priority?.value;
+      const dueDateTimeSlot = slots.dueDateTime?.value;
+      const categorySlot = slots.category?.value;
       const notes = slots.notes?.value;
 
-      // Check required slots - dialog management will handle elicitation
-      if (!taskName || taskName.trim().length === 0) {
+      // Check required slot - taskName is the only required field
+      if (!taskNameSlot || taskNameSlot.trim().length === 0) {
         return buildResponse(
           handlerInput,
           getTranslation(handlerInput, 'add_task_prompt'),
@@ -49,29 +52,14 @@ export class AddTaskHandler implements RequestHandler {
         );
       }
 
-      if (!priority || priority.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'add_task_prompt'),
-          getTranslation(handlerInput, 'add_task_reprompt')
-        );
-      }
-
-      if (!dueDateTime || dueDateTime.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'add_task_prompt'),
-          getTranslation(handlerInput, 'add_task_reprompt')
-        );
-      }
-
-      if (!category || category.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'add_task_prompt'),
-          getTranslation(handlerInput, 'add_task_reprompt')
-        );
-      }
+      // Parse taskName to extract embedded information (dates, priority, category)
+      const parsed = parseTaskFromUserRequest(taskNameSlot, locale);
+      
+      // Use explicit slot values if provided, otherwise use parsed values or defaults
+      const taskName = parsed.parsedName || taskNameSlot.trim();
+      const priority = prioritySlot || parsed.priority || 'NORMAL';
+      const dueDateTime = dueDateTimeSlot || parsed.dueDateTime || null;
+      const category = categorySlot || parsed.category || 'PERSONAL';
 
       // Try to use stored database ID first, fallback to search
       let tasksDbId = user.tasks_db_id || null;
@@ -88,27 +76,30 @@ export class AddTaskHandler implements RequestHandler {
         );
       }
 
-      // Parse date/time from dueDateTime slot using chrono-node
-      const locale = getLocale(handlerInput);
+      // Parse date/time from dueDateTime if it's a string (from slot)
       let parsedDueDateTime: string | null = null;
       if (dueDateTime) {
-        // Use chrono-node as primary parser for better natural language support
-        const chronoResult = chrono.parseDate(dueDateTime);
-        if (chronoResult) {
-          parsedDueDateTime = chronoResult.toISOString();
-        } else {
-          // Fallback to native Date if chrono fails
-          const parsedDate = new Date(dueDateTime);
-          if (!isNaN(parsedDate.getTime())) {
-            parsedDueDateTime = parsedDate.toISOString();
+        if (typeof dueDateTime === 'string') {
+          // Use chrono-node as primary parser for better natural language support
+          const chronoResult = chrono.parseDate(dueDateTime);
+          if (chronoResult) {
+            parsedDueDateTime = chronoResult.toISOString();
+          } else {
+            // Fallback to native Date if chrono fails
+            const parsedDate = new Date(dueDateTime);
+            if (!isNaN(parsedDate.getTime())) {
+              parsedDueDateTime = parsedDate.toISOString();
+            }
           }
+        } else {
+          // Already parsed (ISO string from parseTaskFromUserRequest)
+          parsedDueDateTime = dueDateTime;
         }
       }
 
       // Normalize priority and category values
-      const normalizedPriority = priority.toUpperCase() === 'MEDIUM' ? 'NORMAL' : 
-                                 (priority.toUpperCase() as 'LOW' | 'NORMAL' | 'HIGH');
-      const normalizedCategory = category.toUpperCase() as 'PERSONAL' | 'WORK';
+      const normalizedPriority = normalizePriority(priority);
+      const normalizedCategory = normalizeCategory(category);
       
       // Clean task name
       const cleanedTaskName = taskName.trim();

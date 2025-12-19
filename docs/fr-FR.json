@@ -1,142 +1,292 @@
 {
     "interactionModel": {
-      "languageModel": {
-        "invocationName": "planificateur vocal",
-        "intents": [
-          {
-            "name": "CreateTaskIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "priority", "type": "PRIORITY" },
-              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" },
-              { "name": "category", "type": "CATEGORY" },
-              { "name": "notes", "type": "AMAZON.SearchQuery" }
+        "languageModel": {
+            "invocationName": "voice planner",
+            "intents": [
+                {
+                    "name": "CreateTaskIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "priority",
+                            "type": "PRIORITY",
+                            "elicitationRequired": false,
+                            "confirmationRequired": false
+                        },
+                        {
+                            "name": "dueDateTime",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": false,
+                            "confirmationRequired": false
+                        },
+                        {
+                            "name": "category",
+                            "type": "CATEGORY",
+                            "elicitationRequired": false,
+                            "confirmationRequired": false
+                        },
+                        {
+                            "name": "notes",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": false,
+                            "confirmationRequired": false
+                        }
+                    ],
+                    "samples": [
+                        "ajouter {taskName}",
+                        "créer une tâche {taskName}",
+                        "créer tâche {taskName}",
+                        "rappelle-moi {taskName}",
+                        "rappelle-moi de {taskName}",
+                        "ajouter {taskName} demain",
+                        "ajouter {taskName} la semaine prochaine",
+                        "ajouter {taskName} aujourd'hui",
+                        "ajouter {taskName} cette semaine",
+                        "ajouter {taskName} vendredi prochain"
+                    ]
+                },
+                {
+                    "name": "ReadTasksIntent",
+                    "slots": [
+                        { "name": "status", "type": "STATUS" },
+                        { "name": "priority", "type": "PRIORITY" },
+                        { "name": "category", "type": "CATEGORY" },
+                        { "name": "dueDateTime", "type": "AMAZON.SearchQuery" }
+                    ],
+                    "samples": [
+                        "montre mes tâches",
+                        "lis mes tâches",
+                        "liste mes tâches",
+                        "montre mes tâches {status}",
+                        "montre tâches échéance {dueDateTime}",
+                        "montre mes tâches priorité {priority}",
+                        "lis mes tâches {category}",
+                        "qu'est-ce que j'ai pour aujourd'hui",
+                        "quelles sont mes tâches",
+                        "montre-moi les tâches",
+                        "montre tâches {priority}",
+                        "montre tâches {category}",
+                        "montre tâches échues"
+                    ]
+                },
+                {
+                    "name": "UpdateTaskStatusIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "status",
+                            "type": "STATUS",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.Status" }
+                        }
+                    ],
+                    "samples": [
+                        "marque une tâche comme {status}",
+                        "met à jour le statut d'une tâche à {status}",
+                        "définis statut à {status}",
+                        "complète une tâche",
+                        "complète {taskName}",
+                        "marque comme terminé {taskName}",
+                        "marque comme complété {taskName}"
+                    ]
+                },
+                {
+                    "name": "UpdateTaskPriorityIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "priority",
+                            "type": "PRIORITY",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.Priority" }
+                        }
+                    ],
+                    "samples": [
+                        "définis priorité tâche à {priority}",
+                        "change priorité à {priority}",
+                        "rends priorité {priority}",
+                        "met à jour priorité tâche"
+                    ]
+                },
+                {
+                    "name": "UpdateDueDateIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "dueDateTime",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.DueDateTime" }
+                        }
+                    ],
+                    "samples": [
+                        "change la date d'échéance",
+                        "définis date d'échéance",
+                        "met à jour date d'échéance",
+                        "reprogramme tâche"
+                    ]
+                },
+                {
+                    "name": "UpdateTaskCategoryIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "category",
+                            "type": "CATEGORY",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.Category" }
+                        }
+                    ],
+                    "samples": [
+                        "définis catégorie tâche",
+                        "déplace tâche dans une catégorie",
+                        "rends tâche une catégorie",
+                        "change catégorie tâche"
+                    ]
+                },
+                {
+                    "name": "DeleteTaskIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        }
+                    ],
+                    "samples": [
+                        "supprime {taskName}",
+                        "supprimer {taskName}",
+                        "enlève {taskName}",
+                        "efface {taskName}",
+                        "supprime tâche {taskName}",
+                        "enlève tâche {taskName}",
+                        "efface tâche {taskName}",
+                        "supprime la tâche {taskName}",
+                        "enlève la tâche {taskName}"
+                    ]
+                },
+                {
+                    "name": "ReorderTaskIntent",
+                    "slots": [
+                        {
+                            "name": "taskName",
+                            "type": "AMAZON.SearchQuery",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.TaskName" }
+                        },
+                        {
+                            "name": "position",
+                            "type": "POSITION",
+                            "elicitationRequired": true,
+                            "confirmationRequired": false,
+                            "prompts": { "elicitation": "Elicit.Slot.Position" }
+                        }
+                    ],
+                    "samples": [
+                        "déplace une tâche",
+                        "réordonne tâche",
+                        "mets tâche dans une position",
+                        "déplace tâche {position}"
+                    ]
+                },
+                { "name": "AMAZON.CancelIntent", "samples": [] },
+                { "name": "AMAZON.StopIntent", "samples": [] },
+                { "name": "AMAZON.HelpIntent", "samples": [] },
+                { "name": "AMAZON.FallbackIntent", "samples": [] }
             ],
-            "samples": [
-              "ajouter {taskName}",
-              "créer une tâche {taskName}",
-              "rappelle-moi de {taskName}",
-              "planifier {taskName}",
-              "ajouter {taskName} demain",
-              "créer une tâche {taskName} pour aujourd'hui"
+            "types": [
+                {
+                    "name": "PRIORITY",
+                    "values": [
+                        { "name": { "value": "LOW" } },
+                        { "name": { "value": "NORMAL" } },
+                        { "name": { "value": "HIGH" } }
+                    ]
+                },
+                {
+                    "name": "STATUS",
+                    "values": [
+                        { "name": { "value": "TO DO" } },
+                        { "name": { "value": "DONE" } }
+                    ]
+                },
+                {
+                    "name": "CATEGORY",
+                    "values": [
+                        { "name": { "value": "PERSONAL" } },
+                        { "name": { "value": "WORK" } }
+                    ]
+                },
+                {
+                    "name": "POSITION",
+                    "values": [
+                        { "name": { "value": "first" } },
+                        { "name": { "value": "second" } },
+                        { "name": { "value": "third" } },
+                        { "name": { "value": "top" } },
+                        { "name": { "value": "bottom" } },
+                        { "name": { "value": "before" } },
+                        { "name": { "value": "after" } }
+                    ]
+                }
             ]
-          },
-          {
-            "name": "ReadTasksIntent",
-            "slots": [
-              { "name": "status", "type": "STATUS" },
-              { "name": "priority", "type": "PRIORITY" },
-              { "name": "category", "type": "CATEGORY" },
-              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" }
+        },
+        "dialog": {
+            "intents": [
+                { "name": "CreateTaskIntent" },
+                { "name": "UpdateTaskStatusIntent" },
+                { "name": "UpdateTaskPriorityIntent" },
+                { "name": "UpdateDueDateIntent" },
+                { "name": "UpdateTaskCategoryIntent" },
+                { "name": "DeleteTaskIntent" },
+                { "name": "ReorderTaskIntent" }
             ],
-            "samples": [
-              "montre mes tâches",
-              "lire mes tâches",
-              "affiche mes tâches {status}",
-              "montre les tâches dues {dueDateTime}",
-              "lire mes tâches {priority} priorité",
-              "montre mes tâches {category}"
+            "prompts": [
+                { "id": "Elicit.Slot.TaskName", "variations": [{ "type": "PlainText", "value": "Quelle tâche voulez-vous dire ?" }] },
+                { "id": "Elicit.Slot.Priority", "variations": [{ "type": "PlainText", "value": "Quelle priorité dois-je définir ? Basse, normale ou élevée ?" }] },
+                { "id": "Elicit.Slot.Status", "variations": [{ "type": "PlainText", "value": "Quel statut dois-je définir ?" }] },
+                { "id": "Elicit.Slot.DueDateTime", "variations": [{ "type": "PlainText", "value": "Quand cette tâche est-elle due ?" }] },
+                { "id": "Elicit.Slot.Category", "variations": [{ "type": "PlainText", "value": "Est-ce une tâche personnelle ou professionnelle ?" }] },
+                { "id": "Elicit.Slot.Position", "variations": [{ "type": "PlainText", "value": "Où dois-je déplacer la tâche dans la liste ?" }] }
             ]
-          },
-          {
-            "name": "UpdateTaskStatusIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "status", "type": "STATUS" }
-            ],
-            "samples": [
-              "marquer {taskName} comme {status}",
-              "mettre à jour le statut de {taskName} à {status}",
-              "changer le statut de {taskName}"
-            ]
-          },
-          {
-            "name": "UpdateTaskPriorityIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "priority", "type": "PRIORITY" }
-            ],
-            "samples": [
-              "changer la priorité de {taskName} à {priority}",
-              "mettre {taskName} à {priority} priorité"
-            ]
-          },
-          {
-            "name": "UpdateDueDateIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "dueDateTime", "type": "AMAZON.SearchQuery" }
-            ],
-            "samples": [
-              "changer la date d'échéance de {taskName}",
-              "mettre à jour la date de {taskName}"
-            ]
-          },
-          {
-            "name": "UpdateTaskCategoryIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "category", "type": "CATEGORY" }
-            ],
-            "samples": [
-              "déplacer {taskName} vers {category}",
-              "changer la catégorie de {taskName}"
-            ]
-          },
-          {
-            "name": "DeleteTaskIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" }
-            ],
-            "samples": [
-              "supprimer {taskName}",
-              "effacer {taskName}",
-              "retirer {taskName}"
-            ]
-          },
-          {
-            "name": "ReorderTaskIntent",
-            "slots": [
-              { "name": "taskName", "type": "AMAZON.SearchQuery" },
-              { "name": "position", "type": "POSITION" }
-            ],
-            "samples": [
-              "déplacer {taskName} en première position",
-              "mettre {taskName} en haut de la liste",
-              "placer {taskName} après {position}"
-            ]
-          },
-          { "name": "AMAZON.HelpIntent", "samples": [] },
-          { "name": "AMAZON.CancelIntent", "samples": [] },
-          { "name": "AMAZON.StopIntent", "samples": [] },
-          { "name": "AMAZON.FallbackIntent", "samples": [] }
-        ],
-        "types": [
-          { "name": "PRIORITY", "values": [{ "name": { "value": "BASSE" } }, { "name": { "value": "NORMALE" } }, { "name": { "value": "HAUTE" } }] },
-          { "name": "STATUS", "values": [{ "name": { "value": "TO DO" } }, { "name": { "value": "EN COURS" } }, { "name": { "value": "FAIT" } }] },
-          { "name": "CATEGORY", "values": [{ "name": { "value": "PERSONNEL" } }, { "name": { "value": "TRAVAIL" } }] },
-          { "name": "POSITION", "values": [{ "name": { "value": "premier" } }, { "name": { "value": "deuxième" } }, { "name": { "value": "dernier" } }, { "name": { "value": "haut" } }, { "name": { "value": "bas" } }] }
-        ]
-      },
-      "dialog": {
-        "intents": [
-          { "name": "CreateTaskIntent" },
-          { "name": "ReadTasksIntent" },
-          { "name": "UpdateTaskStatusIntent" },
-          { "name": "UpdateTaskPriorityIntent" },
-          { "name": "UpdateDueDateIntent" },
-          { "name": "UpdateTaskCategoryIntent" },
-          { "name": "DeleteTaskIntent" },
-          { "name": "ReorderTaskIntent" }
-        ],
-        "prompts": [
-          { "id": "Elicit.Slot.TaskName", "variations": [{ "type": "PlainText", "value": "Quelle tâche voulez-vous ?" }] },
-          { "id": "Elicit.Slot.Priority", "variations": [{ "type": "PlainText", "value": "Quelle priorité ? Basse, normale ou haute ?" }] },
-          { "id": "Elicit.Slot.Status", "variations": [{ "type": "PlainText", "value": "Quel statut voulez-vous ?" }] },
-          { "id": "Elicit.Slot.DueDateTime", "variations": [{ "type": "PlainText", "value": "Quelle est la date d'échéance ?" }] },
-          { "id": "Elicit.Slot.Category", "variations": [{ "type": "PlainText", "value": "Tâche personnelle ou travail ?" }] },
-          { "id": "Elicit.Slot.Position", "variations": [{ "type": "PlainText", "value": "Où voulez-vous placer la tâche ?" }] }
-        ]
-      }
+        }
     }
 }
+

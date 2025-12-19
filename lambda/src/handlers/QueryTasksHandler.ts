@@ -4,6 +4,7 @@ import { findDatabaseByName, mapPageToTask } from '../utils/notion';
 import { Client } from '@notionhq/client';
 import { NotionTask } from '../types';
 import { getTranslation, getLocale } from '../utils/i18n';
+import { normalizeStatus, normalizePriority, normalizeCategory } from '../utils/normalization';
 import * as chrono from 'chrono-node';
 
 const MAX_RETRIES = 3;
@@ -176,6 +177,13 @@ export class QueryTasksHandler implements RequestHandler {
   }
 
   async handle(handlerInput: HandlerInput) {
+    const toLocalYyyyMmDd = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
     const attributes = handlerInput.attributesManager.getSessionAttributes();
     const user = attributes.user;
     const notionClient = attributes.notionClient;
@@ -196,7 +204,41 @@ export class QueryTasksHandler implements RequestHandler {
       const status = slots.status?.value;
       const priority = slots.priority?.value;
       const category = slots.category?.value;
-      const dueDateTime = slots.dueDateTime?.value;
+      let dueDateTime = slots.dueDateTime?.value;
+      
+      // Handle special cases where utterances don't have explicit slots
+      // Collect all slot values to check for keywords
+      const allSlotValues = [
+        status,
+        priority,
+        category,
+        dueDateTime
+      ].filter(Boolean).join(' ').toLowerCase();
+      
+      // Also check slot resolutions for additional context
+      const slotResolutions = Object.values(slots).map((s: any) => {
+        if (s?.resolutions?.resolutionsPerAuthority?.[0]?.values?.[0]?.value?.name) {
+          return s.resolutions.resolutionsPerAuthority[0].values[0].value.name;
+        }
+        return s?.value || '';
+      }).filter(Boolean).join(' ').toLowerCase();
+      
+      const allText = (allSlotValues + ' ' + slotResolutions).toLowerCase();
+      
+      // Handle "cosa ho per oggi" - if no dueDateTime slot but "oggi" appears anywhere
+      // Also handle "per oggi" pattern explicitly
+      if (!dueDateTime && (allText.includes('oggi') || allText.includes('today') || 
+          allText.includes('per oggi') || allText.includes('for today'))) {
+        dueDateTime = 'oggi';
+      }
+      
+      // Handle "mostra attività scadute" - detect overdue queries
+      // Check in slot values, resolutions, and also check if status slot might contain "scadute"
+      const isOverdueQuery = allText.includes('scadute') || 
+                            allText.includes('scaduto') || 
+                            allText.includes('overdue') ||
+                            allText.includes('in ritardo') ||
+                            (status && (status.toLowerCase().includes('scadute') || status.toLowerCase().includes('scaduto')));
 
       // Try to use stored database ID first, fallback to search
       let tasksDbId = user.tasks_db_id || null;
@@ -217,13 +259,7 @@ export class QueryTasksHandler implements RequestHandler {
       const filters: any[] = [];
       
       if (status) {
-        const normalizedStatus = status.toUpperCase().replace(/\s+/g, '_');
-        let statusValue = 'TO DO';
-        if (normalizedStatus === 'IN_PROCESS' || normalizedStatus === 'IN_PROGRESS') {
-          statusValue = 'IN_PROCESS';
-        } else if (normalizedStatus === 'DONE' || normalizedStatus === 'COMPLETE') {
-          statusValue = 'DONE';
-        }
+        const statusValue = normalizeStatus(status);
         filters.push({
           property: 'Status',
           select: { equals: statusValue },
@@ -231,7 +267,7 @@ export class QueryTasksHandler implements RequestHandler {
       }
       
       if (priority) {
-        const normalizedPriority = priority.toUpperCase() === 'MEDIUM' ? 'NORMAL' : priority.toUpperCase();
+        const normalizedPriority = normalizePriority(priority);
         filters.push({
           property: 'Priority',
           select: { equals: normalizedPriority },
@@ -239,7 +275,7 @@ export class QueryTasksHandler implements RequestHandler {
       }
       
       if (category) {
-        const normalizedCategory = category.toUpperCase();
+        const normalizedCategory = normalizeCategory(category);
         filters.push({
           property: 'Category',
           select: { equals: normalizedCategory },
@@ -247,40 +283,150 @@ export class QueryTasksHandler implements RequestHandler {
       }
       
       if (dueDateTime) {
-        // Parse date/time from slot using chrono-node
-        const chronoResult = chrono.parseDate(dueDateTime);
+        // Clean the dueDateTime value - remove "scadenza" prefix if present (Italian)
+        let cleanedDueDateTime = dueDateTime.trim();
+        cleanedDueDateTime = cleanedDueDateTime.replace(/^scadenza\s+/i, '');
+        // Also remove common Italian prepositions/articles so "del 18 dicembre" parses correctly
+        cleanedDueDateTime = cleanedDueDateTime.replace(
+          /^(del(?:lo|la|le|li)?|dell[oaie]?|dei|degli|delle|di|il|lo|la|i|gli|le)\s+/i,
+          ''
+        );
         
-        if (chronoResult) {
-          const dateStart = new Date(chronoResult);
-          dateStart.setHours(0, 0, 0, 0);
-          const dateEnd = new Date(chronoResult);
-          dateEnd.setHours(23, 59, 59, 999);
+        const lowerDueDateTime = cleanedDueDateTime.toLowerCase();
+        const now = new Date();
+        let dateFilter: any = null;
+        
+        // Handle Italian keywords explicitly (oggi, domani)
+        if (lowerDueDateTime.includes('oggi') || lowerDueDateTime === 'today') {
+          const todayStart = new Date(now);
+          todayStart.setHours(0, 0, 0, 0);
           
-          filters.push({
+          dateFilter = {
             property: 'Due Date Time',
             date: {
-              on_or_after: dateStart.toISOString(),
-              on_or_before: dateEnd.toISOString(),
+              // Use date-only equality to avoid timezone/range issues
+              equals: toLocalYyyyMmDd(todayStart),
             },
-          });
+          };
+        } else if (lowerDueDateTime.includes('domani') || lowerDueDateTime === 'tomorrow') {
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const tomorrowStart = new Date(tomorrow);
+          tomorrowStart.setHours(0, 0, 0, 0);
+          
+          dateFilter = {
+            property: 'Due Date Time',
+            date: {
+              // Use date-only equality to avoid timezone/range issues
+              equals: toLocalYyyyMmDd(tomorrowStart),
+            },
+          };
         } else {
-          // Fallback to native Date parsing
-          const parsedDate = new Date(dueDateTime);
-          if (!isNaN(parsedDate.getTime())) {
-            const dateStart = new Date(parsedDate);
-            dateStart.setHours(0, 0, 0, 0);
-            const dateEnd = new Date(parsedDate);
-            dateEnd.setHours(23, 59, 59, 999);
+          // Map Italian month names to numbers
+          const italianMonths: { [key: string]: number } = {
+            'gennaio': 0, 'febbraio': 1, 'marzo': 2, 'aprile': 3,
+            'maggio': 4, 'giugno': 5, 'luglio': 6, 'agosto': 7,
+            'settembre': 8, 'ottobre': 9, 'novembre': 10, 'dicembre': 11
+          };
+          
+          // Check for Italian date pattern: "DD mese" or "mese DD" (e.g., "25 dicembre", "dicembre 25")
+          const italianDatePattern1 = /(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/i;
+          const italianDatePattern2 = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{1,2})/i;
+          const italianDateMatch1 = cleanedDueDateTime.match(italianDatePattern1);
+          const italianDateMatch2 = cleanedDueDateTime.match(italianDatePattern2);
+          const italianDateMatch = italianDateMatch1 || italianDateMatch2;
+          
+          if (italianDateMatch) {
+            let day: number;
+            let monthName: string;
+            if (italianDateMatch1) {
+              day = parseInt(italianDateMatch1[1], 10);
+              monthName = italianDateMatch1[2].toLowerCase();
+            } else if (italianDateMatch2) {
+              day = parseInt(italianDateMatch2[2], 10);
+              monthName = italianDateMatch2[1].toLowerCase();
+            } else {
+              // This should never happen, but TypeScript requires it
+              day = 1;
+              monthName = 'gennaio';
+            }
+            const month = italianMonths[monthName];
+            const year = now.getFullYear();
+            const todayStart = new Date(now);
+            todayStart.setHours(0, 0, 0, 0);
             
-            filters.push({
+            // Create date - if month/day has passed this year (at day granularity), use next year
+            // IMPORTANT: compare against "today at 00:00", not "now", or "18 dicembre" on Dec 18 would incorrectly become next year.
+            const dateStart = new Date(year, month, day, 0, 0, 0, 0);
+            if (dateStart < todayStart) {
+              dateStart.setFullYear(year + 1);
+            }
+            
+            dateFilter = {
               property: 'Due Date Time',
               date: {
-                on_or_after: dateStart.toISOString(),
-                on_or_before: dateEnd.toISOString(),
+                // Use date-only equality to avoid timezone/range issues
+                equals: toLocalYyyyMmDd(dateStart),
               },
-            });
+            };
+          } else {
+            // Parse date/time from slot using chrono-node
+            const chronoResult = chrono.parseDate(cleanedDueDateTime);
+            
+            if (chronoResult) {
+              const dateStart = new Date(chronoResult);
+              dateStart.setHours(0, 0, 0, 0);
+              
+              dateFilter = {
+                property: 'Due Date Time',
+                date: {
+                  // Use date-only equality to avoid timezone/range issues
+                  equals: toLocalYyyyMmDd(dateStart),
+                },
+              };
+            } else {
+              // Fallback to native Date parsing
+              const parsedDate = new Date(cleanedDueDateTime);
+              if (!isNaN(parsedDate.getTime())) {
+                const dateStart = new Date(parsedDate);
+                dateStart.setHours(0, 0, 0, 0);
+                
+                dateFilter = {
+                  property: 'Due Date Time',
+                  date: {
+                    // Use date-only equality to avoid timezone/range issues
+                    equals: toLocalYyyyMmDd(dateStart),
+                  },
+                };
+              }
+            }
           }
         }
+        
+        if (dateFilter) {
+          filters.push(dateFilter);
+        }
+      }
+      
+      // Handle overdue queries ("mostra attività scadute")
+      if (isOverdueQuery && !dueDateTime) {
+        const now = new Date();
+        filters.push({
+          and: [
+            {
+              property: 'Due Date Time',
+              date: {
+                before: now.toISOString(),
+              },
+            },
+            {
+              property: 'Status',
+              select: {
+                does_not_equal: 'DONE',
+              },
+            },
+          ],
+        });
       }
 
       // Build final filter

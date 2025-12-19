@@ -70,15 +70,34 @@ export class UpdateDueDateHandler implements RequestHandler {
       const locale = getLocale(handlerInput);
       let parsedDueDateTime: string | null = null;
       if (dueDateTime) {
+        // Clean the dueDateTime value - remove "scadenza" prefix if present (Italian)
+        let cleanedDueDateTime = dueDateTime.trim();
+        cleanedDueDateTime = cleanedDueDateTime.replace(/^scadenza\s+/i, '');
+        
+        const lowerDueDateTime = cleanedDueDateTime.toLowerCase();
+        const now = new Date();
+        
+        // Handle Italian keywords explicitly (oggi, domani)
+        if (lowerDueDateTime.includes('oggi') || lowerDueDateTime === 'today') {
+          const today = new Date(now);
+          today.setHours(0, 0, 0, 0);
+          parsedDueDateTime = today.toISOString();
+        } else if (lowerDueDateTime.includes('domani') || lowerDueDateTime === 'tomorrow') {
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(0, 0, 0, 0);
+          parsedDueDateTime = tomorrow.toISOString();
+        } else {
         // Use chrono-node as primary parser for better natural language support
-        const chronoResult = chrono.parseDate(dueDateTime);
+          const chronoResult = chrono.parseDate(cleanedDueDateTime);
         if (chronoResult) {
           parsedDueDateTime = chronoResult.toISOString();
         } else {
           // Fallback to native Date if chrono fails
-          const parsedDate = new Date(dueDateTime);
+            const parsedDate = new Date(cleanedDueDateTime);
           if (!isNaN(parsedDate.getTime())) {
             parsedDueDateTime = parsedDate.toISOString();
+            }
           }
         }
       }

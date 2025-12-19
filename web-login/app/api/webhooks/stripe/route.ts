@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase';
 import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs'; // Use Node.js runtime for better Buffer support
 
 /**
  * Stripe Webhook Endpoint
@@ -20,13 +21,29 @@ export const dynamic = 'force-dynamic';
 export async function POST(request: NextRequest) {
   try {
     console.log('[Stripe Webhook] Webhook received');
-    const body = await request.text();
+    
+    // Get raw body as Buffer - this is critical for signature verification
+    // Stripe requires the exact raw body bytes, not a parsed JSON object
+    // We must preserve the exact bytes that Stripe sent
+    let bodyBuffer: Buffer;
+    try {
+      // Get as array buffer first to preserve exact bytes
+      const arrayBuffer = await request.arrayBuffer();
+      bodyBuffer = Buffer.from(arrayBuffer);
+    } catch (error) {
+      // Fallback to text() if arrayBuffer() fails, but this is less ideal
+      console.warn('[Stripe Webhook] Failed to get arrayBuffer, using text() fallback');
+      const bodyText = await request.text();
+      bodyBuffer = Buffer.from(bodyText, 'utf8');
+    }
+    
     const signature = request.headers.get('stripe-signature');
 
     console.log('[Stripe Webhook] Headers:', {
       hasSignature: !!signature,
       signatureLength: signature?.length || 0,
-      bodyLength: body.length,
+      bodyLength: bodyBuffer.length,
+      bodyPreview: bodyBuffer.toString('utf8').substring(0, 100),
       hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
       webhookSecretPrefix: process.env.STRIPE_WEBHOOK_SECRET?.substring(0, 10) || 'NOT SET',
     });
@@ -47,9 +64,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify webhook signature
+    // Verify webhook signature - pass Buffer directly
     console.log('[Stripe Webhook] Verifying signature...');
-    const event = verifyWebhookSignature(body, signature);
+    const event = verifyWebhookSignature(bodyBuffer, signature);
 
     if (!event) {
       console.error('[Stripe Webhook] Invalid signature');

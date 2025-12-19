@@ -9,6 +9,9 @@ export const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 
 /**
  * Verify Stripe webhook signature
+ * 
+ * IMPORTANT: The payload must be the exact raw bytes that Stripe sent.
+ * Do not parse as JSON or modify the body in any way before calling this function.
  */
 export function verifyWebhookSignature(
   payload: string | Buffer,
@@ -19,10 +22,39 @@ export function verifyWebhookSignature(
   }
 
   try {
-    const event = stripe.webhooks.constructEvent(payload, signature, stripeWebhookSecret);
+    // Stripe requires the exact raw bytes for signature verification
+    // If payload is already a Buffer, use it directly
+    // If it's a string, convert to Buffer using 'utf8' encoding
+    // Note: We must use the exact encoding that Stripe used (typically utf8)
+    const payloadBuffer = Buffer.isBuffer(payload) 
+      ? payload 
+      : Buffer.from(payload, 'utf8');
+    
+    // Stripe's constructEvent expects a Buffer or string
+    // Passing Buffer directly is preferred to preserve exact bytes
+    const event = stripe.webhooks.constructEvent(
+      payloadBuffer,
+      signature,
+      stripeWebhookSecret
+    );
     return event;
   } catch (error: any) {
     console.error('[Stripe] Webhook signature verification failed:', error.message);
+    console.error('[Stripe] Error details:', {
+      message: error.message,
+      type: error.type,
+      signatureLength: signature?.length,
+      payloadLength: Buffer.isBuffer(payload) ? payload.length : payload.length,
+      payloadType: Buffer.isBuffer(payload) ? 'Buffer' : 'string',
+      webhookSecretSet: !!stripeWebhookSecret,
+      webhookSecretLength: stripeWebhookSecret?.length || 0,
+    });
+    
+    // Additional debugging: check if webhook secret format is correct
+    if (stripeWebhookSecret && !stripeWebhookSecret.startsWith('whsec_')) {
+      console.error('[Stripe] WARNING: Webhook secret does not start with "whsec_" - this might be incorrect');
+    }
+    
     return null;
   }
 }

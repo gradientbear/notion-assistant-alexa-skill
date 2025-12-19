@@ -104,7 +104,7 @@ interface UtteranceTest {
 const SLOT_SAMPLES: Record<string, string[]> = {
   taskName: ['buy groceries', 'call dentist', 'finish report', 'read book'],
   priority: ['LOW', 'NORMAL', 'HIGH'],
-  status: ['TO DO', 'IN PROCESS', 'DONE'],
+  status: ['TO DO', 'DONE'],
   category: ['PERSONAL', 'WORK'],
   dueDateTime: ['tomorrow', 'next week', 'today', 'in 2 days'],
   notes: ['important reminder', 'urgent', ''],

@@ -16,23 +16,20 @@
               {
                 "name": "priority",
                 "type": "PRIORITY",
-                "elicitationRequired": true,
-                "confirmationRequired": false,
-                "prompts": { "elicitation": "Elicit.Slot.Priority" }
+                "elicitationRequired": false,
+                "confirmationRequired": false
               },
               {
                 "name": "dueDateTime",
                 "type": "AMAZON.SearchQuery",
-                "elicitationRequired": true,
-                "confirmationRequired": false,
-                "prompts": { "elicitation": "Elicit.Slot.DueDateTime" }
+                "elicitationRequired": false,
+                "confirmationRequired": false
               },
               {
                 "name": "category",
                 "type": "CATEGORY",
-                "elicitationRequired": true,
-                "confirmationRequired": false,
-                "prompts": { "elicitation": "Elicit.Slot.Category" }
+                "elicitationRequired": false,
+                "confirmationRequired": false
               },
               {
                 "name": "notes",
@@ -228,7 +225,6 @@
             "name": "STATUS",
             "values": [
               { "name": { "value": "TO DO" } },
-              { "name": { "value": "IN PROCESS" } },
               { "name": { "value": "DONE" } }
             ]
           },

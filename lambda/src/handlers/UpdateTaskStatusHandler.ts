@@ -2,6 +2,7 @@ import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import { findDatabaseByName, getAllTasks, updateTaskStatus } from '../utils/notion';
 import { getTranslation, getLocale } from '../utils/i18n';
+import { normalizeStatus } from '../utils/normalization';
 
 export class UpdateTaskStatusHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -32,7 +33,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       
       // Extract values from slots
       const taskName = slots.taskName?.value;
-      const status = slots.status?.value;
+      let status = slots.status?.value;
 
       if (!taskName || taskName.trim().length === 0) {
         return buildResponse(
@@ -43,11 +44,35 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       }
 
       if (!status || status.trim().length === 0) {
-        return buildResponse(
-          handlerInput,
-          getTranslation(handlerInput, 'update_task_prompt'),
-          getTranslation(handlerInput, 'update_task_reprompt')
-        );
+        // Try to infer status from the taskName slot value
+        // For utterances like "completa comprare il latte", the taskName might be "comprare il latte"
+        // But for "segna come fatto comprare il latte", taskName might include "fatto"
+        const taskNameLower = (taskName || '').toLowerCase();
+        
+        // Check for Italian completion patterns
+        // Pattern 1: "segna come fatto X" → taskName might be "X" or "fatto X"
+        if (taskNameLower.includes('come fatto') || 
+            taskNameLower.includes('come completato') ||
+            taskNameLower.startsWith('fatto ') ||
+            taskNameLower.startsWith('completato ')) {
+          status = 'DONE';
+        }
+        // Pattern 2: Check if taskName contains status keywords anywhere
+        else if (taskNameLower.includes('fatto') || 
+                 taskNameLower.includes('completato') ||
+                 taskNameLower.includes('finito') ||
+                 taskNameLower.includes('terminato')) {
+          status = 'DONE';
+        } else if (taskNameLower.includes('da fare') || taskNameLower.includes('todo')) {
+          status = 'TO DO';
+        } else {
+          // For utterances like "completa {taskName}", Alexa typically doesn't include "completa" in taskName
+          // We need to infer from the intent pattern itself
+          // Since these samples exist: "completa {taskName}", "segna come fatto {taskName}"
+          // If status is empty but taskName exists, and we matched these patterns, infer DONE
+          // This is a reasonable default for completion verbs
+          status = 'DONE'; // Default inference: if no status specified but taskName exists, assume completion
+        }
       }
 
       // Try to use stored database ID first, fallback to search
@@ -66,13 +91,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       }
 
       // Normalize status value
-      const normalizedStatus = status.toUpperCase().replace(/\s+/g, '_');
-      let statusValue: 'TO DO' | 'IN_PROCESS' | 'DONE' = 'TO DO';
-      if (normalizedStatus === 'IN_PROCESS' || normalizedStatus === 'IN_PROGRESS') {
-        statusValue = 'IN_PROCESS';
-      } else if (normalizedStatus === 'DONE' || normalizedStatus === 'COMPLETE') {
-        statusValue = 'DONE';
-      }
+      const statusValue = normalizeStatus(status);
 
       // Clean task name
       const locale = getLocale(handlerInput);
@@ -99,8 +118,7 @@ export class UpdateTaskStatusHandler implements RequestHandler {
       await updateTaskStatus(notionClient, matchingTask.id, statusValue);
 
       // Build confirmation message
-      const statusKey = statusValue === 'DONE' ? 'status_done' : 
-                       statusValue === 'IN_PROCESS' ? 'status_in_progress' : 'status_to_do';
+      const statusKey = statusValue === 'DONE' ? 'status_done' : 'status_to_do';
       const statusText = getTranslation(handlerInput, statusKey);
       const confirmation = getTranslation(handlerInput, 'task_updated', { 
         taskName: matchingTask.name, 

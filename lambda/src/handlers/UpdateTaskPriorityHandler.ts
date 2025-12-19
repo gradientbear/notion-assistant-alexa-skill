@@ -2,6 +2,7 @@ import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import { findDatabaseByName, getAllTasks, updateTask } from '../utils/notion';
 import { getTranslation, getLocale } from '../utils/i18n';
+import { normalizePriority } from '../utils/normalization';
 
 export class UpdateTaskPriorityHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -66,8 +67,7 @@ export class UpdateTaskPriorityHandler implements RequestHandler {
       }
 
       // Normalize priority value
-      const normalizedPriority = priority.toUpperCase() === 'MEDIUM' ? 'NORMAL' : 
-                                (priority.toUpperCase() as 'LOW' | 'NORMAL' | 'HIGH');
+      const normalizedPriority = normalizePriority(priority);
 
       // Clean task name
       const locale = getLocale(handlerInput);

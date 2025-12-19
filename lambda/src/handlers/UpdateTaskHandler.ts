@@ -103,7 +103,7 @@ export class UpdateTaskHandler implements RequestHandler {
 
       // Build update object
       const updates: {
-        status?: 'TO DO' | 'IN_PROCESS' | 'DONE';
+        status?: 'TO DO' | 'DONE';
         priority?: 'LOW' | 'NORMAL' | 'HIGH';
         dueDateTime?: string | null;
       } = {};
@@ -128,11 +128,6 @@ export class UpdateTaskHandler implements RequestHandler {
             lowerRequest.includes('terminé') || lowerRequest.includes('complété') || lowerRequest.includes('fini') ||
             lowerRequest.includes('hecho') || lowerRequest.includes('completado') || lowerRequest.includes('terminado')) {
           updates.status = 'DONE';
-        } else if (lowerRequest.includes('in progress') || lowerRequest.includes('working on') ||
-                   lowerRequest.includes('in corso') || lowerRequest.includes('in lavorazione') ||
-                   lowerRequest.includes('en cours') || lowerRequest.includes('en train') ||
-                   lowerRequest.includes('en progreso') || lowerRequest.includes('en curso')) {
-          updates.status = 'IN_PROCESS';
         } else if (lowerRequest.includes('to do') || lowerRequest.includes('todo') ||
                    lowerRequest.includes('da fare') ||
                    lowerRequest.includes('à faire') ||
@@ -172,8 +167,7 @@ export class UpdateTaskHandler implements RequestHandler {
       // Build confirmation message
       const updateParts: string[] = [];
       if (updates.status) {
-        const statusKey = updates.status === 'DONE' ? 'status_done' : 
-                         updates.status === 'IN_PROCESS' ? 'status_in_progress' : 'status_to_do';
+        const statusKey = updates.status === 'DONE' ? 'status_done' : 'status_to_do';
         const statusText = getTranslation(handlerInput, statusKey);
         updateParts.push(getTranslation(handlerInput, 'status_to', { status: statusText }));
       }

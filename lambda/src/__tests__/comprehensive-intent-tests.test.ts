@@ -143,9 +143,9 @@ describe('Comprehensive Intent Tests', () => {
     const categoryValues = ['PERSONAL', 'WORK'];
     const dateValues = ['today', 'tomorrow', 'next week', 'in 3 days', '2024-12-25'];
 
-    // Test all sample utterances
+    // Test all sample utterances with all slots provided
     sampleUtterances.forEach(({ utterance, slots }) => {
-      it(`should handle "${utterance}" with all required slots`, async () => {
+      it(`should handle "${utterance}" with all slots provided`, async () => {
         for (const priority of priorityValues) {
           for (const category of categoryValues) {
             for (const date of dateValues) {
@@ -169,7 +169,72 @@ describe('Comprehensive Intent Tests', () => {
       });
     });
 
-    // Test missing required slots
+    // Test with only taskName (new behavior - should use defaults)
+    it('should handle "add buy milk" with only taskName (uses defaults)', async () => {
+      const request = buildIntentRequest({
+        intentName: 'CreateTaskIntent',
+        accessToken: 'valid-token',
+        sessionAttributes: { user: mockUser },
+        slots: {
+          taskName: 'buy milk',
+        },
+      });
+
+      const response = await invokeHandler(request);
+      validateResponse(response);
+      
+      // Verify task was added (should not prompt)
+      const speechText = getSpeechText(response);
+      expect(speechText.toLowerCase()).not.toContain('what task');
+      expect(speechText.toLowerCase()).not.toContain('which task');
+    });
+
+    // Test with taskName and date embedded
+    it('should handle "add buy milk tomorrow" with date in taskName', async () => {
+      const request = buildIntentRequest({
+        intentName: 'CreateTaskIntent',
+        accessToken: 'valid-token',
+        sessionAttributes: { user: mockUser },
+        slots: {
+          taskName: 'buy milk tomorrow',
+        },
+      });
+
+      const response = await invokeHandler(request);
+      validateResponse(response);
+    });
+
+    // Test with taskName and priority embedded
+    it('should handle "add buy milk high priority" with priority in taskName', async () => {
+      const request = buildIntentRequest({
+        intentName: 'CreateTaskIntent',
+        accessToken: 'valid-token',
+        sessionAttributes: { user: mockUser },
+        slots: {
+          taskName: 'buy milk high priority',
+        },
+      });
+
+      const response = await invokeHandler(request);
+      validateResponse(response);
+    });
+
+    // Test with taskName and category embedded
+    it('should handle "add finish report work" with category in taskName', async () => {
+      const request = buildIntentRequest({
+        intentName: 'CreateTaskIntent',
+        accessToken: 'valid-token',
+        sessionAttributes: { user: mockUser },
+        slots: {
+          taskName: 'finish report work',
+        },
+      });
+
+      const response = await invokeHandler(request);
+      validateResponse(response);
+    });
+
+    // Test missing required slot - taskName
     it('should prompt for missing taskName', async () => {
       const request = buildIntentRequest({
         intentName: 'CreateTaskIntent',
@@ -177,65 +242,69 @@ describe('Comprehensive Intent Tests', () => {
         sessionAttributes: { user: mockUser },
         slots: {
           taskName: emptySlot(),
-          priority: 'HIGH',
-          dueDateTime: 'tomorrow',
-          category: 'WORK',
         },
       });
 
       const response = await invokeHandler(request);
       validateResponse(response);
+      const speechText = getSpeechText(response);
+      expect(speechText.toLowerCase()).toMatch(/what task|which task|task would you like/i);
     });
 
-    it('should prompt for missing priority', async () => {
+    // Test with optional slots missing (should use defaults, not prompt)
+    it('should handle missing priority slot (uses default NORMAL)', async () => {
       const request = buildIntentRequest({
         intentName: 'CreateTaskIntent',
         accessToken: 'valid-token',
         sessionAttributes: { user: mockUser },
         slots: {
           taskName: 'Test task',
-          priority: emptySlot(),
-          dueDateTime: 'tomorrow',
-          category: 'WORK',
         },
       });
 
       const response = await invokeHandler(request);
       validateResponse(response);
+      
+      // Should not prompt for priority
+      const speechText = getSpeechText(response);
+      expect(speechText.toLowerCase()).not.toContain('priority');
+      expect(speechText.toLowerCase()).not.toMatch(/what priority|which priority/i);
     });
 
-    it('should prompt for missing dueDateTime', async () => {
+    it('should handle missing dueDateTime slot (uses default null)', async () => {
       const request = buildIntentRequest({
         intentName: 'CreateTaskIntent',
         accessToken: 'valid-token',
         sessionAttributes: { user: mockUser },
         slots: {
           taskName: 'Test task',
-          priority: 'HIGH',
-          dueDateTime: emptySlot(),
-          category: 'WORK',
         },
       });
 
       const response = await invokeHandler(request);
       validateResponse(response);
+      
+      // Should not prompt for due date
+      const speechText = getSpeechText(response);
+      expect(speechText.toLowerCase()).not.toMatch(/when|due date|due time/i);
     });
 
-    it('should prompt for missing category', async () => {
+    it('should handle missing category slot (uses default PERSONAL)', async () => {
       const request = buildIntentRequest({
         intentName: 'CreateTaskIntent',
         accessToken: 'valid-token',
         sessionAttributes: { user: mockUser },
         slots: {
           taskName: 'Test task',
-          priority: 'HIGH',
-          dueDateTime: 'tomorrow',
-          category: emptySlot(),
         },
       });
 
       const response = await invokeHandler(request);
       validateResponse(response);
+      
+      // Should not prompt for category
+      const speechText = getSpeechText(response);
+      expect(speechText.toLowerCase()).not.toMatch(/personal or work|category/i);
     });
 
     it('should handle optional notes slot', async () => {
@@ -286,7 +355,7 @@ describe('Comprehensive Intent Tests', () => {
       { utterance: 'read my {category} tasks', slots: ['category'] },
     ];
 
-    const statusValues = ['TO DO', 'IN PROCESS', 'DONE'];
+    const statusValues = ['TO DO', 'DONE'];
     const priorityValues = ['LOW', 'NORMAL', 'HIGH'];
     const categoryValues = ['PERSONAL', 'WORK'];
     const dateValues = ['today', 'tomorrow', 'next week'];
@@ -358,7 +427,7 @@ describe('Comprehensive Intent Tests', () => {
       'complete a task',
     ];
 
-    const statusValues = ['TO DO', 'IN PROCESS', 'DONE'];
+    const statusValues = ['TO DO', 'DONE'];
 
     sampleUtterances.forEach((utterance) => {
       statusValues.forEach((status) => {

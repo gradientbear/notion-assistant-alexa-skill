@@ -2,6 +2,7 @@ import { RequestHandler, HandlerInput } from 'ask-sdk-core';
 import { buildResponse, cleanTaskName, findMatchingTask } from '../utils/alexa';
 import { findDatabaseByName, getAllTasks } from '../utils/notion';
 import { getTranslation, getLocale } from '../utils/i18n';
+import { normalizeCategory } from '../utils/normalization';
 
 export class UpdateTaskCategoryHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
@@ -66,7 +67,7 @@ export class UpdateTaskCategoryHandler implements RequestHandler {
       }
 
       // Normalize category value
-      const normalizedCategory = category.toUpperCase() as 'PERSONAL' | 'WORK';
+      const normalizedCategory = normalizeCategory(category);
 
       // Clean task name
       const locale = getLocale(handlerInput);

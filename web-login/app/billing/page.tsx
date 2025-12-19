@@ -38,10 +38,11 @@ export default function BillingPage() {
         throw new Error('Not authenticated');
       }
 
-      // Get Stripe price ID from environment or use default
-      const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID || '';
+      // Get Stripe price ID from environment
+      // Note: NEXT_PUBLIC_* variables are available at build time in Next.js
+      const priceId = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID;
       if (!priceId) {
-        throw new Error('Stripe price ID not configured. Please set NEXT_PUBLIC_STRIPE_PRICE_ID in your environment variables.');
+        throw new Error('Stripe price ID not configured. Please contact support or check your environment configuration.');
       }
       
       // Validate price ID format (should start with 'price_')
@@ -58,7 +59,8 @@ export default function BillingPage() {
         },
         body: JSON.stringify({
           priceId,
-          successUrl: `${window.location.origin}/billing/success`,
+          // Stripe automatically appends ?session_id={CHECKOUT_SESSION_ID} to the success URL
+          successUrl: `${window.location.origin}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${window.location.origin}/billing`,
         }),
       });
