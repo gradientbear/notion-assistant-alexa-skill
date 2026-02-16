@@ -11,7 +11,21 @@ import { getTranslation } from '../utils/i18n';
 
 export class LaunchRequestHandler implements RequestHandler {
   canHandle(handlerInput: HandlerInput): boolean {
-    return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
+    const requestType = handlerInput.requestEnvelope.request.type;
+    
+    // Handle LaunchRequest (when skill is opened fresh)
+    if (requestType === 'LaunchRequest') {
+      return true;
+    }
+    
+    // Handle restart intents (when user says "open Voice Planner" while skill is already open)
+    // These intents should show the welcome message, not the unhandled message
+    if (requestType === 'IntentRequest') {
+      const intentName = (handlerInput.requestEnvelope.request as any)?.intent?.name;
+      return intentName === 'AMAZON.NavigateHomeIntent' || intentName === 'AMAZON.StartOverIntent';
+    }
+    
+    return false;
   }
 
   async handle(handlerInput: HandlerInput) {

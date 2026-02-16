@@ -5,6 +5,7 @@ import { Client } from '@notionhq/client';
 import { NotionTask } from '../types';
 import { getTranslation, getLocale } from '../utils/i18n';
 import { normalizeStatus, normalizePriority, normalizeCategory } from '../utils/normalization';
+import { extractCategory } from '../utils/parsing';
 import * as chrono from 'chrono-node';
 
 const MAX_RETRIES = 3;
@@ -132,7 +133,24 @@ function formatTaskList(tasks: NotionTask[], handlerInput: HandlerInput): string
       const hours = dueDate.getHours();
       const minutes = dueDate.getMinutes();
       if (hours !== 0 || minutes !== 0) {
-        const timeStr = dueDate.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
+        // Use the same timezone logic as parsing to ensure correct display
+        const localeTimeZones: Record<string, string> = {
+          'it-IT': 'Europe/Rome',
+          'fr-FR': 'Europe/Paris',
+          'es-ES': 'Europe/Madrid',
+          'es-MX': 'America/Mexico_City',
+          'en-US': 'UTC',
+        };
+        const targetTimeZone = localeTimeZones[locale] || 'UTC';
+        
+        // Format time using the same timezone that was used during parsing
+        const timeFormatter = new Intl.DateTimeFormat(locale, {
+          timeZone: targetTimeZone,
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+        });
+        const timeStr = timeFormatter.format(dueDate);
         response += getTranslation(handlerInput, 'task_due_time', { date: dateStr, time: timeStr });
       } else {
         response += getTranslation(handlerInput, 'task_due', { date: dateStr });
@@ -203,7 +221,7 @@ export class QueryTasksHandler implements RequestHandler {
       // Extract values from specific slots (all optional)
       const status = slots.status?.value;
       const priority = slots.priority?.value;
-      const category = slots.category?.value;
+      let category = slots.category?.value;
       let dueDateTime = slots.dueDateTime?.value;
       
       // Handle special cases where utterances don't have explicit slots
@@ -223,13 +241,56 @@ export class QueryTasksHandler implements RequestHandler {
         return s?.value || '';
       }).filter(Boolean).join(' ').toLowerCase();
       
-      const allText = (allSlotValues + ' ' + slotResolutions).toLowerCase();
+      // Try to get raw utterance text for fallback parsing (NLU lives under request.intent in Alexa)
+      const nluTokens = request.intent?.nlu?.tokens || (request as any).nlu?.tokens || [];
+      const originalUtterance = nluTokens.join(' ').toLowerCase();
+      const interpretations = request.intent?.nlu?.interpretations || (request as any).interpretations || [];
+      let utteranceFromInterpretations = '';
+      if (interpretations.length > 0) {
+        utteranceFromInterpretations = (interpretations[0]?.nluConfidence?.intent?.input || '').toLowerCase();
+      }
+      const requestInput = (request as any).input || (request as any).rawInput || '';
+      const allInputs = [requestInput, ...interpretations.map((i: any) => i?.nluConfidence?.intent?.input || '').filter(Boolean)].join(' ').toLowerCase();
+      const allUtteranceSources = [originalUtterance, utteranceFromInterpretations, allInputs, allSlotValues, slotResolutions].filter(Boolean).join(' ').toLowerCase();
       
-      // Handle "cosa ho per oggi" - if no dueDateTime slot but "oggi" appears anywhere
-      // Also handle "per oggi" pattern explicitly
+      const allText = (allSlotValues + ' ' + slotResolutions + ' ' + allUtteranceSources).toLowerCase();
+      
+      // Fallback: Handle "cosa ho per oggi" - if no dueDateTime slot but "oggi" appears anywhere
+      // This is a fallback for cases where the interaction model might not have captured the date
+      // With the updated interaction model using {dueDateTime} slot, this should rarely be needed
       if (!dueDateTime && (allText.includes('oggi') || allText.includes('today') || 
           allText.includes('per oggi') || allText.includes('for today'))) {
         dueDateTime = 'oggi';
+        console.log('[QueryTasksHandler] Fallback: Detected "oggi" in text, using as dueDateTime');
+      }
+      
+      // Fallback: Extract Italian date from utterance when slot is empty (e.g. "leggi le mie attività del 30 gennaio 2026")
+      // Alexa may not fill dueDateTime when user says "del" instead of "di", so parse from full text
+      if (!dueDateTime) {
+        const italianMonthsStr = 'gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre';
+        // Match "del/di DD mese YYYY" or "DD mese YYYY" (with word boundaries so we don't match partial words)
+        const dateInPhrase = allText.match(
+          new RegExp(`(?:del|di)\\s+(\\d{1,2})\\s+(${italianMonthsStr})\\s+(\\d{4})`, 'i')
+        ) || allText.match(
+          new RegExp(`(\\d{1,2})\\s+(${italianMonthsStr})\\s+(\\d{4})`, 'i')
+        );
+        if (dateInPhrase) {
+          dueDateTime = `${dateInPhrase[1]} ${dateInPhrase[2]} ${dateInPhrase[3]}`;
+          console.log('[QueryTasksHandler] Fallback: Extracted date from utterance:', dueDateTime);
+        }
+      }
+      
+      // Fallback: Detect category from utterance text when slot is not filled
+      // This handles cases like "leggi le mie attività lavoro" where "lavoro" might not be captured in the category slot
+      if (!category) {
+        const detectedCategory = extractCategory(allUtteranceSources || allText, getLocale(handlerInput));
+        if (detectedCategory) {
+          category = detectedCategory;
+          console.log('[QueryTasksHandler] Fallback: Detected category from utterance:', {
+            detectedCategory,
+            utterance: allUtteranceSources || allText
+          });
+        }
       }
       
       // Handle "mostra attività scadute" - detect overdue queries
@@ -282,6 +343,7 @@ export class QueryTasksHandler implements RequestHandler {
         });
       }
       
+      let dateFilterAdded = false;
       if (dueDateTime) {
         // Clean the dueDateTime value - remove "scadenza" prefix if present (Italian)
         let cleanedDueDateTime = dueDateTime.trim();
@@ -289,6 +351,11 @@ export class QueryTasksHandler implements RequestHandler {
         // Also remove common Italian prepositions/articles so "del 18 dicembre" parses correctly
         cleanedDueDateTime = cleanedDueDateTime.replace(
           /^(del(?:lo|la|le|li)?|dell[oaie]?|dei|degli|delle|di|il|lo|la|i|gli|le)\s+/i,
+          ''
+        );
+        // Remove common English prepositions/articles so "on December 25th" or "for December 25th" parses correctly
+        cleanedDueDateTime = cleanedDueDateTime.replace(
+          /^(on|for|at|by|the)\s+/i,
           ''
         );
         
@@ -329,9 +396,9 @@ export class QueryTasksHandler implements RequestHandler {
             'settembre': 8, 'ottobre': 9, 'novembre': 10, 'dicembre': 11
           };
           
-          // Check for Italian date pattern: "DD mese" or "mese DD" (e.g., "25 dicembre", "dicembre 25")
-          const italianDatePattern1 = /(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)/i;
-          const italianDatePattern2 = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{1,2})/i;
+          // Check for Italian date pattern: "DD mese" or "mese DD" with optional year (e.g., "25 dicembre", "dicembre 25", "30 gennaio 2026", "del 20 gennaio 2026")
+          const italianDatePattern1 = /(\d{1,2})\s+(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)(?:\s+(\d{4}))?/i;
+          const italianDatePattern2 = /(gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|novembre|dicembre)\s+(\d{1,2})(?:\s+(\d{4}))?/i;
           const italianDateMatch1 = cleanedDueDateTime.match(italianDatePattern1);
           const italianDateMatch2 = cleanedDueDateTime.match(italianDatePattern2);
           const italianDateMatch = italianDateMatch1 || italianDateMatch2;
@@ -339,26 +406,35 @@ export class QueryTasksHandler implements RequestHandler {
           if (italianDateMatch) {
             let day: number;
             let monthName: string;
+            let yearExplicit: number | null = null;
             if (italianDateMatch1) {
               day = parseInt(italianDateMatch1[1], 10);
               monthName = italianDateMatch1[2].toLowerCase();
+              yearExplicit = italianDateMatch1[3] ? parseInt(italianDateMatch1[3], 10) : null;
             } else if (italianDateMatch2) {
               day = parseInt(italianDateMatch2[2], 10);
               monthName = italianDateMatch2[1].toLowerCase();
+              yearExplicit = italianDateMatch2[3] ? parseInt(italianDateMatch2[3], 10) : null;
             } else {
               // This should never happen, but TypeScript requires it
               day = 1;
               monthName = 'gennaio';
             }
             const month = italianMonths[monthName];
-            const year = now.getFullYear();
             const todayStart = new Date(now);
             todayStart.setHours(0, 0, 0, 0);
             
-            // Create date - if month/day has passed this year (at day granularity), use next year
-            // IMPORTANT: compare against "today at 00:00", not "now", or "18 dicembre" on Dec 18 would incorrectly become next year.
+            let year: number;
+            if (yearExplicit !== null) {
+              // User specified a year (e.g. "30 gennaio 2026") - use it as-is, including past dates
+              year = yearExplicit;
+            } else {
+              year = now.getFullYear();
+            }
+            
             const dateStart = new Date(year, month, day, 0, 0, 0, 0);
-            if (dateStart < todayStart) {
+            // Only "next occurrence" logic when no year was given (e.g. "30 gennaio" means next 30 Jan)
+            if (yearExplicit === null && dateStart < todayStart) {
               dateStart.setFullYear(year + 1);
             }
             
@@ -405,7 +481,20 @@ export class QueryTasksHandler implements RequestHandler {
         
         if (dateFilter) {
           filters.push(dateFilter);
+          dateFilterAdded = true;
         }
+      }
+      
+      // When querying by date without explicit status, exclude completed tasks
+      // This handles cases like "cosa ho da fare oggi?" (what do I have to do today?)
+      // where the user is asking about tasks to do, not completed tasks
+      if (dateFilterAdded && !status) {
+        filters.push({
+          property: 'Status',
+          select: {
+            does_not_equal: 'DONE',
+          },
+        });
       }
       
       // Handle overdue queries ("mostra attività scadute")
@@ -465,4 +554,3 @@ export class QueryTasksHandler implements RequestHandler {
     }
   }
 }
-

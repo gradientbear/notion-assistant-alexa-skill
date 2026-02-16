@@ -78,7 +78,30 @@ export function normalizeStatus(status: string): 'TO DO' | 'DONE' {
     return 'TO DO';
   }
   
-  // Existing English logic
+  // English keywords
+  if (
+    lower.includes('done') ||
+    lower.includes('complete') ||
+    lower.includes('finished') ||
+    lower.includes('closed') ||
+    lower.includes('finished tasks') ||
+    lower.includes('completed tasks') ||
+    lower.includes('done tasks') ||
+    lower.includes('closed tasks')
+  ) {
+    return 'DONE';
+  }
+  if (
+    lower.includes('to do') ||
+    lower.includes('todo') ||
+    lower.includes('pending') ||
+    lower.includes('open') ||
+    lower.includes('incomplete')
+  ) {
+    return 'TO DO';
+  }
+  
+  // Fallback: uppercase normalization
   const normalized = status.toUpperCase().replace(/\s+/g, '_');
   if (normalized === 'DONE' || normalized === 'COMPLETE' || normalized === 'COMPLETED') {
     return 'DONE';
@@ -93,6 +116,14 @@ export function normalizeCategory(category: string): 'PERSONAL' | 'WORK' {
   if (!category) return 'PERSONAL';
   
   const lower = category.toLowerCase();
+  
+  // English keywords
+  if (lower === 'work' || lower === 'office' || lower === 'business') {
+    return 'WORK';
+  }
+  if (lower === 'personal' || lower === 'home' || lower === 'private') {
+    return 'PERSONAL';
+  }
   
   // Italian keywords
   if (lower === 'lavoro' || lower === 'ufficio' || lower === 'business') {

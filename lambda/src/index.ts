@@ -14,6 +14,7 @@ import { ErrorHandler } from './handlers/ErrorHandler';
 
 import { AuthInterceptor, handleAuthError } from './middleware/auth';
 import { NotionConnectionInterceptor } from './interceptors/NotionConnectionInterceptor';
+import { SessionCleanupInterceptor } from './interceptors/SessionCleanupInterceptor';
 
 // ======================================================================
 // BUILD SKILL
@@ -45,6 +46,9 @@ const skill = SkillBuilders.custom()
     },
     new AuthInterceptor(),
     new NotionConnectionInterceptor()
+  )
+  .addResponseInterceptors(
+    new SessionCleanupInterceptor()
   )
   .addErrorHandlers({
     canHandle() {

@@ -291,6 +291,23 @@ describe('Multi-Language Parsing Tests', () => {
       });
     });
   });
+
+  describe('Italian date + time', () => {
+    it('should parse "ritirare analisi il 20 febbraio 2026 alle 20" with correct task name and 20:00', () => {
+      const text = 'ritirare analisi il 20 febbraio 2026 alle 20';
+      const result = parseTaskFromUserRequest(text, 'it-IT');
+      expect(result.parsedName).toBe('ritirare analisi');
+      expect(result.taskName).toBe('ritirare analisi');
+      expect(result.dueDateTime).toBeTruthy();
+      const due = new Date(result.dueDateTime!);
+      expect(due.getUTCFullYear()).toBe(2026);
+      expect(due.getUTCMonth()).toBe(1); // February
+      expect(due.getUTCDate()).toBe(20);
+      // 20:00 in Europe/Rome (winter = UTC+1) => 19:00 UTC
+      expect(due.getUTCHours()).toBe(19);
+      expect(due.getUTCMinutes()).toBe(0);
+    });
+  });
 });
 
 

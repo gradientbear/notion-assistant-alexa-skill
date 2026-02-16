@@ -153,7 +153,8 @@ export async function addTask(
       pageId: response.id,
       taskName,
       parsedName: parsedName || taskName,
-      databaseId
+      databaseId,
+      dueDateTime: dueDateTime || 'none'
     });
     
     // Update NotionID property with the page ID

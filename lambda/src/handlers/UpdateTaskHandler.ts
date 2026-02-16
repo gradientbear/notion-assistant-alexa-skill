@@ -178,11 +178,14 @@ export class UpdateTaskHandler implements RequestHandler {
         updateParts.push(getTranslation(handlerInput, 'priority_to', { priority: priorityText }));
       }
       if (updates.dueDateTime) {
+        const isDateOnly = typeof updates.dueDateTime === 'string' && !updates.dueDateTime.includes('T');
         const dueDate = new Date(updates.dueDateTime);
-        const dateStr = dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-        const hours = dueDate.getHours();
-        const minutes = dueDate.getMinutes();
-        if (hours !== 0 || minutes !== 0) {
+        const dateStr = isDateOnly
+          ? dueDate.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' })
+          : dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+        const hours = dueDate.getUTCHours();
+        const minutes = dueDate.getUTCMinutes();
+        if (!isDateOnly && (hours !== 0 || minutes !== 0)) {
           const timeStr = dueDate.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
           updateParts.push(getTranslation(handlerInput, 'due_date_to_time', { date: dateStr, time: timeStr }));
         } else {

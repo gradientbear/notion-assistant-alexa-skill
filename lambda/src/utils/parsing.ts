@@ -19,6 +19,59 @@ export interface QueryFilter {
   keyword?: string;
 }
 
+const LOCALE_TIME_ZONES: Record<Locale, string> = {
+  'it-IT': 'Europe/Rome',
+  'fr-FR': 'Europe/Paris',
+  'es-ES': 'Europe/Madrid',
+  'es-MX': 'America/Mexico_City',
+  'en-US': 'UTC',
+};
+
+function getCalendarDateInTz(date: Date, timezone: string): { y: number; m: number; d: number } {
+  const dtf = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  const parts = dtf.formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '0';
+  return {
+    y: Number(get('year')),
+    m: Number(get('month')) - 1,
+    d: Number(get('day')),
+  };
+}
+
+/** Format date as YYYY-MM-DD in the given timezone (user's calendar date). */
+function formatDateOnly(date: Date, timezone: string = 'UTC'): string {
+  const { y, m, d } = getCalendarDateInTz(date, timezone);
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** When time is midnight in the given timezone, return date-only so Notion shows "February 10, 2026" without time. */
+function formatDueDateTime(date: Date, timezone: string = 'UTC'): string {
+  const dtf = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const parts = dtf.formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '0';
+  const h = Number(get('hour'));
+  const min = Number(get('minute'));
+  const sec = Number(get('second'));
+  if (h === 0 && min === 0 && sec === 0) {
+    return formatDateOnly(date, timezone);
+  }
+  return date.toISOString();
+}
+
+/** Return UTC instant of midnight on the calendar date of dateToUse in the given timezone. */
+function getMidnightInTimezone(dateToUse: Date, timezone: string): Date {
+  const { y, m, d } = getCalendarDateInTz(dateToUse, timezone);
+  const refUtc = Date.UTC(y, m, d, 0, 0, 0);
+  const dtf = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  const parts = dtf.formatToParts(new Date(refUtc));
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '0';
+  const h = Number(get('hour'));
+  const min = Number(get('minute'));
+  const sec = Number(get('second'));
+  const offsetMinutes = h * 60 + min + sec / 60;
+  return new Date(refUtc - offsetMinutes * 60000);
+}
+
 /**
  * Clean task name by removing date/time references and command words
  */
@@ -41,6 +94,15 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     /^the\s+tasks:\s+/i,
     /^task:\s+/i,
     /^tasks:\s+/i,
+    // Delete/remove prefixes (English)
+    /^delete\s+/i,
+    /^remove\s+/i,
+    /^trash\s+/i,
+    /^get rid of\s+/i,
+    /^cancel\s+/i,
+    /^delete task\s+/i,
+    /^remove task\s+/i,
+    /^cancel task\s+/i,
     // Italian prefixes
     /^aggiungi\s+/i,
     /^crea\s+/i,
@@ -106,6 +168,127 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
     text = text.replace(pattern, '');
   }
   
+  // Remove priority keywords (English, Italian, French, Spanish)
+  // Note: Patterns without $ anchor match anywhere in the string, patterns with $ match only at the end
+  const priorityPatterns = [
+    // English
+    /\s+high\s+priority\s+/i,
+    /\s+low\s+priority\s+/i,
+    /\s+normal\s+priority\s+/i,
+    /\s+medium\s+priority\s+/i,
+    /\s+urgent\s+/i,
+    /\s+important\s+/i,
+    /\s+high\s+priority$/i,
+    /\s+low\s+priority$/i,
+    /\s+normal\s+priority$/i,
+    /\s+medium\s+priority$/i,
+    /\s+urgent$/i,
+    /\s+important$/i,
+    // Italian - handle both "priorità" (with accent) and "priorita" (without accent)
+    // Patterns without $ anchor (match anywhere)
+    /\s+alta\s+priorità\s+/i,
+    /\s+priorità\s+alta\s+/i,
+    /\s+alta\s+priorita\s+/i,
+    /\s+priorita\s+alta\s+/i,
+    /\s+bassa\s+priorità\s+/i,
+    /\s+priorità\s+bassa\s+/i,
+    /\s+bassa\s+priorita\s+/i,
+    /\s+priorita\s+bassa\s+/i,
+    /\s+priorità\s+normale\s+/i,
+    /\s+media\s+priorità\s+/i,
+    /\s+priorita\s+normale\s+/i,
+    /\s+media\s+priorita\s+/i,
+    /\s+urgente\s+/i,
+    /\s+importante\s+/i,
+    // Patterns with $ anchor (match at end)
+    /\s+alta\s+priorità$/i,
+    /\s+priorità\s+alta$/i,
+    /\s+alta\s+priorita$/i,
+    /\s+priorita\s+alta$/i,
+    /\s+bassa\s+priorità$/i,
+    /\s+priorità\s+bassa$/i,
+    /\s+bassa\s+priorita$/i,
+    /\s+priorita\s+bassa$/i,
+    /\s+priorità\s+normale$/i,
+    /\s+media\s+priorità$/i,
+    /\s+priorita\s+normale$/i,
+    /\s+media\s+priorita$/i,
+    /\s+urgente$/i,
+    /\s+importante$/i,
+    // French
+    /\s+haute\s+priorité\s+/i,
+    /\s+priorité\s+haute\s+/i,
+    /\s+basse\s+priorité\s+/i,
+    /\s+priorité\s+basse\s+/i,
+    /\s+priorité\s+normale\s+/i,
+    /\s+moyenne\s+priorité\s+/i,
+    /\s+urgent\s+/i,
+    /\s+important\s+/i,
+    /\s+haute\s+priorité$/i,
+    /\s+priorité\s+haute$/i,
+    /\s+basse\s+priorité$/i,
+    /\s+priorité\s+basse$/i,
+    /\s+priorité\s+normale$/i,
+    /\s+moyenne\s+priorité$/i,
+    /\s+urgent$/i,
+    /\s+important$/i,
+    // Spanish
+    /\s+alta\s+prioridad\s+/i,
+    /\s+prioridad\s+alta\s+/i,
+    /\s+baja\s+prioridad\s+/i,
+    /\s+prioridad\s+baja\s+/i,
+    /\s+prioridad\s+normal\s+/i,
+    /\s+media\s+prioridad\s+/i,
+    /\s+urgente\s+/i,
+    /\s+importante\s+/i,
+    /\s+alta\s+prioridad$/i,
+    /\s+prioridad\s+alta$/i,
+    /\s+baja\s+prioridad$/i,
+    /\s+prioridad\s+baja$/i,
+    /\s+prioridad\s+normal$/i,
+    /\s+media\s+prioridad$/i,
+    /\s+urgente$/i,
+    /\s+importante$/i,
+  ];
+  
+  for (const pattern of priorityPatterns) {
+    text = text.replace(pattern, '');
+  }
+  
+  // Remove category keywords (English, Italian, French, Spanish)
+  const categoryPatterns = [
+    // English
+    /\s+work$/i,
+    /\s+office$/i,
+    /\s+business$/i,
+    /\s+personal$/i,
+    /\s+home$/i,
+    /\s+private$/i,
+    // Italian
+    /\s+lavoro$/i,
+    /\s+ufficio$/i,
+    /\s+personale$/i,
+    /\s+casa$/i,
+    /\s+privato$/i,
+    // French
+    /\s+travail$/i,
+    /\s+bureau$/i,
+    /\s+personnel$/i,
+    /\s+maison$/i,
+    /\s+privé$/i,
+    // Spanish
+    /\s+trabajo$/i,
+    /\s+oficina$/i,
+    /\s+negocio$/i,
+    /\s+personal$/i,
+    /\s+casa$/i,
+    /\s+privado$/i,
+  ];
+  
+  for (const pattern of categoryPatterns) {
+    text = text.replace(pattern, '');
+  }
+  
   return text.trim();
 }
 
@@ -115,11 +298,11 @@ function cleanTaskName(raw: string, locale: Locale = 'en-US'): string {
 function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'DONE' | undefined {
   const lower = text.toLowerCase();
   
-  // English keywords
-  if (lower.includes('done') || lower.includes('complete') || lower.includes('finished')) {
+  // English keywords — use word boundaries so "finish report" doesn't match "finished"
+  if (/\b(done|complete|finished|closed)\b/.test(lower)) {
     return 'DONE';
   }
-  if (lower.includes('to do') || lower.includes('todo') || lower.includes('pending')) {
+  if (/\b(to do|todo|pending|open|incomplete)\b/.test(lower) || lower.includes('to do') || lower.includes('todo')) {
     return 'TO DO';
   }
   
@@ -153,7 +336,7 @@ function extractStatus(text: string, locale: Locale = 'en-US'): 'TO DO' | 'DONE'
 /**
  * Extract category from natural language (English, Italian, French, Spanish)
  */
-function extractCategory(text: string, locale: Locale = 'en-US'): 'PERSONAL' | 'WORK' | undefined {
+export function extractCategory(text: string, locale: Locale = 'en-US'): 'PERSONAL' | 'WORK' | undefined {
   const lower = text.toLowerCase();
   
   // English keywords
@@ -198,24 +381,40 @@ function extractPriority(text: string, locale: Locale = 'en-US'): 'LOW' | 'NORMA
   const lower = text.toLowerCase();
   
   // English keywords
+  // Check for "high priority" phrase first, then standalone "high" (but not words containing "high" like "highlight")
   if (lower.includes('high priority') || lower.includes('urgent') || lower.includes('important')) {
     return 'HIGH';
   }
-  if (lower.includes('low priority') || lower.includes('low')) {
+  // Check for standalone "high" (as whole word, not part of another word)
+  if (/\bhigh\b/.test(lower) && !lower.includes('highlight') && !lower.includes('highway')) {
+    return 'HIGH';
+  }
+  // Check for "low priority" phrase first, then standalone "low" (but not words containing "low" like "below", "follow", "yellow")
+  if (lower.includes('low priority')) {
+    return 'LOW';
+  }
+  // Check for standalone "low" (as whole word, not part of another word)
+  if (/\blow\b/.test(lower) && !lower.includes('below') && !lower.includes('follow') && !lower.includes('yellow') && !lower.includes('allow')) {
     return 'LOW';
   }
   if (lower.includes('normal priority') || lower.includes('medium priority')) {
     return 'NORMAL';
   }
   
-  // Italian keywords
-  if (lower.includes('alta priorità') || lower.includes('priorità alta') || lower.includes('urgente') || lower.includes('importante')) {
+  // Italian keywords - handle both "priorità" (with accent) and "priorita" (without accent)
+  if (lower.includes('alta priorità') || lower.includes('alta priorita') || 
+      lower.includes('priorità alta') || lower.includes('priorita alta') || 
+      lower.includes('urgente') || lower.includes('importante')) {
     return 'HIGH';
   }
-  if (lower.includes('bassa priorità') || lower.includes('priorità bassa') || lower.includes('bassa')) {
+  if (lower.includes('bassa priorità') || lower.includes('bassa priorita') || 
+      lower.includes('priorità bassa') || lower.includes('priorita bassa') || 
+      lower.includes('bassa')) {
     return 'LOW';
   }
-  if (lower.includes('priorità normale') || lower.includes('media priorità') || lower.includes('normale')) {
+  if (lower.includes('priorità normale') || lower.includes('priorita normale') || 
+      lower.includes('media priorità') || lower.includes('media priorita') || 
+      lower.includes('normale')) {
     return 'NORMAL';
   }
   
@@ -275,9 +474,33 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
   let parsedDate: Date | null = null;
   let dueDateTime: string | null = null;
   let textWithoutDate = userRequest;
-  
-  // Handle Italian specific dates before chrono parsing
-  if (italianDateMatch) {
+  const now = new Date();
+  const tz = LOCALE_TIME_ZONES[locale] || 'UTC';
+
+  // Normalize: collapse spaces so "tomorrow" is reliably detected
+  const normalizedRequest = userRequest.replace(/\s+/g, ' ').trim();
+
+  // Early check for "tomorrow" / "today" / "next week" so we never miss them (before Italian/chrono).
+  // Build midnight in user's timezone so the saved date is "today" in their locale, not yesterday.
+  const tomorrowKeyword = /\b(tomorrow|domani|demain|mañana)\b/i;
+  const todayKeyword = /\b(today|oggi|aujourd['']hui|hoy)\b/i;
+  const nextWeekKeyword = /\b(next week|prossima settimana|semaine prochaine|próxima semana)\b/i;
+  if (tomorrowKeyword.test(normalizedRequest) && !parsedDate) {
+    const tomorrowInTz = new Date(now.getTime() + 86400000);
+    parsedDate = getMidnightInTimezone(tomorrowInTz, tz);
+    textWithoutDate = normalizedRequest.replace(tomorrowKeyword, ' ').replace(/\s+/g, ' ').trim();
+  } else if (todayKeyword.test(normalizedRequest) && !parsedDate) {
+    parsedDate = getMidnightInTimezone(now, tz);
+    textWithoutDate = normalizedRequest.replace(todayKeyword, ' ').replace(/\s+/g, ' ').trim();
+  } else if (nextWeekKeyword.test(normalizedRequest) && !parsedDate) {
+    const nextWeek = new Date(now);
+    nextWeek.setDate(now.getDate() - now.getDay() + 7);
+    parsedDate = getMidnightInTimezone(nextWeek, tz);
+    textWithoutDate = normalizedRequest.replace(nextWeekKeyword, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  // Handle Italian specific dates before chrono parsing (only if we didn't already set date from tomorrow/today)
+  if (italianDateMatch && !parsedDate) {
     let day: number;
     let monthName: string;
     let matchedText: string;
@@ -314,57 +537,343 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
       parsedDate = new Date(targetYear, month, day, 0, 0, 0, 0);
     }
     
-    dueDateTime = parsedDate.toISOString();
-    
     // Remove the date from the text to get the task name
     textWithoutDate = userRequest.replace(matchedText, '').trim();
-  } else {
-    // Use chrono-node to parse dates/times (with locale support)
-    // Note: chrono-node should handle Italian dates even with default parser
-    // but we use locale-specific keyword matching for better accuracy
-    parsedDate = chrono.parseDate(userRequest);
-    
-    if (parsedDate) {
-      dueDateTime = parsedDate.toISOString();
-      // Try to remove date references from text
-      const chronoResults = chrono.parse(userRequest);
-      if (chronoResults.length > 0) {
-        const firstResult = chronoResults[0];
-        if (firstResult.text) {
-          textWithoutDate = userRequest.replace(firstResult.text, '').trim();
-        }
+
+    // If the request also contains Italian time (e.g. "alle 20"), parse and combine so we don't store midnight
+    const italianTimePatternInBlock = /alle\s+(?:ore\s+)?(\d{1,2})(?::(\d{2}))?/i;
+    const italianTimeMatchInBlock = userRequest.match(italianTimePatternInBlock);
+    if (italianTimeMatchInBlock) {
+      const hours = parseInt(italianTimeMatchInBlock[1], 10);
+      const minutes = italianTimeMatchInBlock[2] ? parseInt(italianTimeMatchInBlock[2], 10) : 0;
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        const localeTimeZones: Record<string, string> = {
+          'it-IT': 'Europe/Rome',
+          'fr-FR': 'Europe/Paris',
+          'es-ES': 'Europe/Madrid',
+          'es-MX': 'America/Mexico_City',
+          'en-US': 'UTC',
+        };
+        const targetTimeZone = localeTimeZones[locale] || 'Europe/Rome';
+        // Build UTC time for (targetYear, month, day, hours, minutes) in target TZ (not server local TZ)
+        const ref = Date.UTC(targetYear, month, day, hours, minutes, 0);
+        const dtf = new Intl.DateTimeFormat('en-US', {
+          timeZone: targetTimeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        });
+        const parts = dtf.formatToParts(new Date(ref));
+        const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+        const tzHour = Number(getPart('hour'));
+        const tzMinute = Number(getPart('minute'));
+        const offsetMinutes = (tzHour * 60 + tzMinute) - (hours * 60 + minutes);
+        const actualUTC = new Date(ref - offsetMinutes * 60000);
+        dueDateTime = actualUTC.toISOString();
+        textWithoutDate = textWithoutDate.replace(italianTimePatternInBlock, '').trim();
       }
+    } else {
+      dueDateTime = formatDateOnly(parsedDate, tz);
     }
-  }
+  } else {
+  // Use chrono-node to parse dates/times (with locale support)
+  // Note: chrono-node should handle Italian dates even with default parser
+  // but we use locale-specific keyword matching for better accuracy
   
-  // Handle Italian time expressions explicitly (e.g., "oggi alle 18", "domani alle 16")
-  let parsedTime: { hours: number; minutes: number } | null = null;
+    // FIRST check for time expressions, as they might come before date keywords (e.g., "at 4 PM tomorrow")
+    // Handle time expressions explicitly (Italian "alle", English "at", French "à", Spanish "a")
+    let parsedTime: { hours: number; minutes: number } | null = null;
 
   // Check for Italian time pattern: "alle HH", "alle HH:MM", "alle ore HH", "alle ore HH:MM"
   const italianTimePattern = /alle\s+(?:ore\s+)?(\d{1,2})(?::(\d{2}))?/i;
-  const timeMatch = userRequest.match(italianTimePattern);
-  if (timeMatch) {
-    const hours = parseInt(timeMatch[1], 10);
-    const minutes = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
+  const italianTimeMatch = userRequest.match(italianTimePattern);
+  
+  // Check for English time pattern: "at HH", "at HH:MM", "at HH PM", "at HH AM", "at HH:MM PM", "at HH:MM AM"
+  // Also handle "p.m." and "a.m." formats (with periods) that Alexa might send
+  const englishTimePattern = /at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i;
+  const englishTimeMatch = userRequest.match(englishTimePattern);
+  
+  // Check for French time pattern: "à HH", "à HH:MM", "à HHh", "à HHhMM"
+  const frenchTimePattern = /à\s+(\d{1,2})(?:h(\d{2})?)?/i;
+  const frenchTimeMatch = userRequest.match(frenchTimePattern);
+  
+  // Check for Spanish time pattern: "a las HH", "a las HH:MM", "a la HH", "a la HH:MM"
+  const spanishTimePattern = /a\s+(?:las?|las)\s+(\d{1,2})(?::(\d{2}))?/i;
+  const spanishTimeMatch = userRequest.match(spanishTimePattern);
+  
+  if (italianTimeMatch) {
+    let hours = parseInt(italianTimeMatch[1], 10);
+    const minutes = italianTimeMatch[2] ? parseInt(italianTimeMatch[2], 10) : 0;
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      parsedTime = { hours, minutes };
+    }
+  } else if (englishTimeMatch) {
+    let hours = parseInt(englishTimeMatch[1], 10);
+    const minutes = englishTimeMatch[2] ? parseInt(englishTimeMatch[2], 10) : 0;
+    let ampm = englishTimeMatch[3] ? englishTimeMatch[3].toLowerCase() : null;
+    
+    // Normalize "p.m." and "a.m." to "pm" and "am" (Alexa sometimes sends with periods)
+    if (ampm === 'p.m.' || ampm === 'p. m.') {
+      ampm = 'pm';
+    } else if (ampm === 'a.m.' || ampm === 'a. m.') {
+      ampm = 'am';
+    }
+    
+    // Convert to 24-hour format
+    if (ampm === 'pm' && hours !== 12) {
+      hours += 12;
+    } else if (ampm === 'am' && hours === 12) {
+      hours = 0;
+    }
+    
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      parsedTime = { hours, minutes };
+    }
+  } else if (frenchTimeMatch) {
+    const hours = parseInt(frenchTimeMatch[1], 10);
+    const minutes = frenchTimeMatch[2] ? parseInt(frenchTimeMatch[2], 10) : 0;
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      parsedTime = { hours, minutes };
+    }
+  } else if (spanishTimeMatch) {
+    const hours = parseInt(spanishTimeMatch[1], 10);
+    const minutes = spanishTimeMatch[2] ? parseInt(spanishTimeMatch[2], 10) : 0;
     if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
       parsedTime = { hours, minutes };
     }
   }
 
-  // If we found a time but no date, try to parse date again or use today
+  // If we found a time but no date, try to parse date again or check for today/tomorrow keywords
+  // Also check if we have a time expression that comes with a date keyword (e.g., "at 4 PM tomorrow")
   if (parsedTime && !parsedDate) {
-    // Remove time expression and try parsing again
-    const withoutTime = textWithoutDate.replace(italianTimePattern, '').trim();
-    parsedDate = chrono.parseDate(withoutTime);
+    // First, check the original userRequest for date keywords that might come after the time
+    // (e.g., "at 4 PM tomorrow" or "at 4 PM December 25th")
+    const tomorrowAfterTimePattern = /(?:^|\s)(tomorrow|domani|demain|mañana)(?:\s|$)/i;
+    const todayAfterTimePattern = /(?:^|\s)(today|oggi|aujourd['']hui|hoy)(?:\s|$)/i;
+    const tomorrowAfterTimeMatch = userRequest.match(tomorrowAfterTimePattern);
+    const todayAfterTimeMatch = userRequest.match(todayAfterTimePattern);
     
-    // If still no date, default to today for "alle HH" patterns
-    if (!parsedDate && userRequest.toLowerCase().includes('alle')) {
-      parsedDate = new Date();
+    if (tomorrowAfterTimeMatch) {
+      parsedDate = new Date(now);
+      parsedDate.setDate(parsedDate.getDate() + 1);
       parsedDate.setHours(0, 0, 0, 0);
+      // Remove tomorrow from userRequest first, then remove time
+      let tempText = userRequest.replace(/(?:^|\s)(tomorrow|domani|demain|mañana)(?:\s|$)/gi, ' ').trim();
+      // Now remove the time expression from the text
+      if (italianTimeMatch) {
+        textWithoutDate = tempText.replace(italianTimePattern, '').trim();
+      } else if (englishTimeMatch) {
+        textWithoutDate = tempText.replace(englishTimePattern, '').trim();
+      } else if (frenchTimeMatch) {
+        textWithoutDate = tempText.replace(frenchTimePattern, '').trim();
+      } else if (spanishTimeMatch) {
+        textWithoutDate = tempText.replace(spanishTimePattern, '').trim();
+      } else {
+        textWithoutDate = tempText;
+      }
+    } else if (todayAfterTimeMatch) {
+      parsedDate = new Date(now);
+      parsedDate.setHours(0, 0, 0, 0);
+      // Remove today from userRequest first, then remove time
+      let tempText = userRequest.replace(/(?:^|\s)(today|oggi|aujourd['']hui|hoy)(?:\s|$)/gi, ' ').trim();
+      // Now remove the time expression from the text
+      if (italianTimeMatch) {
+        textWithoutDate = tempText.replace(italianTimePattern, '').trim();
+      } else if (englishTimeMatch) {
+        textWithoutDate = tempText.replace(englishTimePattern, '').trim();
+      } else if (frenchTimeMatch) {
+        textWithoutDate = tempText.replace(frenchTimePattern, '').trim();
+      } else if (spanishTimeMatch) {
+        textWithoutDate = tempText.replace(spanishTimePattern, '').trim();
+      } else {
+        textWithoutDate = tempText;
+      }
+    } else {
+      // Remove time expression and try parsing again
+      let withoutTime = textWithoutDate;
+      if (italianTimeMatch) {
+        withoutTime = withoutTime.replace(italianTimePattern, '').trim();
+      } else if (englishTimeMatch) {
+        withoutTime = withoutTime.replace(englishTimePattern, '').trim();
+      } else if (frenchTimeMatch) {
+        withoutTime = withoutTime.replace(frenchTimePattern, '').trim();
+      } else if (spanishTimeMatch) {
+        withoutTime = withoutTime.replace(spanishTimePattern, '').trim();
+      }
+      
+      parsedDate = chrono.parseDate(withoutTime);
+      
+      // If still no date, check for today/tomorrow keywords in all languages
+      if (!parsedDate) {
+        if (/\btoday\b/i.test(withoutTime) || /\boggi\b/i.test(withoutTime) || 
+            /\baujourd['']hui\b/i.test(withoutTime) || /\bhoy\b/i.test(withoutTime)) {
+          parsedDate = new Date(now);
+          parsedDate.setHours(0, 0, 0, 0);
+        } else if (/\btomorrow\b/i.test(withoutTime) || /\bdomani\b/i.test(withoutTime) || 
+                   /\bdemain\b/i.test(withoutTime) || /\bmañana\b/i.test(withoutTime)) {
+          parsedDate = new Date(now);
+          parsedDate.setDate(parsedDate.getDate() + 1);
+          parsedDate.setHours(0, 0, 0, 0);
+        } else {
+          // Default to today if time pattern was found (e.g., "at 4 PM" without date)
+          parsedDate = new Date(now);
+          parsedDate.setHours(0, 0, 0, 0);
+        }
+      }
+      
+      if (parsedDate) {
+        textWithoutDate = withoutTime;
+      }
     }
+  }
+  
+  // If we haven't found a date yet, check for date keywords (today/tomorrow)
+  // This handles cases like "buy milk tomorrow" (no time, just date keyword)
+  // IMPORTANT: Check keywords BEFORE chrono-node to ensure "tomorrow" is correctly parsed
+  if (!parsedDate) {
+    // Handle date keywords explicitly (today/tomorrow in all languages)
+    // Check for "today" keywords in all languages (using word boundaries to avoid partial matches)
+    const todayPattern = /\b(today|oggi|aujourd['']hui|hoy)\b/i;
+    const tomorrowPattern = /\b(tomorrow|domani|demain|mañana)\b/i;
     
-    if (parsedDate) {
-      textWithoutDate = withoutTime;
+    const todayMatch = userRequest.match(todayPattern);
+    const tomorrowMatch = userRequest.match(tomorrowPattern);
+    
+    if (todayMatch) {
+      const today = new Date(now);
+      today.setHours(0, 0, 0, 0);
+      parsedDate = today;
+      
+      console.log('[parseTaskFromUserRequest] Detected "today" keyword:', {
+        userRequest,
+        detectedKeyword: todayMatch[1],
+        parsedDate: parsedDate.toISOString()
+      });
+      
+      // Remove date keywords from task name
+      textWithoutDate = userRequest.replace(/\b(today|oggi|aujourd['']hui|hoy)\b/gi, ' ').trim();
+    } 
+    // Check for "tomorrow" keywords in all languages
+    else if (tomorrowMatch) {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      parsedDate = tomorrow;
+      
+      console.log('[parseTaskFromUserRequest] Detected "tomorrow" keyword:', {
+        userRequest,
+        detectedKeyword: tomorrowMatch[1],
+        parsedDate: parsedDate.toISOString()
+      });
+      
+      // Remove date keywords from task name
+      textWithoutDate = userRequest.replace(/\b(tomorrow|domani|demain|mañana)\b/gi, ' ').trim();
+    } else {
+      // Fallback to chrono-node for other date formats
+      // But first, check if chrono-node parsed "tomorrow" incorrectly (returning today instead of tomorrow)
+      const chronoResults = chrono.parse(userRequest);
+      if (chronoResults.length > 0) {
+        const firstResult = chronoResults[0];
+        let chronoDate = firstResult.start.date();
+        
+        // Validate: if the parsed text contains "tomorrow" keyword, ensure the date is actually tomorrow
+        const parsedText = firstResult.text?.toLowerCase() || '';
+        if (/\b(tomorrow|domani|demain|mañana)\b/i.test(parsedText)) {
+          // Force tomorrow's date if chrono parsed it incorrectly
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          tomorrow.setHours(0, 0, 0, 0);
+          
+          // Check if chrono returned today instead of tomorrow (within 24 hours of now)
+          const todayStart = new Date(now);
+          todayStart.setHours(0, 0, 0, 0);
+          const todayEnd = new Date(now);
+          todayEnd.setHours(23, 59, 59, 999);
+          
+          if (chronoDate >= todayStart && chronoDate <= todayEnd) {
+            // Chrono incorrectly parsed "tomorrow" as today, fix it
+            console.log('[parseTaskFromUserRequest] Chrono incorrectly parsed "tomorrow" as today, correcting to tomorrow');
+            chronoDate = tomorrow;
+          } else {
+            // Use chrono's date but ensure it's at least tomorrow
+            const tomorrowStart = new Date(now);
+            tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+            tomorrowStart.setHours(0, 0, 0, 0);
+            if (chronoDate < tomorrowStart) {
+              chronoDate = tomorrow;
+            }
+          }
+        }
+        
+        parsedDate = chronoDate;
+        dueDateTime = formatDueDateTime(parsedDate, tz);
+        
+        if (firstResult.text) {
+          // Remove the date text from the user request
+          textWithoutDate = userRequest.replace(firstResult.text, '').trim();
+          // Remove English prepositions that might appear before the date
+          const dateIndex = userRequest.toLowerCase().indexOf(firstResult.text.toLowerCase());
+          if (dateIndex > 0) {
+            const beforeDate = userRequest.substring(0, dateIndex).trim();
+            const prepositionMatch = beforeDate.match(/\b(on|for|at|by|the)\s*$/i);
+            if (prepositionMatch) {
+              textWithoutDate = textWithoutDate.replace(new RegExp(`\\b${prepositionMatch[1]}\\s*$`, 'i'), '').trim();
+            }
+          }
+          textWithoutDate = textWithoutDate.replace(/\b(on|for|at|by|the)\s+/gi, ' ').trim();
+          textWithoutDate = textWithoutDate.replace(/\s+(on|for|at|by|the)\b/gi, ' ').trim();
+        }
+      } else {
+        // If chrono-node didn't find anything, try parseDate as fallback
+        parsedDate = chrono.parseDate(userRequest);
+        if (parsedDate) {
+          // Validate: check if userRequest contains "tomorrow" keyword
+          if (/\b(tomorrow|domani|demain|mañana)\b/i.test(userRequest)) {
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            tomorrow.setHours(0, 0, 0, 0);
+            
+            // Check if chrono returned today instead of tomorrow
+            const todayStart = new Date(now);
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date(now);
+            todayEnd.setHours(23, 59, 59, 999);
+            
+            if (parsedDate >= todayStart && parsedDate <= todayEnd) {
+              console.log('[parseTaskFromUserRequest] Chrono parseDate incorrectly parsed "tomorrow" as today, correcting to tomorrow');
+              parsedDate = tomorrow;
+            }
+          }
+          dueDateTime = formatDueDateTime(parsedDate, tz);
+        }
+      }
+    }
+  }
+  
+  // Also check if we have a date but time comes after it (e.g., "tomorrow at 4 PM")
+  if (parsedDate && !parsedTime) {
+    // Check if there's a time expression that comes after the date keyword
+    const timeAfterDatePattern = /(?:^|\s)(tomorrow|domani|demain|mañana|today|oggi|aujourd['']hui|hoy)\s+(?:at|alle|à|a las?)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i;
+    const timeAfterDateMatch = userRequest.match(timeAfterDatePattern);
+    if (timeAfterDateMatch) {
+      let hours = parseInt(timeAfterDateMatch[2], 10);
+      const minutes = timeAfterDateMatch[3] ? parseInt(timeAfterDateMatch[3], 10) : 0;
+      const ampm = timeAfterDateMatch[4] ? timeAfterDateMatch[4].toLowerCase() : null;
+      
+      // Convert to 24-hour format
+      if (ampm === 'pm' && hours !== 12) {
+        hours += 12;
+      } else if (ampm === 'am' && hours === 12) {
+        hours = 0;
+      }
+      
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        parsedTime = { hours, minutes };
+      }
     }
   }
 
@@ -372,13 +881,69 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
   if (parsedDate && parsedTime) {
     const combinedDate = new Date(parsedDate);
     combinedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
+
+    // Adjust for user locale time zone before converting to ISO (Lambda runs in UTC).
+    // Use locale timezone; en-US uses UTC to avoid 4 PM becoming 10 PM for European users with en-US locale.
+    const localeTimeZones: Record<Locale, string> = {
+      'it-IT': 'Europe/Rome',
+      'fr-FR': 'Europe/Paris',
+      'es-ES': 'Europe/Madrid',
+      'es-MX': 'America/Mexico_City',
+      'en-US': 'UTC',
+    };
+    const targetTimeZone = localeTimeZones[locale] || 'UTC';
+
+    // Compute offset between target time zone and Lambda (UTC) at the combined date
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: targetTimeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = dtf.formatToParts(combinedDate);
+    const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
+    const tzYear = Number(getPart('year'));
+    const tzMonth = Number(getPart('month')) - 1; // zero-based month
+    const tzDay = Number(getPart('day'));
+    const tzHour = Number(getPart('hour'));
+    const tzMinute = Number(getPart('minute'));
+    const tzSecond = Number(getPart('second'));
+
+    // Date in UTC that corresponds to the same wall-clock time in target timezone
+    const utcForTarget = Date.UTC(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond);
+    const offsetMinutes = (utcForTarget - combinedDate.getTime()) / 60000;
+
+    // Apply offset so that stored ISO represents the intended wall-clock time in target TZ
+    combinedDate.setMinutes(combinedDate.getMinutes() - offsetMinutes);
     dueDateTime = combinedDate.toISOString();
+
     // Remove time expression from task name
-    textWithoutDate = textWithoutDate.replace(italianTimePattern, '').trim();
+    if (italianTimeMatch) {
+      textWithoutDate = textWithoutDate.replace(italianTimePattern, '').trim();
+    } else if (englishTimeMatch) {
+      textWithoutDate = textWithoutDate.replace(englishTimePattern, '').trim();
+      // Also remove any leftover "PM", "AM", "p.m.", "a.m." that might remain
+      textWithoutDate = textWithoutDate.replace(/\b(p\.?m\.?|a\.?m\.?)\b/gi, '').trim();
+    } else if (frenchTimeMatch) {
+      textWithoutDate = textWithoutDate.replace(frenchTimePattern, '').trim();
+    } else if (spanishTimeMatch) {
+      textWithoutDate = textWithoutDate.replace(spanishTimePattern, '').trim();
+    }
+    // Remove any remaining English prepositions after time removal
+    textWithoutDate = textWithoutDate.replace(/\b(on|for|at|by|the)\s+/gi, ' ').trim();
   } else if (parsedDate && !dueDateTime) {
-    // If we parsed a date but haven't set dueDateTime yet (from chrono-node)
-    dueDateTime = parsedDate.toISOString();
+    // If we parsed a date but haven't set dueDateTime yet (from chrono-node or keyword detection)
+    dueDateTime = formatDueDateTime(parsedDate, tz);
+    // Remove any remaining English prepositions after date parsing
+    // Check both at the beginning and end of the remaining text
+    textWithoutDate = textWithoutDate.replace(/\b(on|for|at|by|the)\s+/gi, ' ').trim();
+    textWithoutDate = textWithoutDate.replace(/\s+(on|for|at|by|the)\b/gi, ' ').trim();
   }
+  } // End of else block for non-Italian date patterns
   
   // Extract status, category, priority
   const status = extractStatus(userRequest, locale) || 'TO DO';
@@ -389,7 +954,7 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
   const taskName = textWithoutDate || userRequest;
   const parsedName = cleanTaskName(taskName, locale);
   
-  return {
+  const result = {
     taskName,
     parsedName: parsedName || taskName,
     dueDateTime,
@@ -397,6 +962,17 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
     category,
     priority,
   };
+  
+  console.log('[parseTaskFromUserRequest] Returning:', {
+    taskName: result.taskName,
+    parsedName: result.parsedName,
+    dueDateTime: result.dueDateTime,
+    status: result.status,
+    category: result.category,
+    priority: result.priority,
+  });
+  
+  return result;
 }
 
 /**
@@ -620,7 +1196,7 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
   }
   
   // Status queries (English, Italian, French, Spanish)
-  if (lower.includes('to do') || lower.includes('todo') || lower.includes('not done') || lower.includes('incomplete') ||
+  if (lower.includes('to do') || lower.includes('todo') || lower.includes('not done') || lower.includes('incomplete') || lower.includes('open') ||
       lower.includes('da fare') || lower.includes('in sospeso') ||
       lower.includes('à faire') || lower.includes('en attente') ||
       lower.includes('por hacer') || lower.includes('pendiente')) {
@@ -631,7 +1207,7 @@ export function parseQueryFromUserRequest(userRequest: string, locale: Locale = 
       },
     });
     if (queryType === 'keyword') queryType = 'status';
-  } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished') ||
+  } else if (lower.includes('done') || lower.includes('complete') || lower.includes('finished') || lower.includes('closed') ||
              lower.includes('fatto') || lower.includes('completato') || lower.includes('finito') ||
              lower.includes('terminé') || lower.includes('complété') || lower.includes('fini') ||
              lower.includes('hecho') || lower.includes('completado') || lower.includes('terminado')) {

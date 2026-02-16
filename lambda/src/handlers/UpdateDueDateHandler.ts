@@ -77,26 +77,31 @@ export class UpdateDueDateHandler implements RequestHandler {
         const lowerDueDateTime = cleanedDueDateTime.toLowerCase();
         const now = new Date();
         
-        // Handle Italian keywords explicitly (oggi, domani)
+        // Handle Italian keywords explicitly (oggi, domani) — store date-only when no time
         if (lowerDueDateTime.includes('oggi') || lowerDueDateTime === 'today') {
           const today = new Date(now);
           today.setHours(0, 0, 0, 0);
-          parsedDueDateTime = today.toISOString();
+          parsedDueDateTime = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
         } else if (lowerDueDateTime.includes('domani') || lowerDueDateTime === 'tomorrow') {
           const tomorrow = new Date(now);
           tomorrow.setDate(tomorrow.getDate() + 1);
           tomorrow.setHours(0, 0, 0, 0);
-          parsedDueDateTime = tomorrow.toISOString();
+          parsedDueDateTime = `${tomorrow.getUTCFullYear()}-${String(tomorrow.getUTCMonth() + 1).padStart(2, '0')}-${String(tomorrow.getUTCDate()).padStart(2, '0')}`;
         } else {
         // Use chrono-node as primary parser for better natural language support
           const chronoResult = chrono.parseDate(cleanedDueDateTime);
         if (chronoResult) {
-          parsedDueDateTime = chronoResult.toISOString();
+          const d = new Date(chronoResult);
+          parsedDueDateTime = (d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0)
+            ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+            : d.toISOString();
         } else {
           // Fallback to native Date if chrono fails
             const parsedDate = new Date(cleanedDueDateTime);
           if (!isNaN(parsedDate.getTime())) {
-            parsedDueDateTime = parsedDate.toISOString();
+            parsedDueDateTime = (parsedDate.getUTCHours() === 0 && parsedDate.getUTCMinutes() === 0 && parsedDate.getUTCSeconds() === 0)
+              ? `${parsedDate.getUTCFullYear()}-${String(parsedDate.getUTCMonth() + 1).padStart(2, '0')}-${String(parsedDate.getUTCDate()).padStart(2, '0')}`
+              : parsedDate.toISOString();
             }
           }
         }
@@ -133,13 +138,16 @@ export class UpdateDueDateHandler implements RequestHandler {
       // Update the task due date
       await updateTask(notionClient, matchingTask.id, { dueDateTime: parsedDueDateTime });
 
-      // Build confirmation message
+      // Build confirmation message (date-only when no time)
+      const isDateOnly = !parsedDueDateTime.includes('T');
       const dueDate = new Date(parsedDueDateTime);
-      const dateStr = dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
-      const hours = dueDate.getHours();
-      const minutes = dueDate.getMinutes();
+      const dateStr = isDateOnly
+        ? dueDate.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' })
+        : dueDate.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+      const hours = dueDate.getUTCHours();
+      const minutes = dueDate.getUTCMinutes();
       let confirmation: string;
-      if (hours !== 0 || minutes !== 0) {
+      if (!isDateOnly && (hours !== 0 || minutes !== 0)) {
         const timeStr = dueDate.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit', hour12: true });
         confirmation = getTranslation(handlerInput, 'task_updated', { 
           taskName: matchingTask.name, 

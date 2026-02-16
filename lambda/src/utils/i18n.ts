@@ -27,7 +27,7 @@ export function getLocale(handlerInput: HandlerInput): Locale {
 const translations: Record<Locale, Record<string, string>> = {
   'en-US': {
     // Launch & Welcome
-    'welcome': 'Welcome to Voice Planner! I can help you manage your tasks. You can add tasks, list your tasks, mark them complete, update their status, or delete them. You can also check your connection status. What would you like to do?',
+    'welcome': 'Welcome to Voice Planner! I can help you manage your tasks. You can add tasks, list your tasks, mark them complete, update their status, or delete them. What would you like to do?',
     'welcome_reprompt': 'What would you like to do?',
     'welcome_error': 'Welcome to Voice Planner! I encountered an issue connecting to your account. Please try again later.',
     'welcome_error_simple': 'Welcome to Voice Planner. Please try again later.',
@@ -56,6 +56,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'task_added_due_time': ' at {time}',
     'task_added_work': ' (work)',
     'add_task_error': 'I encountered an error adding your task. Please try again.',
+    'for_today_or_tomorrow': 'For today or tomorrow?',
+    'say_today_or_tomorrow': 'Say today or tomorrow.',
     
     // Update Task
     'update_task_prompt': 'What task would you like to update?',
@@ -120,7 +122,7 @@ const translations: Record<Locale, Record<string, string>> = {
   },
   'it-IT': {
     // Launch & Welcome
-    'welcome': 'Benvenuto in Voice Planner! Posso aiutarti a gestire le tue attività. Puoi aggiungere attività, elencare le tue attività, segnarle come completate, aggiornare il loro stato o eliminarle. Puoi anche controllare lo stato della connessione. Cosa vorresti fare?',
+    'welcome': 'Benvenuto in Voice Planner! Posso aiutarti a gestire le tue attività. Puoi aggiungere attività, elencare le tue attività, segnarle come completate, aggiornare il loro stato o eliminarle. Cosa vorresti fare?',
     'welcome_reprompt': 'Cosa vorresti fare?',
     'welcome_error': 'Benvenuto in Voice Planner! Ho riscontrato un problema nella connessione al tuo account. Riprova più tardi.',
     'welcome_error_simple': 'Benvenuto in Voice Planner. Riprova più tardi.',
@@ -149,6 +151,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'task_added_due_time': ' alle {time}',
     'task_added_work': ' (lavoro)',
     'add_task_error': 'Ho riscontrato un errore nell\'aggiunta della tua attività. Riprova.',
+    'for_today_or_tomorrow': 'Per oggi o per domani?',
+    'say_today_or_tomorrow': 'Di\' oggi o domani.',
     
     // Update Task
     'update_task_prompt': 'Quale attività vorresti aggiornare?',
@@ -242,6 +246,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'task_added_due_time': ' à {time}',
     'task_added_work': ' (travail)',
     'add_task_error': 'J\'ai rencontré une erreur lors de l\'ajout de votre tâche. Veuillez réessayer.',
+    'for_today_or_tomorrow': 'Pour aujourd\'hui ou pour demain ?',
+    'say_today_or_tomorrow': 'Dites aujourd\'hui ou demain.',
     
     // Update Task
     'update_task_prompt': 'Quelle tâche souhaitez-vous mettre à jour ?',
@@ -335,6 +341,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'task_added_due_time': ' a las {time}',
     'task_added_work': ' (trabajo)',
     'add_task_error': 'He encontrado un error al agregar tu tarea. Por favor, inténtalo de nuevo.',
+    'for_today_or_tomorrow': '¿Para hoy o para mañana?',
+    'say_today_or_tomorrow': 'Di hoy o mañana.',
     
     // Update Task
     'update_task_prompt': '¿Qué tarea te gustaría actualizar?',
@@ -428,6 +436,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'task_added_due_time': ' a las {time}',
     'task_added_work': ' (trabajo)',
     'add_task_error': 'He encontrado un error al agregar tu tarea. Por favor, inténtalo de nuevo.',
+    'for_today_or_tomorrow': '¿Para hoy o para mañana?',
+    'say_today_or_tomorrow': 'Di hoy o mañana.',
     
     // Update Task
     'update_task_prompt': '¿Qué tarea te gustaría actualizar?',

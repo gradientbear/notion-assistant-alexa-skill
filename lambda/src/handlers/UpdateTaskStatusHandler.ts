@@ -57,18 +57,38 @@ export class UpdateTaskStatusHandler implements RequestHandler {
             taskNameLower.startsWith('completato ')) {
           status = 'DONE';
         }
-        // Pattern 2: Check if taskName contains status keywords anywhere
+        // Pattern 2: Check if taskName contains status keywords anywhere (Italian)
         else if (taskNameLower.includes('fatto') || 
                  taskNameLower.includes('completato') ||
                  taskNameLower.includes('finito') ||
                  taskNameLower.includes('terminato')) {
           status = 'DONE';
-        } else if (taskNameLower.includes('da fare') || taskNameLower.includes('todo')) {
+        } 
+        // Check for English completion patterns
+        else if (taskNameLower.includes('as done') ||
+                 taskNameLower.includes('as completed') ||
+                 taskNameLower.includes('as finished') ||
+                 taskNameLower.includes('as closed') ||
+                 taskNameLower.startsWith('done ') ||
+                 taskNameLower.startsWith('completed ') ||
+                 taskNameLower.startsWith('finished ') ||
+                 taskNameLower.startsWith('closed ')) {
+          status = 'DONE';
+        }
+        // Pattern 3: Check if taskName contains English status keywords anywhere
+        else if (taskNameLower.includes('done') || 
+                 taskNameLower.includes('completed') ||
+                 taskNameLower.includes('finished') ||
+                 taskNameLower.includes('closed')) {
+          status = 'DONE';
+        } else if (taskNameLower.includes('da fare') || taskNameLower.includes('todo') ||
+                   taskNameLower.includes('to do') || taskNameLower.includes('pending') ||
+                   taskNameLower.includes('open') || taskNameLower.includes('incomplete')) {
           status = 'TO DO';
         } else {
-          // For utterances like "completa {taskName}", Alexa typically doesn't include "completa" in taskName
+          // For utterances like "completa {taskName}" or "complete {taskName}", Alexa typically doesn't include "completa"/"complete" in taskName
           // We need to infer from the intent pattern itself
-          // Since these samples exist: "completa {taskName}", "segna come fatto {taskName}"
+          // Since these samples exist: "completa {taskName}", "complete {taskName}", "segna come fatto {taskName}", "mark as done {taskName}"
           // If status is empty but taskName exists, and we matched these patterns, infer DONE
           // This is a reasonable default for completion verbs
           status = 'DONE'; // Default inference: if no status specified but taskName exists, assume completion

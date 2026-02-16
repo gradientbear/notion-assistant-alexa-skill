@@ -17,6 +17,8 @@ interface IntrospectResponse {
   notion_db_id?: string;
   amazon_account_id?: string;
   token_type?: string;
+  exp?: number; // Token expiration timestamp
+  iat?: number; // Token issued at timestamp
 }
 
 /**
@@ -122,19 +124,55 @@ export class AuthInterceptor implements RequestInterceptor {
 
         if (!introspectResponse.ok) {
           const errorText = await introspectResponse.text();
+          const statusCode = introspectResponse.status;
+          
           console.warn('[AuthInterceptor] Introspection failed:', {
-            status: introspectResponse.status,
+            status: statusCode,
             statusText: introspectResponse.statusText,
             errorBody: errorText,
+            tokenPreview: accessToken.substring(0, 20) + '...',
           });
-          throw new Error('TOKEN_INVALID');
+          
+          // Provide more specific error messages
+          if (statusCode === 401) {
+            throw new Error('TOKEN_INVALID');
+          } else if (statusCode === 500) {
+            console.error('[AuthInterceptor] Introspection endpoint server error - may be temporary');
+            throw new Error('TOKEN_INVALID'); // Treat as invalid for now
+          } else {
+            throw new Error('TOKEN_INVALID');
+          }
         }
 
         userInfo = await introspectResponse.json() as IntrospectResponse;
 
         if (!userInfo.active) {
-          console.warn('[AuthInterceptor] Token is not active');
+          console.warn('[AuthInterceptor] Token is not active (expired or revoked)');
           throw new Error('TOKEN_INVALID');
+        }
+
+        // Check token expiration if exp is provided
+        if (userInfo.exp) {
+          const now = Math.floor(Date.now() / 1000);
+          const timeUntilExpiry = userInfo.exp - now;
+          
+          // Log if token is close to expiring (within 5 minutes)
+          if (timeUntilExpiry > 0 && timeUntilExpiry < 300) {
+            console.warn('[AuthInterceptor] Token expiring soon:', {
+              expires_in_seconds: timeUntilExpiry,
+              expires_at: new Date(userInfo.exp * 1000).toISOString()
+            });
+          }
+          
+          // Token is expired (shouldn't happen if introspection is working correctly)
+          if (timeUntilExpiry <= 0) {
+            console.error('[AuthInterceptor] Token has expired:', {
+              expired_at: new Date(userInfo.exp * 1000).toISOString(),
+              now: new Date().toISOString(),
+              seconds_expired: Math.abs(timeUntilExpiry)
+            });
+            throw new Error('TOKEN_EXPIRED');
+          }
         }
 
         // Log token type for debugging
@@ -221,7 +259,12 @@ export class AuthInterceptor implements RequestInterceptor {
       }
 
       if (!user) {
-        console.error('[AuthInterceptor] User not found with id:', userId);
+        console.error('[AuthInterceptor] User not found with id:', {
+          user_id: userId,
+          amazon_account_id: handlerInput.requestEnvelope.session?.user?.userId,
+          email: userInfo.email,
+          token_type: userInfo.token_type,
+        });
         throw new Error('USER_NOT_FOUND');
       }
 
@@ -231,6 +274,7 @@ export class AuthInterceptor implements RequestInterceptor {
       attributes.email = userInfo.email;
       attributes.licenseActive = userInfo.license_active;
       attributes.notionDbId = userInfo.notion_db_id || user.tasks_db_id;
+      attributes.sessionTimestamp = Date.now(); // Track when session data was loaded
 
       // Create Notion client if token exists
       if (user.notion_token) {
@@ -256,7 +300,14 @@ export class AuthInterceptor implements RequestInterceptor {
 
       handlerInput.attributesManager.setSessionAttributes(attributes);
 
-      console.log('[AuthInterceptor] Token validated successfully for user:', userInfo.email);
+      console.log('[AuthInterceptor] Token validated successfully:', {
+        user_id: userInfo.user_id,
+        email: userInfo.email,
+        token_type: userInfo.token_type,
+        expires_at: userInfo.exp ? new Date(userInfo.exp * 1000).toISOString() : 'unknown',
+        has_notion_token: !!user.notion_token,
+        notion_setup_complete: user.notion_setup_complete,
+      });
     } catch (error: any) {
       console.error('[AuthInterceptor] Error:', error);
       console.error('[AuthInterceptor] Error stack:', error?.stack);
@@ -276,6 +327,7 @@ export class AuthInterceptor implements RequestInterceptor {
       // Re-throw to be caught by error handler (for non-LaunchRequest)
       if (error.message === 'LINK_ACCOUNT_REQUIRED' || 
           error.message === 'TOKEN_INVALID' || 
+          error.message === 'TOKEN_EXPIRED' ||
           error.message === 'USER_NOT_FOUND') {
         throw new Error('AUTH_REQUIRED');
       }
@@ -295,10 +347,18 @@ export class AuthInterceptor implements RequestInterceptor {
  */
 export function handleAuthError(error: any, handlerInput: HandlerInput): Response | null {
   if (error?.message === 'AUTH_REQUIRED') {
+    console.log('[handleAuthError] Authentication required - prompting for account linking');
+    return buildLinkAccountResponse(handlerInput);
+  }
+
+  if (error?.message === 'TOKEN_EXPIRED') {
+    console.log('[handleAuthError] Token expired - prompting for account re-linking');
+    // Token expired - user needs to re-link their account
     return buildLinkAccountResponse(handlerInput);
   }
 
   if (error?.message === 'LICENSE_INACTIVE') {
+    console.log('[handleAuthError] License inactive');
     return handlerInput.responseBuilder
       .speak('Your license is not active. Please visit the app to purchase or activate your license.')
       .withShouldEndSession(true)

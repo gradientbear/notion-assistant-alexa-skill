@@ -19,44 +19,95 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseKey, {
 });
 
 /**
+ * Retry helper with exponential backoff
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 100
+): Promise<T> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      // Don't retry on certain errors (not found, validation errors)
+      if (error?.code === 'PGRST116' || error?.code === '23505') {
+        throw error;
+      }
+      
+      // Don't retry on last attempt
+      if (attempt === maxRetries - 1) {
+        break;
+      }
+      
+      // Exponential backoff: 100ms, 200ms, 400ms
+      const delay = baseDelay * Math.pow(2, attempt);
+      console.warn(`[Retry] Attempt ${attempt + 1} failed, retrying in ${delay}ms:`, {
+        error: error?.message || error,
+        attempt: attempt + 1,
+        maxRetries
+      });
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError;
+}
+
+/**
  * Get user by Supabase Auth user ID (OAuth2 flow)
  * This is the primary method for OAuth2 users
  * Note: users.id now matches Supabase Auth user id directly
+ * Includes retry logic with exponential backoff for transient failures
  */
 export async function getUserByAuthUserId(authUserId: string): Promise<User | null> {
   try {
-    const queryPromise = supabase
-      .from('users')
-      .select('*')
-      .eq('id', authUserId)
-      .maybeSingle();
+    return await retryWithBackoff(async () => {
+      const queryPromise = supabase
+        .from('users')
+        .select('*')
+        .eq('id', authUserId)
+        .maybeSingle();
 
-    const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
-      setTimeout(() => {
-        resolve({ data: null, error: { code: 'TIMEOUT' } });
-      }, 5000); // Increased from 1.5s to 5s for network latency
-    });
+      const timeoutPromise = new Promise<{ data: null; error: { code: string } }>((resolve) => {
+        setTimeout(() => {
+          resolve({ data: null, error: { code: 'TIMEOUT' } });
+        }, 5000); // 5 second timeout
+      });
 
-    const result = await Promise.race([queryPromise, timeoutPromise]);
-    const { data, error } = result as any;
+      const result = await Promise.race([queryPromise, timeoutPromise]);
+      const { data, error } = result as any;
 
-    if (error) {
-      if (error.code !== 'PGRST116' && error.code !== 'TIMEOUT') {
-        console.error('[getUserByAuthUserId] Supabase error:', error);
+      if (error) {
+        if (error.code === 'TIMEOUT') {
+          throw new Error('Query timeout');
+        }
+        if (error.code !== 'PGRST116') {
+          console.error('[getUserByAuthUserId] Supabase error:', error);
+          throw error;
+        }
+        return null;
       }
-      return null;
-    }
 
-    if (!data) {
-      return null;
-    }
+      if (!data) {
+        return null;
+      }
 
-    return data as User;
+      return data as User;
+    }, 3, 100);
   } catch (err: any) {
-    console.error('[getUserByAuthUserId] Unexpected error:', {
-      message: err?.message,
-      stack: err?.stack
-    });
+    // Only log if it's not a "not found" error
+    if (err?.code !== 'PGRST116' && err?.message !== 'Query timeout') {
+      console.error('[getUserByAuthUserId] Error after retries:', {
+        message: err?.message,
+        stack: err?.stack,
+        code: err?.code
+      });
+    }
     return null;
   }
 }
