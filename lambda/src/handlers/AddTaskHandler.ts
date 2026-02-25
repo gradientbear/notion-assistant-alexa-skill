@@ -31,6 +31,7 @@ export class AddTaskHandler implements RequestHandler {
       }
 
       const request = handlerInput.requestEnvelope.request as any;
+      const intentName = request.intent?.name || '';
       const slots = request.intent.slots || {};
       const locale = getLocale(handlerInput);
       
@@ -70,8 +71,9 @@ export class AddTaskHandler implements RequestHandler {
       // The envelope always contains interaction model sample utterances like
       // "add {taskName} tomorrow" which causes false positives on every request.
       
-      // Extract values from specific slots (Alexa disallows phrase slot + other slot in same utterance).
+      // Extract values from specific slots. CreateTaskIntent has optional "when" (tomorrow/today) for due date.
       const taskNameSlot = slots.taskName?.value;
+      const whenSlot = slots.when?.value;
       const dueDateTimeSlot = slots.dueDateTime?.value;
       const prioritySlot = slots.priority?.value;
       const categorySlot = slots.category?.value;
@@ -89,16 +91,76 @@ export class AddTaskHandler implements RequestHandler {
       // Collect ALL slot values to check for date keywords that might be in any slot
       const allSlotValues = [
         taskNameSlot,
+        whenSlot,
         dueDateTimeSlot,
         prioritySlot,
         categorySlot,
         notes
       ].filter(Boolean).join(' ').toLowerCase();
       
-      // Build text for parsing. With only CreateTaskIntent, taskName should contain the full phrase
-      // (e.g. "buy milk tomorrow" or "buy milk today"); parser extracts date and strips from task name.
+      // Build text for parsing. Primary source for today/tomorrow: "when" slot or taskName containing tomorrow/today.
       let finalCombinedText = [taskNameSlot, dueDateTimeSlot].filter(Boolean).join(' ').trim();
-      const intentName = request.intent?.name || '';
+      const whenLower = (whenSlot || '').toLowerCase().trim();
+      if (whenLower && !/\b(tomorrow|today|oggi|domani)\b/i.test(finalCombinedText)) {
+        if (whenLower === 'tomorrow' || whenLower === 'domani') {
+          finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+          console.log('[AddTaskHandler] When slot "tomorrow": appended to text for parsing');
+        } else if (whenLower === 'today' || whenLower === 'oggi') {
+          finalCombinedText = (finalCombinedText + ' today').trim();
+          console.log('[AddTaskHandler] When slot "today": appended to text for parsing');
+        }
+      }
+      // Fallback: when slot empty but taskName ends with " tomorrow" or " today" (Alexa sometimes merges into taskName).
+      if (!whenLower && /\s+(tomorrow|domani)$/i.test(taskNameSlot || '')) {
+        finalCombinedText = finalCombinedText.trim();
+        if (!/\btomorrow\b/i.test(finalCombinedText)) {
+          finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+          console.log('[AddTaskHandler] Recovered "tomorrow" from end of taskName slot');
+        }
+      }
+      if (!whenLower && /\s+(today|oggi)$/i.test(taskNameSlot || '')) {
+        finalCombinedText = finalCombinedText.trim();
+        if (!/\btoday\b/i.test(finalCombinedText)) {
+          finalCombinedText = (finalCombinedText + ' today').trim();
+          console.log('[AddTaskHandler] Recovered "today" from end of taskName slot');
+        }
+      }
+      // Fallback: when slot empty but taskName starts with "tomorrow " or "today " (e.g. "add tomorrow buy milk" → taskName="tomorrow buy milk").
+      if (!whenLower && /^(tomorrow|domani)\s+/i.test(taskNameSlot || '')) {
+        if (!/\btomorrow\b/i.test(finalCombinedText)) {
+          finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+          console.log('[AddTaskHandler] Recovered "tomorrow" from start of taskName slot');
+        }
+      }
+      if (!whenLower && /^(today|oggi)\s+/i.test(taskNameSlot || '')) {
+        if (!/\btoday\b/i.test(finalCombinedText)) {
+          finalCombinedText = (finalCombinedText + ' today').trim();
+          console.log('[AddTaskHandler] Recovered "today" from start of taskName slot');
+        }
+      }
+      // Fallback: taskName contains " for tomorrow" / " for today" or " per domani" / " per oggi" (e.g. "add buy milk for tomorrow" → taskName="buy milk for tomorrow").
+      // Parser may not extract date from "for tomorrow", so we append the keyword to ensure correct parsing.
+      if (!whenLower && /\s+for\s+(tomorrow|domani)(?:\s|$)/i.test(taskNameSlot || '')) {
+        finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+        console.log('[AddTaskHandler] Recovered "tomorrow" from "for tomorrow" in taskName slot');
+      }
+      if (!whenLower && /\s+for\s+(today|oggi)(?:\s|$)/i.test(taskNameSlot || '')) {
+        finalCombinedText = (finalCombinedText + ' today').trim();
+        console.log('[AddTaskHandler] Recovered "today" from "for today" in taskName slot');
+      }
+      // Fallback: Alexa sometimes sends taskName="buy milk for" (drops "tomorrow") for "add buy milk for tomorrow". Treat trailing " for" as "for tomorrow".
+      if (!whenLower && /\s+for$/i.test(taskNameSlot || '')) {
+        finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+        console.log('[AddTaskHandler] Recovered "tomorrow" from taskName ending with " for"');
+      }
+      if (!whenLower && /\s+per\s+(domani|tomorrow)(?:\s|$)/i.test(taskNameSlot || '')) {
+        finalCombinedText = (finalCombinedText + ' tomorrow').trim();
+        console.log('[AddTaskHandler] Recovered "tomorrow" from "per domani" in taskName slot');
+      }
+      if (!whenLower && /\s+per\s+(oggi|today)(?:\s|$)/i.test(taskNameSlot || '')) {
+        finalCombinedText = (finalCombinedText + ' today').trim();
+        console.log('[AddTaskHandler] Recovered "today" from "per oggi" in taskName slot');
+      }
 
       // Combine all utterance sources for checking (including all interpretation inputs)
       const allUtteranceSources = [originalUtterance, utteranceFromInterpretations, allInputs].filter(Boolean).join(' ');
@@ -183,6 +245,7 @@ export class AddTaskHandler implements RequestHandler {
       
       console.log('[AddTaskHandler] Slot values:', {
         taskNameSlot,
+        whenSlot,
         prioritySlot,
         categorySlot,
         notes,
@@ -294,21 +357,25 @@ export class AddTaskHandler implements RequestHandler {
       // When Alexa matches CreateTaskIntent and strips "today" or "tomorrow" from the slot, we have no signal — default to today
       // so that "add X" (no date) defaults to today; "add X tomorrow" / "add X today" come in taskName and are parsed.
       if (!parsedDueDateTime) {
-        // Date keywords come from taskName slot (e.g. "buy milk tomorrow") or fallback sources
+        // Date keywords: taskName, utterance, allInputs, interpretations, or raw request
+        const allTextForDateKeyword = [finalCombinedText, originalUtterance, allInputs, allUtteranceSources].filter(Boolean).join(' ');
         let requestContainsTomorrow =
           /\b(tomorrow|domani|demain|mañana)\b/i.test(finalCombinedText) ||
-          /\b(tomorrow|domani|demain|mañana)\b/i.test(originalUtterance);
+          /\b(tomorrow|domani|demain|mañana)\b/i.test(originalUtterance) ||
+          /\b(tomorrow|domani|demain|mañana)\b/i.test(allTextForDateKeyword);
         let requestContainsToday =
           /\b(today|oggi|aujourd['']hui|hoy)\b/i.test(finalCombinedText) ||
-          /\b(today|oggi|aujourd['']hui|hoy)\b/i.test(originalUtterance);
+          /\b(today|oggi|aujourd['']hui|hoy)\b/i.test(originalUtterance) ||
+          /\b(today|oggi|aujourd['']hui|hoy)\b/i.test(allTextForDateKeyword);
+        // When Alexa matched CreateTaskIntent but user said "tomorrow"/"today", alternative interpretations may have the date intent
         const requestJson = JSON.stringify(handlerInput.requestEnvelope.request);
         if (!requestContainsTomorrow && /\b(tomorrow|domani|demain|mañana)\b/i.test(requestJson)) {
           requestContainsTomorrow = true;
-          console.log('[AddTaskHandler] Recovered "tomorrow" from raw request envelope');
+          console.log('[AddTaskHandler] Recovered "tomorrow" from raw request');
         }
         if (!requestContainsToday && /\b(today|oggi|aujourd['']hui|hoy)\b/i.test(requestJson)) {
           requestContainsToday = true;
-          console.log('[AddTaskHandler] Recovered "today" from raw request envelope');
+          console.log('[AddTaskHandler] Recovered "today" from raw request');
         }
         // When no date was parsed and no keyword in slot/request, default to today.
         const now = new Date();
@@ -383,8 +450,16 @@ export class AddTaskHandler implements RequestHandler {
       const normalizedPriority = normalizePriority(priority);
       const normalizedCategory = normalizeCategory(category);
       
-      // Clean task name
-      const cleanedTaskName = taskName.trim();
+      // Clean task name: strip leading/trailing date words and " for tomorrow/today" / " per domani/oggi" so Notion title is e.g. "buy milk"
+      let cleanedTaskName = taskName.trim();
+      cleanedTaskName = cleanedTaskName
+        .replace(/^(tomorrow|today|domani|oggi)\s+/i, '')
+        .replace(/\s+(tomorrow|today|domani|oggi)$/i, '')
+        .replace(/\s+for\s+(tomorrow|today|domani|oggi)(?:\s|$)/gi, ' ')
+        .replace(/\s+per\s+(domani|oggi|tomorrow|today)(?:\s|$)/gi, ' ')
+        .replace(/\s+for$/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       const parsedName = cleanedTaskName;
 
       // Add task with slot values

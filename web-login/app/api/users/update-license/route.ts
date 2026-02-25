@@ -40,11 +40,66 @@ export async function POST(request: NextRequest) {
 
     const serverClient = createServerClient()
 
+    // Validate that the license_key exists in the licenses table and is active
+    const { data: license, error: licenseError } = await serverClient
+      .from('licenses')
+      .select('status, stripe_payment_intent_id')
+      .eq('stripe_payment_intent_id', license_key.trim())
+      .maybeSingle()
+
+    if (licenseError) {
+      console.error('[Update License] Error checking license:', licenseError)
+      return NextResponse.json(
+        { error: 'Failed to validate license key' },
+        { status: 500 }
+      )
+    }
+
+    if (!license) {
+      return NextResponse.json(
+        { error: 'License key not found in system' },
+        { status: 404 }
+      )
+    }
+
+    if (license.status !== 'active') {
+      return NextResponse.json(
+        { error: 'License key is not active' },
+        { status: 400 }
+      )
+    }
+
+    // Check if this license_key is already assigned to a different user
+    const { data: existingUser, error: checkError } = await serverClient
+      .from('users')
+      .select('id, email')
+      .eq('license_key', license_key.trim())
+      .neq('id', authUser.id)
+      .maybeSingle()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('[Update License] Error checking for existing assignment:', checkError)
+      return NextResponse.json(
+        { error: 'Failed to validate license assignment' },
+        { status: 500 }
+      )
+    }
+
+    if (existingUser) {
+      return NextResponse.json(
+        { 
+          error: 'This license key is already assigned to another user',
+          existing_user_email: existingUser.email 
+        },
+        { status: 409 }
+      )
+    }
+
     // Update user
     const { data: user, error } = await serverClient
       .from('users')
       .update({
-        license_key,
+        license_key: license_key.trim(),
         updated_at: new Date().toISOString(),
       })
       .eq('id', authUser.id)

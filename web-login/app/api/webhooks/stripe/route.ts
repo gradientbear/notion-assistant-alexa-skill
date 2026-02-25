@@ -169,21 +169,67 @@ export async function POST(request: NextRequest) {
           return { success: false, error: `License creation failed: ${licenseError.message}` };
         }
 
-        // Update user's license_key field (critical - must succeed)
-        const { error: updateUserError } = await supabase
+        // Check if this license_key is already assigned to a different user
+        const { data: existingUserWithLicense, error: checkError } = await supabase
           .from('users')
-          .update({ license_key: paymentIntentId })
-          .eq('id', userId);
+          .select('id, email')
+          .eq('license_key', paymentIntentId)
+          .neq('id', userId)
+          .maybeSingle();
 
-        if (updateUserError) {
-          console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
-          // This is critical - if this fails, license validation will fail
-          // Try to rollback license status
-          await supabase
-            .from('licenses')
-            .update({ status: 'inactive' })
-            .eq('stripe_payment_intent_id', paymentIntentId);
-          return { success: false, error: `User update failed: ${updateUserError.message}` };
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('[Stripe Webhook] Error checking for existing license_key assignment:', checkError);
+          // Continue anyway - this is just a safety check
+        } else if (existingUserWithLicense) {
+          console.error('[Stripe Webhook] CRITICAL: License key already assigned to different user:', {
+            payment_intent_id: paymentIntentId,
+            current_user_id: userId,
+            existing_user_id: existingUserWithLicense.id,
+            existing_user_email: existingUserWithLicense.email,
+          });
+          // This should not happen, but if it does, we need to handle it
+          // For now, we'll still update the correct user and log the issue
+          console.warn('[Stripe Webhook] Proceeding with update - this may indicate a data integrity issue');
+        }
+
+        // Update user's license_key field (critical - must succeed)
+        // Only update if the user doesn't already have this license_key
+        const { data: currentUser, error: fetchCurrentUserError } = await supabase
+          .from('users')
+          .select('license_key')
+          .eq('id', userId)
+          .single();
+
+        if (fetchCurrentUserError) {
+          console.error('[Stripe Webhook] Error fetching current user:', fetchCurrentUserError);
+          return { success: false, error: `User fetch failed: ${fetchCurrentUserError.message}` };
+        }
+
+        // Only update if license_key is different (avoid unnecessary updates)
+        if (currentUser?.license_key !== paymentIntentId) {
+          const { error: updateUserError } = await supabase
+            .from('users')
+            .update({ license_key: paymentIntentId })
+            .eq('id', userId);
+
+          if (updateUserError) {
+            console.error('[Stripe Webhook] Error updating user license_key:', updateUserError);
+            // This is critical - if this fails, license validation will fail
+            // Try to rollback license status
+            await supabase
+              .from('licenses')
+              .update({ status: 'inactive' })
+              .eq('stripe_payment_intent_id', paymentIntentId);
+            return { success: false, error: `User update failed: ${updateUserError.message}` };
+          }
+          
+          console.log('[Stripe Webhook] Updated user license_key:', {
+            user_id: userId,
+            old_license_key: currentUser?.license_key || 'null',
+            new_license_key: paymentIntentId,
+          });
+        } else {
+          console.log('[Stripe Webhook] User already has correct license_key, skipping update');
         }
 
         console.log('[Stripe Webhook] License activated successfully:', {

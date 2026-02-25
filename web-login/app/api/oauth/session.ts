@@ -25,8 +25,25 @@ export async function createOAuthSession(
 ): Promise<OAuthSession> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   
-  // Session expires in 10 minutes
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  // Session expires in 30 minutes (extended from 10 to allow more time for OAuth flow)
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+  // Check if state already exists (prevent collisions)
+  const { data: existingSession } = await supabase
+    .from('oauth_sessions')
+    .select('id, state, expires_at')
+    .eq('state', state)
+    .gt('expires_at', new Date().toISOString())
+    .single();
+
+  if (existingSession) {
+    console.warn('[OAuth Session] ⚠️ State collision detected:', {
+      state: state.substring(0, 16) + '...',
+      existing_session_id: existingSession.id,
+      expires_at: existingSession.expires_at,
+    });
+    throw new Error('OAuth session state already exists and is not expired');
+  }
 
   console.log('[OAuth Session] Attempting to insert session:', {
     state: state.substring(0, 16) + '...',
@@ -53,6 +70,16 @@ export async function createOAuthSession(
     .single();
 
   if (error) {
+    // Handle unique constraint violation specifically
+    if (error.code === '23505') {
+      console.error('[OAuth Session] ❌ Unique constraint violation (state already exists):', {
+        error_code: error.code,
+        error_message: error.message,
+        state: state.substring(0, 16) + '...',
+      });
+      throw new Error(`OAuth session with this state already exists: ${error.message}`);
+    }
+    
     console.error('[OAuth Session] ❌ Insert error:', {
       error_code: error.code,
       error_message: error.message,
@@ -84,13 +111,21 @@ export async function getOAuthSession(state: string): Promise<OAuthSession | nul
     .single();
 
   if (error) {
-    console.error('[OAuth Session] ❌ Retrieval error:', {
-      error_code: error.code,
-      error_message: error.message,
-      error_details: error.details,
-      error_hint: error.hint,
-      state: state.substring(0, 16) + '...',
-    });
+    // PGRST116 means "0 rows" - session not found or expired
+    if (error.code === 'PGRST116') {
+      console.warn('[OAuth Session] ⚠️ Session not found or expired (PGRST116):', {
+        state: state.substring(0, 16) + '...',
+        error_message: error.message,
+      });
+    } else {
+      console.error('[OAuth Session] ❌ Retrieval error:', {
+        error_code: error.code,
+        error_message: error.message,
+        error_details: error.details,
+        error_hint: error.hint,
+        state: state.substring(0, 16) + '...',
+      });
+    }
     return null;
   }
 
@@ -113,14 +148,53 @@ export async function getOAuthSession(state: string): Promise<OAuthSession | nul
 export async function deleteOAuthSession(state: string): Promise<void> {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  console.log('[OAuth Session] Deleting session for state:', state.substring(0, 16) + '...');
+
   const { error } = await supabase
     .from('oauth_sessions')
     .delete()
     .eq('state', state);
 
   if (error) {
-    console.error('Failed to delete OAuth session:', error);
+    console.error('[OAuth Session] ❌ Failed to delete OAuth session:', {
+      error_code: error.code,
+      error_message: error.message,
+      state: state.substring(0, 16) + '...',
+    });
     // Don't throw - cleanup is best effort
+  } else {
+    console.log('[OAuth Session] ✅ Session deleted successfully:', state.substring(0, 16) + '...');
   }
+}
+
+/**
+ * Cleanup expired OAuth sessions
+ * This function can be called periodically to remove stale sessions from the database
+ */
+export async function cleanupExpiredOAuthSessions(): Promise<number> {
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  console.log('[OAuth Session] Starting cleanup of expired sessions...');
+
+  const { data, error } = await supabase
+    .from('oauth_sessions')
+    .delete()
+    .lt('expires_at', new Date().toISOString())
+    .select();
+
+  if (error) {
+    console.error('[OAuth Session] ❌ Failed to cleanup expired sessions:', {
+      error_code: error.code,
+      error_message: error.message,
+    });
+    return 0;
+  }
+
+  const deletedCount = data?.length || 0;
+  console.log('[OAuth Session] ✅ Cleanup completed:', {
+    deleted_count: deletedCount,
+  });
+
+  return deletedCount;
 }
 

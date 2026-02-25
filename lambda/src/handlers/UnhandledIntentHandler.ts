@@ -16,7 +16,25 @@ export class UnhandledIntentHandler implements RequestHandler {
   async handle(handlerInput: HandlerInput) {
     const request = handlerInput.requestEnvelope.request as any;
     const intentName = request.intent?.name;
-    
+    const locale = request.locale ?? 'unknown';
+
+    // Log diagnostic info when user utterance didn't match any intent (helps debug locale/language mismatch)
+    if (intentName === 'AMAZON.FallbackIntent') {
+      const nlu = request.intent?.nlu;
+      const tokens = nlu?.tokens ?? [];
+      const interpretations = nlu?.interpretations ?? [];
+      const utteranceFromTokens = tokens.length ? tokens.join(' ') : '(no tokens)';
+      console.log('[UnhandledIntentHandler] AMAZON.FallbackIntent — utterance did not match any custom intent', {
+        locale,
+        utteranceFromTokens,
+        tokenCount: tokens.length,
+        interpretationCount: interpretations.length,
+        firstInterpretationInput: interpretations[0]?.nluConfidence?.intent?.input ?? '(none)'
+      });
+    } else {
+      console.log('[UnhandledIntentHandler] Unhandled intent', { intentName, locale });
+    }
+
     // Check if this is a built-in Amazon intent
     if (intentName?.startsWith('AMAZON.')) {
       // Handle common Amazon intents

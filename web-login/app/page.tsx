@@ -58,6 +58,11 @@ function AuthPageContent() {
 
       // Check if session is expired
       if (session.expires_at && session.expires_at < Date.now() / 1000) {
+        // Clear website tokens too when Supabase session expires
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('website_access_token');
+          localStorage.removeItem('website_refresh_token');
+        }
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
@@ -68,6 +73,11 @@ function AuthPageContent() {
       
       // If there's an error getting the user, or no user, clear session and stay on auth page
       if (userError || !user) {
+        // Clear website tokens when session is invalid
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('website_access_token');
+          localStorage.removeItem('website_refresh_token');
+        }
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
@@ -75,6 +85,11 @@ function AuthPageContent() {
 
       // Double-check: verify the user has an email (basic validation)
       if (!user.email) {
+        // Clear website tokens when user is invalid
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('website_access_token');
+          localStorage.removeItem('website_refresh_token');
+        }
         await supabase.auth.signOut();
         setCheckingAuth(false);
         return;
@@ -162,6 +177,11 @@ function AuthPageContent() {
       console.error('[AuthPage] Error checking session:', err);
       // Clear any invalid session on error
       try {
+        // Clear website tokens on error
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('website_access_token');
+          localStorage.removeItem('website_refresh_token');
+        }
         await supabase.auth.signOut();
       } catch (signOutErr) {
         console.error('[AuthPage] Error signing out:', signOutErr);

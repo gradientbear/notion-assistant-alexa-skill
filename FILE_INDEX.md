@@ -12,6 +12,7 @@ This document lists all files created/modified for the OAuth2 JWT migration.
 - `web-login/app/api/webhooks/stripe/route.ts` - Stripe webhook handler
 - `web-login/app/api/stripe/create-checkout-session/route.ts` - Checkout session creation
 
+
 ### Helper Libraries
 - `web-login/lib/jwt.ts` - JWT signing/verification utilities
 - `web-login/lib/oauth.ts` - OAuth flow helpers (authorization codes, tokens)

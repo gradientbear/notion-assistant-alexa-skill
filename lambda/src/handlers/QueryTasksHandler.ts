@@ -254,14 +254,35 @@ export class QueryTasksHandler implements RequestHandler {
       const allUtteranceSources = [originalUtterance, utteranceFromInterpretations, allInputs, allSlotValues, slotResolutions].filter(Boolean).join(' ').toLowerCase();
       
       const allText = (allSlotValues + ' ' + slotResolutions + ' ' + allUtteranceSources).toLowerCase();
-      
-      // Fallback: Handle "cosa ho per oggi" - if no dueDateTime slot but "oggi" appears anywhere
-      // This is a fallback for cases where the interaction model might not have captured the date
-      // With the updated interaction model using {dueDateTime} slot, this should rarely be needed
-      if (!dueDateTime && (allText.includes('oggi') || allText.includes('today') || 
-          allText.includes('per oggi') || allText.includes('for today'))) {
-        dueDateTime = 'oggi';
-        console.log('[QueryTasksHandler] Fallback: Detected "oggi" in text, using as dueDateTime');
+
+      // If dueDateTime was misheard as "every day" / "all day" etc., clear it so we can use fallback from utterance
+      if (dueDateTime && /^(every\s+day|each\s+day|all\s+days|everyday|all\s+day)\s*$/i.test(String(dueDateTime).trim())) {
+        dueDateTime = undefined;
+        console.log('[QueryTasksHandler] Cleared dueDateTime: slot was generic "every day" / "all day" etc.');
+      }
+
+      // Normalize: AMAZON.SearchQuery may capture "my tasks today" or "tasks tomorrow" — treat as today/tomorrow
+      if (dueDateTime) {
+        const d = String(dueDateTime).trim().toLowerCase();
+        if (/\btomorrow\b/.test(d) && !/\btoday\b/.test(d)) {
+          dueDateTime = 'tomorrow';
+        } else if (/\b(today|oggi)\b/.test(d)) {
+          dueDateTime = 'today';
+        }
+      }
+
+      // Fallback: Detect today/tomorrow from utterance when slot is empty or was cleared
+      // Handles "read my tasks today", "read my tasks tomorrow", "what do I have for today?", etc.
+      const hasToday = /\b(oggi|today)\b|per oggi|for today|tasks today/i.test(allText);
+      const hasTomorrow = /\b(domani|tomorrow)\b|for tomorrow|per domani|tasks tomorrow/i.test(allText);
+      if (!dueDateTime && (hasToday || hasTomorrow)) {
+        if (hasTomorrow && !hasToday) {
+          dueDateTime = 'tomorrow';
+          console.log('[QueryTasksHandler] Fallback: Detected "tomorrow" in text, using as dueDateTime');
+        } else {
+          dueDateTime = 'today';
+          console.log('[QueryTasksHandler] Fallback: Detected "today" in text, using as dueDateTime');
+        }
       }
       
       // Fallback: Extract Italian date from utterance when slot is empty (e.g. "leggi le mie attività del 30 gennaio 2026")
@@ -363,8 +384,8 @@ export class QueryTasksHandler implements RequestHandler {
         const now = new Date();
         let dateFilter: any = null;
         
-        // Handle Italian keywords explicitly (oggi, domani)
-        if (lowerDueDateTime.includes('oggi') || lowerDueDateTime === 'today') {
+        // Handle today/tomorrow (exact or contained in phrase, e.g. "my tasks today")
+        if (lowerDueDateTime.includes('oggi') || lowerDueDateTime.includes('today')) {
           const todayStart = new Date(now);
           todayStart.setHours(0, 0, 0, 0);
           
@@ -375,7 +396,7 @@ export class QueryTasksHandler implements RequestHandler {
               equals: toLocalYyyyMmDd(todayStart),
             },
           };
-        } else if (lowerDueDateTime.includes('domani') || lowerDueDateTime === 'tomorrow') {
+        } else if (lowerDueDateTime.includes('domani') || lowerDueDateTime.includes('tomorrow')) {
           const tomorrow = new Date(now);
           tomorrow.setDate(tomorrow.getDate() + 1);
           const tomorrowStart = new Date(tomorrow);
@@ -485,10 +506,10 @@ export class QueryTasksHandler implements RequestHandler {
         }
       }
       
-      // When querying by date without explicit status, exclude completed tasks
-      // This handles cases like "cosa ho da fare oggi?" (what do I have to do today?)
-      // where the user is asking about tasks to do, not completed tasks
-      if (dateFilterAdded && !status) {
+      // When user did not ask for a specific status, exclude completed tasks (show only open/pending).
+      // This handles: "show what I have to do", "read what I have to do", "what do I have to do?",
+      // "cosa ho da fare oggi?", and any read-tasks request without explicit status.
+      if (!status) {
         filters.push({
           property: 'Status',
           select: {

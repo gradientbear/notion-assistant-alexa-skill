@@ -1,7 +1,9 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getOAuthSession, deleteOAuthSession } from '../session';
 import { setupNotionWorkspace } from '../notion-setup';
+import { revokeUserTokens } from '@/lib/oauth';
 
 // Mark this route as dynamic since it uses searchParams
 export const dynamic = 'force-dynamic';
@@ -54,6 +56,17 @@ export async function GET(request: NextRequest) {
       );
     }
     
+    // Double-check session is valid before proceeding
+    if (!session || !session.email) {
+      console.error('[OAuth Callback] ❌ Invalid session data:', {
+        has_session: !!session,
+        has_email: !!session?.email,
+      });
+      return NextResponse.redirect(
+        new URL('/error?message=Invalid session data. Please try connecting Notion again.', request.url)
+      );
+    }
+    
     console.log('[OAuth Callback] ✅ OAuth session retrieved:', {
       session_id: session.id,
       email: session.email,
@@ -62,6 +75,72 @@ export async function GET(request: NextRequest) {
       has_amazon_account_id: !!session.amazon_account_id,
       expires_at: session.expires_at,
     });
+
+    // CRITICAL: Delete session immediately after retrieval to prevent reuse
+    // This prevents race conditions where the same session could be used multiple times
+    console.log('[OAuth Callback] Deleting session immediately after retrieval to prevent reuse');
+    await deleteOAuthSession(state);
+    console.log('[OAuth Callback] ✅ Session deleted successfully');
+
+    // Validate session ownership for web flow (if auth_user_id is present in session)
+    // This ensures the session belongs to the authenticated user
+    if (session.auth_user_id && !session.amazon_account_id) {
+      // For web flow, try to get authenticated user from request
+      const supabaseAuthUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (supabaseAuthUrl && supabaseAnonKey) {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabaseAuth = createClient(supabaseAuthUrl, supabaseAnonKey);
+        
+        // Try to get session token from cookies or headers
+        const projectRef = supabaseAuthUrl.split('//')[1]?.split('.')[0] || 'default';
+        const cookieNames = [
+          'sb-access-token',
+          `sb-${projectRef}-auth-token`,
+          `sb-${projectRef}-auth-token-code-verifier`,
+        ];
+        
+        let sessionToken: string | null = null;
+        for (const cookieName of cookieNames) {
+          const cookieValue = request.cookies.get(cookieName)?.value;
+          if (cookieValue) {
+            sessionToken = cookieValue;
+            break;
+          }
+        }
+        
+        if (!sessionToken) {
+          const authHeader = request.headers.get('authorization');
+          sessionToken = authHeader?.replace('Bearer ', '') || null;
+        }
+        
+        if (sessionToken) {
+          try {
+            const { data: { user: authUser }, error: authError } = await supabaseAuth.auth.getUser(sessionToken);
+            if (!authError && authUser) {
+              // Validate that the session's auth_user_id matches the authenticated user
+              if (session.auth_user_id !== authUser.id) {
+                console.error('[OAuth Callback] ❌ Session ownership validation failed:', {
+                  session_auth_user_id: session.auth_user_id,
+                  authenticated_user_id: authUser.id,
+                  state: state.substring(0, 16) + '...',
+                });
+                return NextResponse.redirect(
+                  new URL('/error?message=Session ownership validation failed. Please try connecting Notion again.', request.url)
+                );
+              }
+              console.log('[OAuth Callback] ✅ Session ownership validated:', {
+                session_auth_user_id: session.auth_user_id,
+                authenticated_user_id: authUser.id,
+              });
+            }
+          } catch (err) {
+            console.warn('[OAuth Callback] ⚠️ Could not validate session ownership (non-critical):', err);
+          }
+        }
+      }
+    }
 
     // Handle user denial or errors
     if (error) {
@@ -104,12 +183,17 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Clean up session
-      await deleteOAuthSession(state);
+      // Session already deleted immediately after retrieval
 
       // Return appropriate response
-      // Check if this is Alexa account linking (has amazon_account_id in session)
-      if (session.amazon_account_id) {
+      // CRITICAL: Only treat as Alexa flow if:
+      // 1. amazon_account_id is present in session AND
+      // 2. auth_user_id is NOT present (web flows always have auth_user_id)
+      // This prevents web reconnection flows from being misidentified as Alexa flows
+      // when a user has a previous amazon_account_id from earlier Alexa linking
+      const isAlexaFlow = session.amazon_account_id && !session.auth_user_id;
+      
+      if (isAlexaFlow) {
         // For Alexa, return error in OAuth2 format
         const errorMsg = isNoAccount 
           ? 'Notion account not found. Please create a Notion account first, then retry.'
@@ -160,11 +244,15 @@ export async function GET(request: NextRequest) {
     });
 
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json();
+      let errorData;
+      try {
+        errorData = await tokenResponse.json();
+      } catch (parseError) {
+        errorData = { error: 'Failed to parse error response' };
+      }
       console.error('Token exchange error:', errorData);
       
-      // Clean up session
-      await deleteOAuthSession(state);
+      // Session already deleted immediately after retrieval
 
       return NextResponse.redirect(
         new URL(
@@ -174,7 +262,34 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { access_token } = await tokenResponse.json();
+    let tokenData;
+    try {
+      tokenData = await tokenResponse.json();
+    } catch (parseError: any) {
+      console.error('Failed to parse token response:', parseError);
+      return NextResponse.redirect(
+        new URL(
+          `/error?message=${encodeURIComponent('Invalid response from Notion. Please try again.')}`,
+          request.url
+        )
+      );
+    }
+    
+    const access_token = tokenData.access_token;
+    
+    // CRITICAL: Validate access_token exists before proceeding
+    if (!access_token) {
+      console.error('Token exchange result missing access_token:', {
+        response_keys: Object.keys(tokenData),
+        response_preview: JSON.stringify(tokenData).substring(0, 200),
+      });
+      return NextResponse.redirect(
+        new URL(
+          `/error?message=${encodeURIComponent('Invalid token response from Notion. Please try again.')}`,
+          request.url
+        )
+      );
+    }
 
     console.log('🔍 Token exchange result:', {
       has_access_token: !!access_token,
@@ -183,9 +298,23 @@ export async function GET(request: NextRequest) {
     });
 
     // Setup Notion workspace (create Privacy page and databases)
-    console.log('Starting Notion workspace setup...');
-    const setupResult = await setupNotionWorkspace(access_token);
-    console.log('Notion workspace setup result:', setupResult);
+    console.log('=== Starting Notion Workspace Setup ===');
+    let setupResult;
+    try {
+      setupResult = await setupNotionWorkspace(access_token);
+      console.log('Notion workspace setup result:', setupResult);
+    } catch (setupError: any) {
+      console.error('Notion workspace setup threw exception:', {
+        error: setupError.message,
+        stack: setupError.stack,
+      });
+      // Continue with partial setup - user can retry later
+      setupResult = {
+        privacyPageId: null,
+        tasksDbId: null,
+        success: false,
+      };
+    }
     
     if (!setupResult.success) {
       console.error('Notion workspace setup failed:', setupResult);
@@ -275,19 +404,27 @@ export async function GET(request: NextRequest) {
     
     // Create or update user with Notion token and setup data
     console.log('=== Starting User Database Update ===');
-    console.log('Session data:', {
-      amazon_account_id: session.amazon_account_id,
-      email: session.email,
-      has_license_key: !!session.license_key,
-      auth_user_id_from_session: authUserId,
-    });
-    console.log('Setup result:', {
-      success: setupResult.success,
-      privacyPageId: setupResult.privacyPageId,
-      tasksDbId: setupResult.tasksDbId,
-    });
+    try {
+      console.log('Session data:', {
+        amazon_account_id: session.amazon_account_id,
+        email: session.email,
+        has_license_key: !!session.license_key,
+        auth_user_id_from_session: authUserId,
+      });
+      console.log('Setup result:', {
+        success: setupResult.success,
+        privacyPageId: setupResult.privacyPageId,
+        tasksDbId: setupResult.tasksDbId,
+      });
 
-    if (session.amazon_account_id) {
+    // CRITICAL: Determine flow type - only treat as Alexa flow if:
+    // 1. amazon_account_id is present in session AND
+    // 2. auth_user_id is NOT present (web flows always have auth_user_id)
+    // This prevents web reconnection flows from being misidentified as Alexa flows
+    // when a user has a previous amazon_account_id from earlier Alexa linking
+    const isAlexaFlow = session.amazon_account_id && !session.auth_user_id;
+    
+    if (isAlexaFlow) {
       // Alexa flow - update by amazon_account_id
       console.log('Alexa flow: Looking up user by amazon_account_id:', session.amazon_account_id);
       const { data: existingUser, error: lookupError } = await supabase
@@ -733,13 +870,33 @@ export async function GET(request: NextRequest) {
         }
       }
     
-    console.log('=== User Database Update Complete ===');
+      console.log('=== User Database Update Complete ===');
+    } catch (dbError: any) {
+      console.error('[OAuth Callback] ❌ Database update error:', {
+        error: dbError.message,
+        stack: dbError.stack,
+        error_code: dbError.code,
+        error_name: dbError.name,
+      });
+      // Still redirect to dashboard - token was obtained, user can retry setup later
+      const redirectUrl = new URL('/dashboard', request.url);
+      redirectUrl.searchParams.set('notion_connected', 'true');
+      redirectUrl.searchParams.set('error', 'setup_failed');
+      console.log('[OAuth Callback] 🔄 Redirecting to dashboard with error flag due to database update failure');
+      return NextResponse.redirect(redirectUrl);
+    }
 
-    // Clean up session
-    await deleteOAuthSession(state);
+    // Session already deleted immediately after retrieval
 
     // Handle Alexa account linking - return OAuth2 token format
-    if (session.amazon_account_id) {
+    // CRITICAL: Only treat as Alexa flow if:
+    // 1. amazon_account_id is present in session AND
+    // 2. auth_user_id is NOT present (web flows always have auth_user_id)
+    // This prevents web reconnection flows from being misidentified as Alexa flows
+    // when a user has a previous amazon_account_id from earlier Alexa linking
+    const isAlexaFlow = session.amazon_account_id && !session.auth_user_id;
+    
+    if (isAlexaFlow) {
       // Generate a token for Alexa (this could be a JWT or simple token)
       // For simplicity, we'll use a base64 encoded string of user info
       const alexaToken = Buffer.from(

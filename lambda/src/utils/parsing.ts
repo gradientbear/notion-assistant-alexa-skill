@@ -879,23 +879,16 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
 
   // If we have both date and time, combine them
   if (parsedDate && parsedTime) {
-    const combinedDate = new Date(parsedDate);
-    combinedDate.setHours(parsedTime.hours, parsedTime.minutes, 0, 0);
-
-    // Adjust for user locale time zone before converting to ISO (Lambda runs in UTC).
-    // Use locale timezone; en-US uses UTC to avoid 4 PM becoming 10 PM for European users with en-US locale.
-    const localeTimeZones: Record<Locale, string> = {
-      'it-IT': 'Europe/Rome',
-      'fr-FR': 'Europe/Paris',
-      'es-ES': 'Europe/Madrid',
-      'es-MX': 'America/Mexico_City',
-      'en-US': 'UTC',
-    };
-    const targetTimeZone = localeTimeZones[locale] || 'UTC';
-
-    // Compute offset between target time zone and Lambda (UTC) at the combined date
+    // Get the calendar date in the user's timezone from parsedDate
+    // This is critical: parsedDate from getMidnightInTimezone is a UTC instant representing
+    // midnight in the user's timezone. Using setHours() would set hours in Lambda's local time (UTC),
+    // not in the user's timezone, causing the date to shift by one day.
+    const { y: calYear, m: calMonth, d: calDay } = getCalendarDateInTz(parsedDate, tz);
+    
+    // Build UTC time for (calYear, calMonth, calDay, hours, minutes) in target timezone
+    const ref = Date.UTC(calYear, calMonth, calDay, parsedTime.hours, parsedTime.minutes, 0);
     const dtf = new Intl.DateTimeFormat('en-US', {
-      timeZone: targetTimeZone,
+      timeZone: tz,
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
@@ -904,22 +897,20 @@ export function parseTaskFromUserRequest(userRequest: string, locale: Locale = '
       second: '2-digit',
       hour12: false,
     });
-    const parts = dtf.formatToParts(combinedDate);
+    const parts = dtf.formatToParts(new Date(ref));
     const getPart = (type: string) => parts.find(p => p.type === type)?.value || '00';
-    const tzYear = Number(getPart('year'));
-    const tzMonth = Number(getPart('month')) - 1; // zero-based month
-    const tzDay = Number(getPart('day'));
-    const tzHour = Number(getPart('hour'));
-    const tzMinute = Number(getPart('minute'));
-    const tzSecond = Number(getPart('second'));
-
-    // Date in UTC that corresponds to the same wall-clock time in target timezone
-    const utcForTarget = Date.UTC(tzYear, tzMonth, tzDay, tzHour, tzMinute, tzSecond);
-    const offsetMinutes = (utcForTarget - combinedDate.getTime()) / 60000;
-
-    // Apply offset so that stored ISO represents the intended wall-clock time in target TZ
-    combinedDate.setMinutes(combinedDate.getMinutes() - offsetMinutes);
-    dueDateTime = combinedDate.toISOString();
+    const refHour = Number(getPart('hour'));
+    const refMinute = Number(getPart('minute'));
+    const offsetMinutes = (refHour * 60 + refMinute) - (parsedTime.hours * 60 + parsedTime.minutes);
+    const actualUTC = new Date(ref - offsetMinutes * 60000);
+    dueDateTime = actualUTC.toISOString();
+    
+    console.log('[parseTaskFromUserRequest] Combined date+time:', {
+      calendarDate: `${calYear}-${calMonth + 1}-${calDay}`,
+      time: `${parsedTime.hours}:${parsedTime.minutes}`,
+      timezone: tz,
+      resultUTC: dueDateTime
+    });
 
     // Remove time expression from task name
     if (italianTimeMatch) {

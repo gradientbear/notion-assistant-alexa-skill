@@ -20,12 +20,6 @@
                             "confirmationRequired": false
                         },
                         {
-                            "name": "dueDateTime",
-                            "type": "AMAZON.SearchQuery",
-                            "elicitationRequired": false,
-                            "confirmationRequired": false
-                        },
-                        {
                             "name": "category",
                             "type": "CATEGORY",
                             "elicitationRequired": false,
@@ -43,12 +37,7 @@
                         "créer une tâche {taskName}",
                         "créer tâche {taskName}",
                         "rappelle-moi {taskName}",
-                        "rappelle-moi de {taskName}",
-                        "ajouter {taskName} demain",
-                        "ajouter {taskName} la semaine prochaine",
-                        "ajouter {taskName} aujourd'hui",
-                        "ajouter {taskName} cette semaine",
-                        "ajouter {taskName} vendredi prochain"
+                        "rappelle-moi de {taskName}"
                     ]
                 },
                 {

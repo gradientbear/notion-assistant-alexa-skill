@@ -186,11 +186,46 @@ export async function GET(request: NextRequest) {
         if (!normalizedLicenseKey) {
           console.warn('[OAuth Authorize] User license_key is empty or whitespace');
         } else {
-          const { data: license, error: licenseError } = await supabase
-            .from('licenses')
-            .select('status, stripe_payment_intent_id')
-            .eq('stripe_payment_intent_id', normalizedLicenseKey)
-            .maybeSingle();
+          // Retry logic with exponential backoff for license lookup
+          let license: any = null;
+          let licenseError: any = null;
+          const maxRetries = 3;
+          const baseDelay = 100; // 100ms
+          
+          for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const { data: licenseData, error: errorData } = await supabase
+              .from('licenses')
+              .select('status, stripe_payment_intent_id')
+              .eq('stripe_payment_intent_id', normalizedLicenseKey)
+              .maybeSingle();
+
+            if (!errorData) {
+              license = licenseData;
+              licenseError = null;
+              break; // Success, exit retry loop
+            }
+
+            // Don't retry on certain errors (not found, validation errors)
+            if (errorData?.code === 'PGRST116' || errorData?.code === '23505') {
+              licenseError = errorData;
+              break; // Don't retry on these errors
+            }
+
+            // Don't retry on last attempt
+            if (attempt === maxRetries - 1) {
+              licenseError = errorData;
+              break;
+            }
+
+            // Exponential backoff: 100ms, 200ms, 400ms
+            const delay = baseDelay * Math.pow(2, attempt);
+            console.warn(`[OAuth Authorize] License lookup attempt ${attempt + 1} failed, retrying in ${delay}ms:`, {
+              error: errorData?.message || errorData,
+              attempt: attempt + 1,
+              maxRetries,
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
 
           console.log('[OAuth Authorize] License query result:', {
             found: !!license,
@@ -272,24 +307,15 @@ export async function GET(request: NextRequest) {
           });
         }
         
-        // Strategy 2: If no licenses found in time window, check all recent active licenses (last 10)
-        if (matchingLicenses.length === 0 && !matchingLicensesError) {
-          console.log('[OAuth Authorize] No licenses in time window, checking all recent active licenses...');
-          const { data: recentLicenses, error: recentError } = await supabase
-            .from('licenses')
-            .select('stripe_payment_intent_id, status, created_at, updated_at')
-            .eq('status', 'active')
-            .order('created_at', { ascending: false })
-            .limit(10);
+        // Strategy 2: Try to find license by matching Stripe customer_id with user's email
+        // This is safer than checking "all recent licenses" which could assign wrong license
+        if (matchingLicenses.length === 0 && !matchingLicensesError && user.email) {
+          console.log('[OAuth Authorize] No licenses in time window, trying to find by Stripe customer...');
           
-          if (!recentError && recentLicenses) {
-            matchingLicenses = recentLicenses;
-            console.log('[OAuth Authorize] Found recent active licenses:', {
-              count: matchingLicenses.length,
-            });
-          } else if (recentError) {
-            console.error('[OAuth Authorize] Error fetching recent licenses:', recentError);
-          }
+          // Note: We can't directly match by customer email since licenses table doesn't store it
+          // Instead, we'll only use the time window approach to avoid assigning wrong licenses
+          // If no license found in time window, the user needs to contact support
+          console.warn('[OAuth Authorize] No license found in time window - user may need to contact support or retry webhook processing');
         }
         
         if (matchingLicenses.length > 0) {
@@ -353,10 +379,22 @@ export async function GET(request: NextRequest) {
           hasActiveLicense,
           user_id: user.id,
           license_key: user.license_key,
+          email: user.email,
         });
+        
+        // Provide more specific error message based on the situation
+        let errorMessage = 'Please purchase a license to link your Alexa account.';
+        if (user.license_key) {
+          errorMessage = 'Your license could not be validated. Please contact support or try purchasing again.';
+        } else {
+          errorMessage = 'No active license found. Please purchase a license to link your Alexa account.';
+        }
+        
         const errorUrl = new URL('/error', request.url);
-        errorUrl.searchParams.set('message', 'Please purchase a license to link your Alexa account.');
+        errorUrl.searchParams.set('message', errorMessage);
         errorUrl.searchParams.set('action', 'purchase');
+        errorUrl.searchParams.set('user_id', user.id);
+        errorUrl.searchParams.set('has_license_key', user.license_key ? 'true' : 'false');
         return NextResponse.redirect(errorUrl);
       }
 

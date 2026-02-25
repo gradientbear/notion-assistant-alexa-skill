@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createCheckoutSession } from '@/lib/stripe';
 import { createServerClient } from '@/lib/supabase';
+import { verifyWebsiteToken } from '@/lib/jwt';
+import { createClient } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,27 +31,76 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createServerClient();
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(sessionToken);
+    // Try to verify as website JWT first (new approach)
+    // This supports tokens that don't expire like Supabase sessions do
+    const websiteTokenPayload = verifyWebsiteToken(sessionToken);
+    let authUserId: string | null = null;
 
-    if (authError || !authUser) {
+    if (websiteTokenPayload) {
+      // Website JWT token - extract user ID from payload
+      authUserId = websiteTokenPayload.sub;
+    } else {
+      // Fall back to Supabase session token (backward compatibility)
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return NextResponse.json(
+          { error: 'server_error', error_description: 'Server configuration error' },
+          { status: 500 }
+        );
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser(sessionToken);
+
+      if (authError || !authUser) {
+        return NextResponse.json(
+          { error: 'unauthorized', error_description: 'Invalid session' },
+          { status: 401 }
+        );
+      }
+
+      authUserId = authUser.id;
+    }
+
+    if (!authUserId) {
       return NextResponse.json(
         { error: 'unauthorized', error_description: 'Invalid session' },
         { status: 401 }
       );
     }
 
-    // Get user record
+    // Check if user already has an active license before allowing purchase
+    const supabase = createServerClient();
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', authUser.id)
+      .eq('id', authUserId)
       .single();
 
     if (userError || !user) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'User not found' },
         { status: 500 }
+      );
+    }
+
+    // Check if user already has an active license
+    // Check for active opaque token (indicates license is active)
+    const { data: activeToken } = await supabase
+      .from('oauth_access_tokens')
+      .select('token, expires_at, revoked')
+      .eq('user_id', user.id)
+      .eq('revoked', false)
+      .gt('expires_at', new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (activeToken) {
+      return NextResponse.json(
+        { error: 'already_purchased', error_description: 'You already have an active license. No need to purchase again.' },
+        { status: 400 }
       );
     }
 

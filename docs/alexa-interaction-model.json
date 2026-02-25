@@ -20,12 +20,6 @@
                 "confirmationRequired": false
               },
               {
-                "name": "dueDateTime",
-                "type": "AMAZON.SearchQuery",
-                "elicitationRequired": false,
-                "confirmationRequired": false
-              },
-              {
                 "name": "category",
                 "type": "CATEGORY",
                 "elicitationRequired": false,
@@ -40,11 +34,28 @@
             ],
             "samples": [
               "add {taskName}",
-              "create a task {taskName}",
-              "remind me to {taskName}",
               "add {taskName} tomorrow",
-              "add {taskName} next week",
-              "add {taskName} today"
+              "add {taskName} today",
+              "add {taskName} for tomorrow",
+              "add {taskName} for today",
+              "add tomorrow {taskName}",
+              "add today {taskName}",
+              "add task {taskName}",
+              "add task {taskName} tomorrow",
+              "add task {taskName} today",
+              "add a task {taskName}",
+              "add a task {taskName} tomorrow",
+              "add a task {taskName} today",
+              "create {taskName}",
+              "create {taskName} tomorrow",
+              "create {taskName} today",
+              "create tomorrow {taskName}",
+              "create today {taskName}",
+              "create a task {taskName}",
+              "create task {taskName}",
+              "remind me to {taskName}",
+              "remind me to {taskName} tomorrow",
+              "remind me to {taskName} today"
             ]
           },
           {
@@ -58,10 +69,39 @@
             "samples": [
               "show my tasks",
               "read my tasks",
+              "list my tasks",
               "show my {status} tasks",
+              "read my {status} tasks",
+              "show my tasks {dueDateTime}",
               "show tasks due {dueDateTime}",
+              "show my tasks due {dueDateTime}",
               "show my {priority} priority tasks",
-              "read my {category} tasks"
+              "read my {category} tasks",
+              "show my {category} tasks",
+              "what do I have for today",
+              "what do I have for {dueDateTime}",
+              "what do I have to do",
+              "what do I have to do {dueDateTime}",
+              "show what I have to do",
+              "show what I have to do {dueDateTime}",
+              "read what I have to do",
+              "read what I have to do {dueDateTime}",
+              "what are my tasks",
+              "show me tasks",
+              "show tasks {priority}",
+              "show tasks {category}",
+              "show tasks {dueDateTime}",
+              "show overdue tasks",
+              "show {status} overdue tasks",
+              "read my tasks today",
+              "read my tasks tomorrow",
+              "read my tasks {dueDateTime}",
+              "read my {priority} priority tasks",
+              "read tasks {priority}",
+              "read tasks {category}",
+              "read tasks {dueDateTime}",
+              "read {priority} priority tasks",
+              "read {category} tasks"
             ]
           },
           {
@@ -86,7 +126,11 @@
               "mark a task as {status}",
               "update a task status to {status}",
               "set status to {status}",
-              "complete a task"
+              "complete a task",
+              "complete {taskName}",
+              "mark as done {taskName}",
+              "mark as completed {taskName}",
+              "mark as finished {taskName}"
             ]
           },
           {
@@ -111,7 +155,9 @@
               "set task priority to {priority}",
               "change priority to {priority}",
               "make priority {priority}",
-              "update task priority"
+              "update task priority",
+              "set priority for {taskName}",
+              "change priority for {taskName}"
             ]
           },
           {
@@ -136,7 +182,10 @@
               "change the due date",
               "set due date",
               "update due date",
-              "reschedule task"
+              "reschedule task",
+              "reschedule {taskName}",
+              "change due date for {taskName}",
+              "set due date for {taskName}"
             ]
           },
           {
@@ -161,7 +210,9 @@
               "set task category",
               "move task to a category",
               "make a task a category",
-              "change task category"
+              "change task category",
+              "set category for {taskName}",
+              "change category for {taskName}"
             ]
           },
           {
@@ -204,7 +255,8 @@
               "move a task",
               "reorder task",
               "put task at a position",
-              "move task {position}"
+              "move task {position}",
+              "reorder {taskName}"
             ]
           },
           { "name": "AMAZON.CancelIntent", "samples": [] },
@@ -216,23 +268,67 @@
           {
             "name": "PRIORITY",
             "values": [
-              { "name": { "value": "LOW" } },
-              { "name": { "value": "NORMAL" } },
-              { "name": { "value": "HIGH" } }
+              { 
+                "name": { 
+                  "value": "LOW",
+                  "synonyms": ["low", "lower"]
+                }
+              },
+              { 
+                "name": { 
+                  "value": "NORMAL",
+                  "synonyms": ["normal", "medium", "med"]
+                }
+              },
+              { 
+                "name": { 
+                  "value": "HIGH",
+                  "synonyms": ["high", "urgent", "important"]
+                }
+              }
             ]
           },
           {
             "name": "STATUS",
             "values": [
-              { "name": { "value": "TO DO" } },
-              { "name": { "value": "DONE" } }
+              { 
+                "name": { 
+                  "value": "TO DO",
+                  "synonyms": ["to do", "todo", "pending", "open", "incomplete", "tasks to do"]
+                }
+              },
+              { 
+                "name": { 
+                  "value": "DONE",
+                  "synonyms": [
+                    "done",
+                    "completed",
+                    "complete",
+                    "finished",
+                    "closed",
+                    "closed tasks",
+                    "completed tasks",
+                    "done tasks"
+                  ]
+                }
+              }
             ]
           },
           {
             "name": "CATEGORY",
             "values": [
-              { "name": { "value": "PERSONAL" } },
-              { "name": { "value": "WORK" } }
+              { 
+                "name": { 
+                  "value": "PERSONAL",
+                  "synonyms": ["personal", "home", "private"]
+                }
+              },
+              { 
+                "name": { 
+                  "value": "WORK",
+                  "synonyms": ["work", "office", "business"]
+                }
+              }
             ]
           },
           {

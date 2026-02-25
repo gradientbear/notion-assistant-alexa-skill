@@ -14,14 +14,14 @@
                             "prompts": { "elicitation": "Elicit.Slot.TaskName" }
                         },
                         {
-                            "name": "priority",
-                            "type": "PRIORITY",
+                            "name": "dueDateTime",
+                            "type": "AMAZON.SearchQuery",
                             "elicitationRequired": false,
                             "confirmationRequired": false
                         },
                         {
-                            "name": "dueDateTime",
-                            "type": "AMAZON.SearchQuery",
+                            "name": "priority",
+                            "type": "PRIORITY",
                             "elicitationRequired": false,
                             "confirmationRequired": false
                         },
@@ -40,18 +40,25 @@
                     ],
                     "samples": [
                         "aggiungi {taskName}",
-                        "crea un'attività {taskName}",
-                        "crea attività {taskName}",
-                        "ricordami di {taskName}",
-                        "inserisci {taskName}",
-                        "inserisci un'attività {taskName}",
                         "aggiungi {taskName} domani",
-                        "aggiungi {taskName} la prossima settimana",
                         "aggiungi {taskName} oggi",
-                        "aggiungi {taskName} questa settimana",
-                        "aggiungi {taskName} il prossimo venerdì",
+                        "aggiungi {taskName} per domani",
+                        "aggiungi {taskName} per oggi",
+                        "crea un'attività {taskName}",
+                        "crea un'attività {taskName} domani",
+                        "crea un'attività {taskName} oggi",
+                        "crea attività {taskName}",
+                        "crea attività {taskName} domani",
+                        "crea attività {taskName} oggi",
+                        "ricordami di {taskName}",
+                        "ricordami di {taskName} domani",
+                        "ricordami di {taskName} oggi",
+                        "inserisci {taskName}",
                         "inserisci {taskName} domani",
-                        "inserisci {taskName} oggi"
+                        "inserisci {taskName} oggi",
+                        "inserisci un'attività {taskName}",
+                        "aggiungi {taskName} la prossima settimana",
+                        "aggiungi {taskName} questa settimana"
                     ]
                 },
                 {
@@ -74,7 +81,6 @@
                         "mostra le mie attività priorità {priority}",
                         "leggi le mie attività {category}",
                         "mostra le mie attività {category}",
-                        "cosa ho per oggi",
                         "cosa ho per {dueDateTime}",
                         "cosa ho da fare",
                         "cosa ho da fare {dueDateTime}",
@@ -89,15 +95,17 @@
                         "mostra attività {dueDateTime}",
                         "mostra attività scadute",
                         "mostra attività {status} scadute",
-                        "leggi le mie attività oggi",
-                        "leggi le mie attività domani",
                         "leggi le mie attività {dueDateTime}",
                         "leggi le mie attività priorità {priority}",
                         "leggi attività {priority}",
                         "leggi attività {category}",
                         "leggi attività {dueDateTime}",
                         "leggi le attività priorità {priority}",
-                        "leggi le attività {category}"
+                        "leggi le attività {category}",
+                        "mostra le attività di {dueDateTime}",
+                        "leggi le attività di {dueDateTime}",
+                        "mostra le mie attività di {dueDateTime}",
+                        "leggi le mie attività di {dueDateTime}"
                     ]
                 },
                 {

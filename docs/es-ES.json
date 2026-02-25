@@ -8,34 +8,10 @@
                     "slots": [
                         {
                             "name": "taskName",
-                            "type": "AMAZON.SearchQuery",
+                            "type": "TASK_INPUT",
                             "elicitationRequired": true,
                             "confirmationRequired": false,
                             "prompts": { "elicitation": "Elicit.Slot.TaskName" }
-                        },
-                        {
-                            "name": "priority",
-                            "type": "PRIORITY",
-                            "elicitationRequired": false,
-                            "confirmationRequired": false
-                        },
-                        {
-                            "name": "dueDateTime",
-                            "type": "AMAZON.SearchQuery",
-                            "elicitationRequired": false,
-                            "confirmationRequired": false
-                        },
-                        {
-                            "name": "category",
-                            "type": "CATEGORY",
-                            "elicitationRequired": false,
-                            "confirmationRequired": false
-                        },
-                        {
-                            "name": "notes",
-                            "type": "AMAZON.SearchQuery",
-                            "elicitationRequired": false,
-                            "confirmationRequired": false
                         }
                     ],
                     "samples": [
@@ -43,12 +19,7 @@
                         "añadir {taskName}",
                         "crear una tarea {taskName}",
                         "crear tarea {taskName}",
-                        "recuérdame {taskName}",
-                        "agregar {taskName} mañana",
-                        "agregar {taskName} la próxima semana",
-                        "agregar {taskName} hoy",
-                        "agregar {taskName} esta semana",
-                        "agregar {taskName} el próximo viernes"
+                        "recuérdame {taskName}"
                     ]
                 },
                 {
@@ -67,7 +38,7 @@
                         "muestra tareas vencimiento {dueDateTime}",
                         "muestra mis tareas prioridad {priority}",
                         "lee mis tareas {category}",
-                        "qué tengo para hoy",
+                        "qué tengo para {dueDateTime}",
                         "cuáles son mis tareas",
                         "muéstrame las tareas",
                         "muestra tareas {priority}",

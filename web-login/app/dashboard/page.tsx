@@ -116,6 +116,70 @@ export default function DashboardPage() {
     await fetchUserData();
   };
 
+  /**
+   * Check if token should be refreshed proactively (expires in less than 5 minutes)
+   */
+  const isTokenExpiringSoon = (token: string): boolean => {
+    try {
+      // JWT tokens have 3 parts separated by dots
+      const parts = token.split('.');
+      if (parts.length !== 3) {
+        return false; // Not a JWT token
+      }
+      
+      // Decode payload (second part)
+      const payload = JSON.parse(atob(parts[1]));
+      const expiresAt = payload.exp * 1000; // Convert to milliseconds
+      const now = Date.now();
+      
+      // Refresh if expires in less than 5 minutes
+      return (expiresAt - now) < 5 * 60 * 1000;
+    } catch {
+      return false; // If we can't parse, don't refresh proactively
+    }
+  };
+
+  const refreshToken = async (): Promise<string | null> => {
+    try {
+      // Try to get refresh token from localStorage or cookie
+      const refreshTokenValue = localStorage.getItem('website_refresh_token');
+      
+      if (!refreshTokenValue) {
+        console.log('[Dashboard] No refresh token available');
+        return null;
+      }
+
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refresh_token: refreshTokenValue }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('[Dashboard] Token refresh failed:', errorData);
+        return null;
+      }
+
+      const tokenData = await response.json();
+      
+      // Store new tokens
+      if (tokenData.access_token) {
+        localStorage.setItem('website_access_token', tokenData.access_token);
+      }
+      if (tokenData.refresh_token) {
+        localStorage.setItem('website_refresh_token', tokenData.refresh_token);
+      }
+
+      return tokenData.access_token;
+    } catch (error) {
+      console.error('[Dashboard] Error refreshing token:', error);
+      return null;
+    }
+  };
+
   const fetchUserData = async (retryCount = 0) => {
     try {
       setLoading(true);
@@ -128,9 +192,47 @@ export default function DashboardPage() {
       }
 
       // Try to get website JWT token first, fall back to Supabase session
-      const websiteAccessToken = localStorage.getItem('website_access_token');
+      let websiteAccessToken = localStorage.getItem('website_access_token');
       const { data: { session } } = await supabase.auth.getSession();
-      const authToken = websiteAccessToken || session?.access_token;
+      let authToken = websiteAccessToken || session?.access_token;
+
+      // Proactive token refresh: Check if token expires soon and refresh it
+      if (websiteAccessToken && isTokenExpiringSoon(websiteAccessToken)) {
+        console.log('[Dashboard] Token expires soon, refreshing proactively...');
+        const newToken = await refreshToken();
+        if (newToken) {
+          websiteAccessToken = newToken;
+          authToken = newToken;
+        }
+      }
+
+      // If we have a Supabase session but no website token, try to issue one
+      if (!websiteAccessToken && session?.access_token) {
+        try {
+          const tokenResponse = await fetch('/api/auth/issue-tokens', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (tokenResponse.ok) {
+            const tokenData = await tokenResponse.json();
+            if (tokenData.access_token) {
+              localStorage.setItem('website_access_token', tokenData.access_token);
+              websiteAccessToken = tokenData.access_token;
+              authToken = tokenData.access_token;
+            }
+            if (tokenData.refresh_token) {
+              localStorage.setItem('website_refresh_token', tokenData.refresh_token);
+            }
+          }
+        } catch (tokenError) {
+          console.error('[Dashboard] Error issuing tokens:', tokenError);
+          // Continue with Supabase session token
+        }
+      }
 
       if (!authToken) {
         console.error('[Dashboard] No session or website token available');
@@ -146,6 +248,7 @@ export default function DashboardPage() {
       // Get user from database with retry logic
       let response: Response | null = null;
       let lastError: Error | null = null;
+      let shouldRefreshToken = false;
       
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -162,6 +265,24 @@ export default function DashboardPage() {
 
           if (response.ok) {
             break; // Success, exit retry loop
+          }
+
+          // If 401 (Unauthorized), token might be expired - try to refresh
+          if (response.status === 401 && attempt === 0) {
+            console.log('[Dashboard] Token expired, attempting refresh...');
+            const newToken = await refreshToken();
+            if (newToken) {
+              authToken = newToken;
+              shouldRefreshToken = true;
+              continue; // Retry with new token
+            } else {
+              // Refresh failed, redirect to login
+              console.log('[Dashboard] Token refresh failed, redirecting to login');
+              localStorage.removeItem('website_access_token');
+              localStorage.removeItem('website_refresh_token');
+              router.push('/');
+              return null;
+            }
           }
 
           // If 404 and we haven't exhausted retries, wait and retry
@@ -184,6 +305,14 @@ export default function DashboardPage() {
       }
 
       if (!response || !response.ok) {
+        // If we got a 401 and refresh didn't work, redirect to login
+        if (response?.status === 401) {
+          console.log('[Dashboard] Unauthorized after retries, redirecting to login');
+          localStorage.removeItem('website_access_token');
+          localStorage.removeItem('website_refresh_token');
+          router.push('/');
+          return null;
+        }
         throw lastError || new Error('Failed to fetch user data after retries');
       }
 

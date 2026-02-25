@@ -44,18 +44,28 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { token, user_id, all } = body;
+    const { token, refresh_token, user_id, all } = body;
 
     if (all && serviceKey) {
       // Revoke all tokens (admin only)
       const supabase = createServerClient();
-      const { error } = await supabase
+      const { error: accessTokenError } = await supabase
         .from('oauth_access_tokens')
         .update({ revoked: true, revoked_at: new Date().toISOString() })
         .eq('revoked', false);
 
-      if (error) {
-        throw error;
+      if (accessTokenError) {
+        throw accessTokenError;
+      }
+
+      // Also revoke all refresh tokens
+      const { error: refreshTokenError } = await supabase
+        .from('website_refresh_tokens')
+        .update({ revoked: true, revoked_at: new Date().toISOString() })
+        .eq('revoked', false);
+
+      if (refreshTokenError) {
+        throw refreshTokenError;
       }
 
       return NextResponse.json({ success: true, message: 'All tokens revoked' });
@@ -64,11 +74,35 @@ export async function POST(request: NextRequest) {
     if (user_id) {
       // Revoke all tokens for a user
       await revokeUserTokens(user_id);
+      
+      // Also revoke all refresh tokens for the user
+      const supabase = createServerClient();
+      await supabase
+        .from('website_refresh_tokens')
+        .update({ revoked: true, revoked_at: new Date().toISOString() })
+        .eq('user_id', user_id)
+        .eq('revoked', false);
+      
       return NextResponse.json({ success: true, message: `All tokens revoked for user ${user_id}` });
     }
 
+    if (refresh_token) {
+      // Revoke specific refresh token
+      const supabase = createServerClient();
+      const { error } = await supabase
+        .from('website_refresh_tokens')
+        .update({ revoked: true, revoked_at: new Date().toISOString() })
+        .eq('token', refresh_token);
+
+      if (error) {
+        throw error;
+      }
+
+      return NextResponse.json({ success: true, message: 'Refresh token revoked' });
+    }
+
     if (token) {
-      // Revoke specific token
+      // Revoke specific token (access token or opaque token)
       await revokeToken(token);
       return NextResponse.json({ success: true, message: 'Token revoked' });
     }

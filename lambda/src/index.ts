@@ -39,9 +39,10 @@ const skill = SkillBuilders.custom()
   .addRequestInterceptors(
     {
       async process(handlerInput) {
-        const req = handlerInput.requestEnvelope.request;
-        const intentName = (req as any)?.intent?.name ?? '';
-        console.log('[Request]', req.type, intentName);
+        const req = handlerInput.requestEnvelope.request as any;
+        const intentName = req?.intent?.name ?? '';
+        const locale = req.locale ?? handlerInput.requestEnvelope.request.locale ?? 'unknown';
+        console.log('[Request]', req.type, intentName, 'locale:', locale);
       }
     },
     new AuthInterceptor(),
