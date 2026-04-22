@@ -253,7 +253,9 @@ export class QueryTasksHandler implements RequestHandler {
       const allInputs = [requestInput, ...interpretations.map((i: any) => i?.nluConfidence?.intent?.input || '').filter(Boolean)].join(' ').toLowerCase();
       const allUtteranceSources = [originalUtterance, utteranceFromInterpretations, allInputs, allSlotValues, slotResolutions].filter(Boolean).join(' ').toLowerCase();
       
-      const allText = (allSlotValues + ' ' + slotResolutions + ' ' + allUtteranceSources).toLowerCase();
+      // Last-resort: Alexa often omits nlu.tokens in production; use full request JSON to detect today/tomorrow
+      const requestJson = JSON.stringify(handlerInput.requestEnvelope?.request || {});
+      const allText = (allSlotValues + ' ' + slotResolutions + ' ' + allUtteranceSources + ' ' + requestJson).toLowerCase();
 
       // If dueDateTime was misheard as "every day" / "all day" etc., clear it so we can use fallback from utterance
       if (dueDateTime && /^(every\s+day|each\s+day|all\s+days|everyday|all\s+day)\s*$/i.test(String(dueDateTime).trim())) {
@@ -383,9 +385,18 @@ export class QueryTasksHandler implements RequestHandler {
         const lowerDueDateTime = cleanedDueDateTime.toLowerCase();
         const now = new Date();
         let dateFilter: any = null;
-        
-        // Handle today/tomorrow (exact or contained in phrase, e.g. "my tasks today")
-        if (lowerDueDateTime.includes('oggi') || lowerDueDateTime.includes('today')) {
+
+        // AMAZON.DATE sends "today"/"tomorrow" as ISO date (YYYY-MM-DD); handle that first
+        const isoDateMatch = cleanedDueDateTime.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (isoDateMatch) {
+          const [, y, m, d] = isoDateMatch;
+          dateFilter = {
+            property: 'Due Date Time',
+            date: { equals: `${y}-${m}-${d}` },
+          };
+        }
+        // Handle today/tomorrow (exact or contained in phrase, e.g. "my tasks today" from AMAZON.SearchQuery locales)
+        else if (lowerDueDateTime.includes('oggi') || lowerDueDateTime.includes('today')) {
           const todayStart = new Date(now);
           todayStart.setHours(0, 0, 0, 0);
           
@@ -545,6 +556,11 @@ export class QueryTasksHandler implements RequestHandler {
         finalFilter = filters[0];
       } else if (filters.length > 1) {
         finalFilter = { and: filters };
+      }
+
+      // Log resolved date for today/tomorrow debugging (CloudWatch)
+      if (dueDateTime && (String(dueDateTime).toLowerCase().includes('today') || String(dueDateTime).toLowerCase().includes('tomorrow'))) {
+        console.log('[QueryTasksHandler] ReadTasksIntent date filter', { dueDateTime, filterKeys: Object.keys(finalFilter) });
       }
 
       // Query tasks with filter
